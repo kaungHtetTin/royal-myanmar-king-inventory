@@ -1,0 +1,33 @@
+{
+    "release": {
+        "version": "<must-match-APP_VERSION>",
+        "deployment_id": "<must-match-DEPLOYMENT_ID>"
+    },
+    "uat": {
+        "approved_by": "<business-owner-name>",
+        "approved_at": "<ISO-8601-timestamp>",
+        "evidence_reference": "<signed-UAT-record-reference>"
+    },
+    "opening_balances": {
+        "approved_by": "<inventory-owner-name>",
+        "approved_at": "<ISO-8601-timestamp>",
+        "evidence_reference": "<signed-opening-balance-reconciliation-reference>"
+    },
+    "restore": {
+        "approved_by": "<database-recovery-owner-name>",
+        "approved_at": "<ISO-8601-timestamp>",
+        "evidence_reference": "<backup-checksum-and-restore-test-reference>"
+    },
+    "pilot": {
+        "approved_by": "<pilot-business-owner-name>",
+        "approved_at": "<ISO-8601-timestamp>",
+        "evidence_reference": "<pilot-reconciliation-reference>",
+        "warehouse_code": "<must-match-PILOT_WAREHOUSE_CODE>",
+        "representative_code": "<must-match-PILOT_REPRESENTATIVE_CODE>"
+    },
+    "post_launch": {
+        "approved_by": "<technical-owner-name>",
+        "approved_at": "<ISO-8601-timestamp>",
+        "evidence_reference": "<post-launch-verification-reference>"
+    }
+}

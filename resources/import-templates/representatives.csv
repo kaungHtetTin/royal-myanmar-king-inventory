@@ -1,0 +1,2 @@
+code,name,username,email,phone,warehouse_code,region,vehicle_number,is_active
+PILOT-REP-001,Example Representative,pilot.rep,pilot.rep@example.com,09-000000003,PILOT-WH,Yangon,PILOT-VEH-001,1

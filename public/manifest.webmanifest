@@ -1,0 +1,43 @@
+{
+    "id": "./",
+    "name": "StockFlow Inventory Management",
+    "short_name": "StockFlow",
+    "description": "Warehouse inventory, representative stock, sales, cash, and customer credit operations.",
+    "lang": "en",
+    "dir": "ltr",
+    "start_url": "./admin/dashboard",
+    "scope": "./",
+    "display": "standalone",
+    "orientation": "any",
+    "background_color": "#eef4f4",
+    "theme_color": "#087f74",
+    "categories": ["business", "finance", "productivity"],
+    "icons": [
+        {
+            "src": "icons/stockflow.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        },
+        {
+            "src": "icons/stockflow-maskable.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "maskable"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "Admin dashboard",
+            "short_name": "Admin",
+            "url": "./admin/dashboard",
+            "icons": [{ "src": "icons/stockflow.svg", "sizes": "any", "type": "image/svg+xml" }]
+        },
+        {
+            "name": "New representative sale",
+            "short_name": "New sale",
+            "url": "./sales/new-sale",
+            "icons": [{ "src": "icons/stockflow.svg", "sizes": "any", "type": "image/svg+xml" }]
+        }
+    ]
+}

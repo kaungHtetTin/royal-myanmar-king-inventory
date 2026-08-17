@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="StockFlow">
+  <rect width="512" height="512" rx="96" fill="#087f74"/>
+  <path d="M256 94 402 171v170L256 418 110 341V171l146-77Z" fill="none" stroke="#fff" stroke-width="34" stroke-linejoin="round"/>
+  <path d="m116 174 140 78 140-78M256 252v160M187 135l141 79" fill="none" stroke="#fff" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
