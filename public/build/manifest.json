@@ -1,0 +1,206 @@
+{
+  "_finance-CS5BL52B.js": {
+    "file": "assets/finance-CS5BL52B.js",
+    "name": "finance",
+    "imports": [
+      "resources/js/app.tsx"
+    ]
+  },
+  "_sales-BDSpZxqe.js": {
+    "file": "assets/sales-BDSpZxqe.js",
+    "name": "sales",
+    "imports": [
+      "resources/js/app.tsx"
+    ]
+  },
+  "_transfers-CcS2dIeW.js": {
+    "file": "assets/transfers-CcS2dIeW.js",
+    "name": "transfers",
+    "imports": [
+      "resources/js/app.tsx"
+    ]
+  },
+  "resources/css/app.css": {
+    "file": "assets/app-B494Szbg.css",
+    "src": "resources/css/app.css",
+    "isEntry": true,
+    "name": "app",
+    "names": [
+      "app.css"
+    ]
+  },
+  "resources/js/app.tsx": {
+    "file": "assets/app-2q7kksDn.js",
+    "name": "app",
+    "src": "resources/js/app.tsx",
+    "isEntry": true,
+    "dynamicImports": [
+      "resources/js/pages/admin/access-management-page.tsx",
+      "resources/js/pages/admin/audit-log-page.tsx",
+      "resources/js/pages/admin/customer-management-page.tsx",
+      "resources/js/pages/admin/finance-management-page.tsx",
+      "resources/js/pages/admin/inventory-management-page.tsx",
+      "resources/js/pages/admin/product-management-page.tsx",
+      "resources/js/pages/admin/reports-page.tsx",
+      "resources/js/pages/admin/representative-management-page.tsx",
+      "resources/js/pages/admin/sales-management-page.tsx",
+      "resources/js/pages/admin/transfer-management-page.tsx",
+      "resources/js/pages/admin/vehicle-management-page.tsx",
+      "resources/js/pages/admin/warehouse-management-page.tsx",
+      "resources/js/pages/sales/cash-workspace-page.tsx",
+      "resources/js/pages/sales/representative-stock-page.tsx",
+      "resources/js/pages/sales/sales-report-page.tsx",
+      "resources/js/pages/sales/sales-workspace-page.tsx"
+    ]
+  },
+  "resources/js/pages/admin/access-management-page.tsx": {
+    "file": "assets/access-management-page-DX-0mfKF.js",
+    "name": "access-management-page",
+    "src": "resources/js/pages/admin/access-management-page.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx"
+    ]
+  },
+  "resources/js/pages/admin/audit-log-page.tsx": {
+    "file": "assets/audit-log-page-9pbhyKWU.js",
+    "name": "audit-log-page",
+    "src": "resources/js/pages/admin/audit-log-page.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx"
+    ]
+  },
+  "resources/js/pages/admin/customer-management-page.tsx": {
+    "file": "assets/customer-management-page-Dkj6EZHL.js",
+    "name": "customer-management-page",
+    "src": "resources/js/pages/admin/customer-management-page.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx"
+    ]
+  },
+  "resources/js/pages/admin/finance-management-page.tsx": {
+    "file": "assets/finance-management-page-C_v9tBIq.js",
+    "name": "finance-management-page",
+    "src": "resources/js/pages/admin/finance-management-page.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_finance-CS5BL52B.js"
+    ]
+  },
+  "resources/js/pages/admin/inventory-management-page.tsx": {
+    "file": "assets/inventory-management-page-CQxpJBpD.js",
+    "name": "inventory-management-page",
+    "src": "resources/js/pages/admin/inventory-management-page.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx"
+    ]
+  },
+  "resources/js/pages/admin/product-management-page.tsx": {
+    "file": "assets/product-management-page-DHuHpdcF.js",
+    "name": "product-management-page",
+    "src": "resources/js/pages/admin/product-management-page.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx"
+    ]
+  },
+  "resources/js/pages/admin/reports-page.tsx": {
+    "file": "assets/reports-page-BeaK4v3d.js",
+    "name": "reports-page",
+    "src": "resources/js/pages/admin/reports-page.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx"
+    ]
+  },
+  "resources/js/pages/admin/representative-management-page.tsx": {
+    "file": "assets/representative-management-page-BlArsLrl.js",
+    "name": "representative-management-page",
+    "src": "resources/js/pages/admin/representative-management-page.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx"
+    ]
+  },
+  "resources/js/pages/admin/sales-management-page.tsx": {
+    "file": "assets/sales-management-page-la_tbIJ_.js",
+    "name": "sales-management-page",
+    "src": "resources/js/pages/admin/sales-management-page.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_sales-BDSpZxqe.js"
+    ]
+  },
+  "resources/js/pages/admin/transfer-management-page.tsx": {
+    "file": "assets/transfer-management-page-DP4ihHNo.js",
+    "name": "transfer-management-page",
+    "src": "resources/js/pages/admin/transfer-management-page.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_transfers-CcS2dIeW.js"
+    ]
+  },
+  "resources/js/pages/admin/vehicle-management-page.tsx": {
+    "file": "assets/vehicle-management-page-BGg8gzwh.js",
+    "name": "vehicle-management-page",
+    "src": "resources/js/pages/admin/vehicle-management-page.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx"
+    ]
+  },
+  "resources/js/pages/admin/warehouse-management-page.tsx": {
+    "file": "assets/warehouse-management-page-B6qy9LLg.js",
+    "name": "warehouse-management-page",
+    "src": "resources/js/pages/admin/warehouse-management-page.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx"
+    ]
+  },
+  "resources/js/pages/sales/cash-workspace-page.tsx": {
+    "file": "assets/cash-workspace-page-BWzvNToQ.js",
+    "name": "cash-workspace-page",
+    "src": "resources/js/pages/sales/cash-workspace-page.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_finance-CS5BL52B.js"
+    ]
+  },
+  "resources/js/pages/sales/representative-stock-page.tsx": {
+    "file": "assets/representative-stock-page-dkNumvzw.js",
+    "name": "representative-stock-page",
+    "src": "resources/js/pages/sales/representative-stock-page.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_transfers-CcS2dIeW.js"
+    ]
+  },
+  "resources/js/pages/sales/sales-report-page.tsx": {
+    "file": "assets/sales-report-page-kyGZG3Sm.js",
+    "name": "sales-report-page",
+    "src": "resources/js/pages/sales/sales-report-page.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx"
+    ]
+  },
+  "resources/js/pages/sales/sales-workspace-page.tsx": {
+    "file": "assets/sales-workspace-page-B2xbcgXl.js",
+    "name": "sales-workspace-page",
+    "src": "resources/js/pages/sales/sales-workspace-page.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_sales-BDSpZxqe.js"
+    ]
+  }
+}
