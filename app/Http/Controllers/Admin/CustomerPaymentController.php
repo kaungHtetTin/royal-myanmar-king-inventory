@@ -42,7 +42,12 @@ class CustomerPaymentController extends Controller
             ->when($data['search'] ?? null, fn ($query, $search) => $query->where(fn ($inner) => $inner->where('code', 'like', "%{$search}%")->orWhere('name', 'like', "%{$search}%")))
             ->when($data['owing_only'] ?? true, fn ($query) => $query->whereHas('creditBalance', fn ($balance) => $balance->where('outstanding_amount', '>', 0)))->orderBy('name');
 
-        return CustomerCreditBalanceResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString());
+        $summary = [
+            'outstanding' => (int) (clone $query)->get()->sum(fn ($customer) => $customer->creditBalance?->outstanding_amount ?? 0),
+        ];
+
+        return CustomerCreditBalanceResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString())
+            ->additional(['summary' => $summary]);
     }
 
     public function options(Request $request): JsonResponse
@@ -60,7 +65,12 @@ class CustomerPaymentController extends Controller
         $warehouseIds = $this->warehouseIds($request, $data['warehouse_id'] ?? null);
         $query = CustomerPayment::query()->with($this->relations())->whereIn('warehouse_id', $warehouseIds)->when($data['customer_id'] ?? null, fn ($query, $id) => $query->where('customer_id', $id))->when($data['status'] ?? null, fn ($query, $status) => $query->where('status', $status))->when($data['search'] ?? null, fn ($query, $search) => $query->where(fn ($inner) => $inner->where('reference', 'like', "%{$search}%")->orWhere('payment_reference', 'like', "%{$search}%")))->latest('id');
 
-        return CustomerPaymentResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString());
+        $summary = [
+            'draft_amount' => (int) (clone $query)->where('status', CustomerPaymentStatus::Draft)->sum('amount'),
+        ];
+
+        return CustomerPaymentResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString())
+            ->additional(['summary' => $summary]);
     }
 
     public function store(Request $request): JsonResponse

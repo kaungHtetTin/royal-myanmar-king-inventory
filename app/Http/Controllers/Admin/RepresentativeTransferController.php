@@ -56,7 +56,10 @@ class RepresentativeTransferController extends Controller
             ->when($data['search'] ?? null, fn ($query, $search) => $query->where('reference', 'like', "%{$search}%"))
             ->latest('id');
 
-        return RepresentativeTransferResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString());
+        $matching = (clone $query)->get();
+        $summary = ['total' => $matching->count(), 'units' => (int) $matching->sum('total_quantity'), 'products' => $matching->flatMap->items->pluck('product_id')->unique()->count(), 'in_transit' => $matching->where('status', TransferStatus::Dispatched)->count()];
+
+        return RepresentativeTransferResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString())->additional(['summary' => $summary]);
     }
 
     public function store(Request $request): JsonResponse

@@ -2,9 +2,15 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\CashSubmissionStatus;
+use App\Enums\PermissionName;
 use App\Enums\RoleName;
+use App\Enums\SaleStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SalesRepresentativeResource;
+use App\Models\CashSubmission;
+use App\Models\RepresentativeInventory;
+use App\Models\Sale;
 use App\Models\SalesRepresentative;
 use App\Models\User;
 use App\Models\Vehicle;
@@ -12,6 +18,7 @@ use App\Models\Warehouse;
 use App\Services\AuditLogger;
 use App\Services\RepresentativeAccess;
 use App\Services\WarehouseAccess;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -60,7 +67,16 @@ class SalesRepresentativeController extends Controller
             ->when($data['vehicle'] ?? null, fn ($query, string $vehicle) => $vehicle === 'assigned' ? $query->whereHas('vehicle') : $query->whereDoesntHave('vehicle'))
             ->orderBy($data['sort'] ?? 'name', $data['direction'] ?? 'asc');
 
-        return SalesRepresentativeResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString());
+        $summaryQuery = clone $query;
+        $summary = [
+            'total' => (clone $summaryQuery)->count(),
+            'active' => (clone $summaryQuery)->where('is_active', true)->count(),
+            'with_vehicle' => (clone $summaryQuery)->whereHas('vehicle')->count(),
+            'signed_in' => (clone $summaryQuery)->whereHas('user', fn ($user) => $user->whereNotNull('last_login_at'))->count(),
+        ];
+
+        return SalesRepresentativeResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString())
+            ->additional(['summary' => $summary]);
     }
 
     public function options(Request $request): JsonResponse
@@ -72,6 +88,59 @@ class SalesRepresentativeController extends Controller
                 ->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
             'vehicles' => Vehicle::query()->where('is_active', true)->orderBy('vehicle_number')
                 ->get(['id', 'vehicle_number', 'vehicle_type', 'sales_representative_id']),
+        ]);
+    }
+
+    public function show(Request $request, SalesRepresentative $salesRepresentative): JsonResponse
+    {
+        Gate::authorize('view', $salesRepresentative);
+
+        $user = $request->user();
+        $canViewStock = $user->can(PermissionName::RepresentativeStockView->value);
+        $canViewSales = $user->can(PermissionName::SaleView->value);
+        $canViewCash = $user->can(PermissionName::CashView->value);
+        $start = CarbonImmutable::today()->subDays(29);
+        $chart = [];
+
+        if ($canViewSales) {
+            $dailySales = Sale::query()
+                ->where('sales_representative_id', $salesRepresentative->id)
+                ->where('status', SaleStatus::Posted)
+                ->where('posted_at', '>=', $start)
+                ->selectRaw('DATE(posted_at) as sale_date, SUM(total_amount) as amount, COUNT(*) as transactions')
+                ->groupBy('sale_date')
+                ->pluck('amount', 'sale_date');
+            $dailyTransactions = Sale::query()
+                ->where('sales_representative_id', $salesRepresentative->id)
+                ->where('status', SaleStatus::Posted)
+                ->where('posted_at', '>=', $start)
+                ->selectRaw('DATE(posted_at) as sale_date, COUNT(*) as transactions')
+                ->groupBy('sale_date')
+                ->pluck('transactions', 'sale_date');
+
+            foreach (range(0, 29) as $offset) {
+                $date = $start->addDays($offset)->toDateString();
+                $chart[] = ['date' => $date, 'amount' => (int) ($dailySales[$date] ?? 0), 'transactions' => (int) ($dailyTransactions[$date] ?? 0)];
+            }
+        }
+
+        $stockQuery = RepresentativeInventory::query()->where('sales_representative_id', $salesRepresentative->id);
+        $salesQuery = Sale::query()->where('sales_representative_id', $salesRepresentative->id)->where('status', SaleStatus::Posted)->where('posted_at', '>=', $start);
+        $cashQuery = CashSubmission::query()->where('sales_representative_id', $salesRepresentative->id)->where('status', CashSubmissionStatus::Pending);
+
+        return response()->json([
+            'representative' => (new SalesRepresentativeResource($this->load($salesRepresentative)))->resolve($request),
+            'visibility' => ['stock' => $canViewStock, 'sales' => $canViewSales, 'cash' => $canViewCash],
+            'kpis' => [
+                'stock_units' => $canViewStock ? (int) (clone $stockQuery)->sum('quantity') : null,
+                'stock_products' => $canViewStock ? (clone $stockQuery)->where('quantity', '>', 0)->count() : null,
+                'sales_30_days' => $canViewSales ? (int) (clone $salesQuery)->sum('total_amount') : null,
+                'sales_transactions_30_days' => $canViewSales ? (clone $salesQuery)->count() : null,
+                'cash_hold' => $canViewCash ? (int) ($salesRepresentative->cashBalance()->value('amount') ?? 0) : null,
+                'pending_submissions' => $canViewCash ? (int) (clone $cashQuery)->sum('amount') : null,
+                'pending_submission_count' => $canViewCash ? (clone $cashQuery)->count() : null,
+            ],
+            'sales_chart' => $chart,
         ]);
     }
 

@@ -7,6 +7,7 @@ use App\Enums\PaymentType;
 use App\Enums\SaleStatus;
 use App\Enums\TransferStatus;
 use App\Http\Controllers\Controller;
+use App\Models\ApplicationSetting;
 use App\Models\CashSubmission;
 use App\Models\Customer;
 use App\Models\CustomerCreditBalance;
@@ -44,6 +45,9 @@ class DashboardController extends Controller
             'to_type' => $movement->to_location_type, 'to_id' => $movement->to_location_id,
             'actor' => ['id' => $movement->actor->id, 'name' => $movement->actor->name], 'occurred_at' => $movement->occurred_at->toISOString(),
         ]);
+        $lowStockThreshold = ApplicationSetting::current()->low_stock_threshold;
+        $lowStockProducts = WarehouseInventory::query()->whereIn('warehouse_id', $warehouseIds)
+            ->select('product_id')->groupBy('product_id')->havingRaw('SUM(quantity) <= ?', [$lowStockThreshold])->get()->count();
 
         return response()->json([
             'as_of' => now()->toISOString(),
@@ -59,6 +63,8 @@ class DashboardController extends Controller
                 'pending_warehouse_transfers' => WarehouseTransfer::query()->where('status', TransferStatus::Dispatched)->where(fn ($query) => $query->whereIn('source_warehouse_id', $warehouseIds)->orWhereIn('destination_warehouse_id', $warehouseIds))->count(),
                 'pending_representative_receivings' => RepresentativeTransfer::query()->whereIn('source_warehouse_id', $warehouseIds)->where('status', TransferStatus::Dispatched)->count(),
                 'pending_cash_submissions' => CashSubmission::query()->whereIn('warehouse_id', $warehouseIds)->where('status', CashSubmissionStatus::Pending)->count(),
+                'low_stock_products' => $lowStockProducts,
+                'low_stock_threshold' => $lowStockThreshold,
             ],
             'recent_movements' => $movements,
         ]);

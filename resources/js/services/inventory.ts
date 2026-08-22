@@ -7,6 +7,7 @@ export type ProductOption = {
     sku: string;
     name: string;
     unit: string;
+    selling_price: number;
 };
 export type InventoryOptions = {
     warehouses: WarehouseOption[];
@@ -15,7 +16,6 @@ export type InventoryOptions = {
 };
 export type InventoryBalance = {
     id: number;
-    warehouse: WarehouseOption;
     product: ProductOption;
     quantity: number;
     updated_at: string | null;
@@ -72,7 +72,7 @@ export type StockAdjustment = {
 export type ImportInput = {
     warehouse_id: number;
     notes: string;
-    items: { product_id: number; quantity: number }[];
+    items: { product_id: number; quantity: number; selling_price?: number }[];
 };
 export type AdjustmentInput = {
     warehouse_id: number;
@@ -95,6 +95,7 @@ export type ListFilters = {
     date_from?: string;
     date_to?: string;
 };
+export type InventorySummary = { products: number; total: number; units: number; warehouses: number };
 
 export class InventoryApiError extends Error {
     constructor(
@@ -136,25 +137,27 @@ const commandHeaders = () => ({ 'Idempotency-Key': crypto.randomUUID() });
 export const inventoryApi = {
     options: () => request<InventoryOptions>(() => window.axios.get('api/admin/inventory/options')),
     balances: (filters: ListFilters) =>
-        request<{ data: InventoryBalance[]; meta: PaginationMeta }>(() =>
+        request<{ data: InventoryBalance[]; meta: PaginationMeta; summary: InventorySummary }>(() =>
             window.axios.get('api/admin/inventory', {
                 params: pageParams(filters),
             }),
         ),
     movements: (filters: ListFilters) =>
-        request<{ data: StockMovement[]; meta: PaginationMeta }>(() =>
+        request<{ data: StockMovement[]; meta: PaginationMeta; summary: InventorySummary }>(() =>
             window.axios.get('api/admin/inventory/movements', {
                 params: pageParams(filters),
             }),
         ),
     imports: (filters: ListFilters) =>
-        request<{ data: StockImport[]; meta: PaginationMeta }>(() =>
+        request<{ data: StockImport[]; meta: PaginationMeta; summary: InventorySummary }>(() =>
             window.axios.get('api/admin/stock-imports', {
                 params: pageParams(filters),
             }),
         ),
+    importRecord: (id: number) =>
+        request<{ data: StockImport }>(() => window.axios.get(`api/admin/stock-imports/${id}`)),
     adjustments: (filters: ListFilters) =>
-        request<{ data: StockAdjustment[]; meta: PaginationMeta }>(() =>
+        request<{ data: StockAdjustment[]; meta: PaginationMeta; summary: InventorySummary }>(() =>
             window.axios.get('api/admin/stock-adjustments', {
                 params: pageParams(filters),
             }),

@@ -21,7 +21,6 @@ use App\Models\WarehouseInventory;
 use App\Models\WarehouseTransfer;
 use Database\Seeders\AccessControlSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class Phase7ReportingTest extends TestCase
@@ -58,25 +57,57 @@ class Phase7ReportingTest extends TestCase
             ->assertJsonPath('recent_sales.0.reference', 'P7-VOID');
     }
 
+    public function test_admin_representative_detail_combines_scoped_kpis_and_daily_sales_chart(): void
+    {
+        $fixture = $this->fixture();
+        $admin = $this->office(
+            $fixture['warehouse'],
+            PermissionName::RepresentativeView,
+            PermissionName::RepresentativeStockView,
+            PermissionName::SaleView,
+            PermissionName::CashView,
+        );
+
+        $this->actingAs($admin)->getJson('/api/admin/representatives/'.$fixture['representative']->id)
+            ->assertOk()
+            ->assertJsonPath('representative.id', $fixture['representative']->id)
+            ->assertJsonPath('visibility.stock', true)
+            ->assertJsonPath('visibility.sales', true)
+            ->assertJsonPath('visibility.cash', true)
+            ->assertJsonPath('kpis.stock_units', 20)
+            ->assertJsonPath('kpis.stock_products', 1)
+            ->assertJsonPath('kpis.sales_30_days', 800)
+            ->assertJsonPath('kpis.sales_transactions_30_days', 2)
+            ->assertJsonPath('kpis.cash_hold', 500)
+            ->assertJsonPath('kpis.pending_submissions', 100)
+            ->assertJsonPath('kpis.pending_submission_count', 1)
+            ->assertJsonCount(30, 'sales_chart')
+            ->assertJsonPath('sales_chart.29.amount', 800);
+
+        $this->getJson('/api/admin/representatives/'.$fixture['foreignRepresentative']->id)->assertForbidden();
+    }
+
     public function test_admin_reports_are_scoped_filterable_paginated_and_reconciled(): void
     {
         $fixture = $this->fixture();
         $admin = $this->office($fixture['warehouse'], PermissionName::ReportView);
-        $this->actingAs($admin)->getJson('/api/admin/reports/warehouse-stock?sort=quantity&direction=desc&per_page=10')->assertOk()->assertJsonPath('summary.units', 50)->assertJsonPath('meta.total', 1)->assertJsonPath('data.0.warehouse.id', $fixture['warehouse']->id);
-        $this->getJson('/api/admin/reports/representative-stock?per_page=10')->assertOk()->assertJsonPath('summary.units', 20)->assertJsonPath('summary.representatives', 1);
-        $this->getJson('/api/admin/reports/stock-movements?movement_type=SALE_OUT&per_page=10')->assertOk()->assertJsonPath('summary.units', 8)->assertJsonPath('summary.movements', 2);
-        $this->getJson('/api/admin/reports/cash-hold?per_page=10')->assertOk()->assertJsonPath('summary.cash_hold', 500)->assertJsonPath('data.0.representative.id', $fixture['representative']->id);
-        $this->getJson('/api/admin/reports/customer-credit?per_page=10')->assertOk()->assertJsonPath('summary.outstanding', 300)->assertJsonPath('data.0.available_credit', 1700);
+        $this->actingAs($admin)->getJson('/api/admin/report-options')->assertOk()->assertJsonPath('reports', ['sales']);
+        foreach (['warehouse-stock', 'representative-stock', 'stock-movements', 'warehouse-transfers', 'representative-transfers', 'cash-hold', 'customer-credit'] as $removedReport) {
+            $this->getJson('/api/admin/reports/'.$removedReport.'?per_page=10')->assertNotFound();
+        }
     }
 
-    public function test_sales_report_includes_documents_but_totals_only_posted_and_supports_product_filter(): void
+    public function test_sales_report_includes_documents_but_totals_only_posted(): void
     {
         $fixture = $this->fixture();
         $admin = $this->office($fixture['warehouse'], PermissionName::ReportView);
         $this->actingAs($admin)->getJson('/api/admin/reports/sales?per_page=10')->assertOk()->assertJsonPath('meta.total', 4)
+            ->assertJsonPath('summary.month_sales', 800)->assertJsonPath('summary.year_sales', 800)
             ->assertJsonPath('summary.gross_sales', 800)->assertJsonPath('summary.cash_sales', 500)->assertJsonPath('summary.credit_sales', 300)->assertJsonPath('summary.units_sold', 8)
+            ->assertJsonCount(31, 'analysis.month_trend')->assertJsonPath('analysis.month_trend.21.amount', 800)
+            ->assertJsonCount(12, 'analysis.year_trend')->assertJsonPath('analysis.year_trend.7.amount', 800)
+            ->assertJsonCount(1, 'analysis.top_products')->assertJsonPath('analysis.top_products.0.product.id', $fixture['product']->id)->assertJsonPath('analysis.top_products.0.units', 8)
             ->assertJsonPath('rules.financial_totals', 'posted_only');
-        $this->getJson('/api/admin/reports/sales?product_id='.$fixture['product']->id.'&payment_type=cash&per_page=10')->assertOk()->assertJsonPath('meta.total', 3)->assertJsonPath('summary.gross_sales', 500);
     }
 
     public function test_representative_sales_report_is_own_only_and_supports_today_customer_product_and_payment_filters(): void
@@ -99,18 +130,11 @@ class Phase7ReportingTest extends TestCase
             ->assertJsonCount(1, 'filters.actors')->assertJsonPath('filters.actors.0.id', $fixture['repUser']->id);
     }
 
-    public function test_warehouse_stock_report_query_count_stays_bounded_at_realistic_page_size(): void
+    public function test_removed_warehouse_stock_report_is_not_available(): void
     {
         $fixture = $this->fixture();
-        foreach (range(1, 35) as $number) {
-            $product = Product::factory()->create(['sku' => "P7-Q-{$number}"]);
-            WarehouseInventory::query()->create(['warehouse_id' => $fixture['warehouse']->id, 'product_id' => $product->id, 'quantity' => $number]);
-        }
         $admin = $this->office($fixture['warehouse'], PermissionName::ReportView);
-        DB::flushQueryLog();
-        DB::enableQueryLog();
-        $this->actingAs($admin)->getJson('/api/admin/reports/warehouse-stock?per_page=25')->assertOk()->assertJsonPath('meta.total', 36);
-        $this->assertLessThanOrEqual(10, count(DB::getQueryLog()));
+        $this->actingAs($admin)->getJson('/api/admin/reports/warehouse-stock?per_page=25')->assertNotFound();
     }
 
     /** @return array<string, mixed> */

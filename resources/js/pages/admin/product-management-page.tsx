@@ -8,6 +8,7 @@ import {
     type ProductFilters,
     type ProductInput,
     type ProductOptions,
+    type ProductSummary,
 } from '../../services/products';
 import { Icon } from '../../ui/icons';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
@@ -21,6 +22,7 @@ const emptyMeta: PaginationMeta = {
     total: 0,
 };
 const emptyOptions: ProductOptions = { categories: [], units: [] };
+const emptySummary: ProductSummary = { active: 0, categories: 0, inactive: 0, total: 0 };
 
 function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : 'Unable to complete the request.';
@@ -46,6 +48,7 @@ export function ProductManagementPage() {
     const [products, setProducts] = useState<Product[]>([]);
     const [options, setOptions] = useState<ProductOptions>(emptyOptions);
     const [meta, setMeta] = useState(emptyMeta);
+    const [summary, setSummary] = useState(emptySummary);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
@@ -68,6 +71,7 @@ export function ProductManagementPage() {
             const [response, availableOptions] = await Promise.all([productApi.list(filters), productApi.options()]);
             setProducts(response.data);
             setMeta(response.meta);
+            setSummary(response.summary ?? emptySummary);
             setOptions(availableOptions);
         } catch (requestError) {
             setError(errorMessage(requestError));
@@ -83,6 +87,7 @@ export function ProductManagementPage() {
                 if (!active) return;
                 setProducts(response.data);
                 setMeta(response.meta);
+                setSummary(response.summary ?? emptySummary);
                 setOptions(availableOptions);
             })
             .catch((requestError) => {
@@ -96,8 +101,6 @@ export function ProductManagementPage() {
         };
     }, [filters]);
 
-    const activeCount = products.filter((product) => product.is_active).length;
-    const categoryCount = new Set(products.map((product) => product.category).filter(Boolean)).size;
     const showNotice = (message: string) => {
         setNotice(message);
         window.setTimeout(() => setNotice(''), 4000);
@@ -126,15 +129,25 @@ export function ProductManagementPage() {
             </header>
 
             <div className="metric-grid access-metrics">
-                <MetricCard hint="Current filtered result" icon="box" label="Products" value={String(meta.total)} />
-                <MetricCard hint="On this page" icon="dashboard" label="Active" value={String(activeCount)} />
+                <MetricCard hint="Current filtered result" icon="box" label="Products" value={String(summary.total)} />
                 <MetricCard
-                    hint="On this page"
+                    hint="Current filtered result"
+                    icon="dashboard"
+                    label="Active"
+                    value={String(summary.active)}
+                />
+                <MetricCard
+                    hint="Current filtered result"
                     icon="adjustments"
                     label="Inactive"
-                    value={String(products.length - activeCount)}
+                    value={String(summary.inactive)}
                 />
-                <MetricCard hint="On this page" icon="reports" label="Categories" value={String(categoryCount)} />
+                <MetricCard
+                    hint="Current filtered result"
+                    icon="reports"
+                    label="Categories"
+                    value={String(summary.categories)}
+                />
             </div>
 
             {notice ? (

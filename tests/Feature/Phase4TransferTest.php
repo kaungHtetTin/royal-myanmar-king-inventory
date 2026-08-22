@@ -199,6 +199,44 @@ class Phase4TransferTest extends TestCase
         $this->postJson('/api/admin/representative-transfers', $this->representativePayload($warehouse, $representative, $product, 1))->assertForbidden();
     }
 
+    public function test_representative_stock_and_receivings_are_independently_paginated(): void
+    {
+        $warehouse = Warehouse::factory()->create();
+        [$representative, $user] = $this->representative($warehouse);
+        $products = Product::factory()->count(11)->create();
+
+        foreach ($products as $index => $product) {
+            RepresentativeInventory::query()->create([
+                'sales_representative_id' => $representative->id,
+                'product_id' => $product->id,
+                'quantity' => $index + 1,
+            ]);
+            $transfer = RepresentativeTransfer::query()->create([
+                'reference' => sprintf('PAGE-RTR-%02d', $index + 1),
+                'source_warehouse_id' => $warehouse->id,
+                'sales_representative_id' => $representative->id,
+                'status' => 'dispatched',
+                'created_by' => $user->id,
+                'dispatched_by' => $user->id,
+                'dispatched_at' => now(),
+            ]);
+            $transfer->items()->create(['product_id' => $product->id, 'quantity' => 1]);
+        }
+
+        $this->actingAs($user)->getJson('/api/sales/stock?page=2&per_page=10')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('meta.current_page', 2)
+            ->assertJsonPath('meta.total', 11)
+            ->assertJsonPath('summary.on_hand', 66);
+
+        $this->getJson('/api/sales/receivings?page=2&per_page=10')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('meta.current_page', 2)
+            ->assertJsonPath('meta.total', 11);
+    }
+
     public function test_representative_cancel_and_reversal_preserve_documents_and_restore_stock(): void
     {
         $admin = $this->superAdmin();

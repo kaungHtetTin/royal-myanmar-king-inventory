@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useSession, type SessionUser } from '../auth/session-context';
+import { useBranding } from '../branding/branding-context';
 import { reportingApi } from '../services/reporting';
 import { Icon, type IconName } from '../ui/icons';
 import { IconButton } from '../ui/primitives';
@@ -34,6 +35,12 @@ const navigation: NavGroup[] = [
                 label: 'Dashboard',
                 permission: 'dashboard.view',
                 to: '/admin/dashboard',
+            },
+            {
+                icon: 'reports',
+                label: 'Reports',
+                permission: 'report.view',
+                to: '/admin/reports',
             },
         ],
     },
@@ -101,12 +108,6 @@ const navigation: NavGroup[] = [
                 permission: 'vehicle.view',
                 to: '/admin/vehicles',
             },
-            {
-                icon: 'reports',
-                label: 'Reports',
-                permission: 'report.view',
-                to: '/admin/reports',
-            },
         ],
     },
     {
@@ -114,7 +115,7 @@ const navigation: NavGroup[] = [
         items: [
             {
                 icon: 'users',
-                label: 'Users & roles',
+                label: 'Users',
                 permission: 'user.manage',
                 to: '/admin/users',
             },
@@ -166,7 +167,10 @@ export function AdminShell({ children }: AdminShellProps) {
     const { density, theme, toggleDensity, toggleTheme } = useUiPreferences();
     const online = useOnlineStatus();
     const { logout, user } = useSession();
-    const pageTitle = routeTitles[location.pathname] ?? 'Dashboard';
+    const { branding } = useBranding();
+    const pageTitle = location.pathname.startsWith('/admin/representatives/')
+        ? 'Representative details'
+        : (routeTitles[location.pathname] ?? 'Dashboard');
 
     useEffect(() => {
         window.localStorage.setItem('inventory.sidebar', collapsed ? 'collapsed' : 'expanded');
@@ -246,6 +250,7 @@ export function AdminShell({ children }: AdminShellProps) {
             data-density={density}
             data-sidebar={collapsed ? 'collapsed' : 'expanded'}
             data-theme={theme}
+            style={{ '--color-primary': branding.primary_color } as CSSProperties}
         >
             <a className="skip-link" href="#admin-content">
                 Skip to content
@@ -267,10 +272,10 @@ export function AdminShell({ children }: AdminShellProps) {
             >
                 <div className="admin-brand">
                     <span className="admin-brand__mark" aria-hidden="true">
-                        <Icon name="box" size={17} />
+                        {branding.logo_url ? <img alt="" src={branding.logo_url} /> : <Icon name="box" size={17} />}
                     </span>
                     <span className="admin-brand__copy">
-                        <strong>StockFlow</strong>
+                        <strong>{branding.business_name}</strong>
                         <small>Operations console</small>
                     </span>
                     <IconButton

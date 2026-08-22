@@ -29,7 +29,14 @@ class CashController extends Controller
         $query = SalesRepresentative::query()->with(['primaryWarehouse:id,code,name', 'cashBalance'])->withSum(['cashSubmissions as pending_submissions' => fn ($query) => $query->where('status', CashSubmissionStatus::Pending)], 'amount')->whereIn('primary_warehouse_id', $warehouseIds)
             ->when($data['search'] ?? null, fn ($query, $search) => $query->where(fn ($inner) => $inner->where('code', 'like', "%{$search}%")->orWhere('name', 'like', "%{$search}%")))->orderBy('name');
 
-        return RepresentativeCashBalanceResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString());
+        $matching = (clone $query)->get();
+        $summary = [
+            'cash_held' => (int) $matching->sum(fn ($representative) => $representative->cashBalance?->amount ?? 0),
+            'pending_handover' => (int) $matching->sum('pending_submissions'),
+        ];
+
+        return RepresentativeCashBalanceResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString())
+            ->additional(['summary' => $summary]);
     }
 
     public function submissions(Request $request): AnonymousResourceCollection

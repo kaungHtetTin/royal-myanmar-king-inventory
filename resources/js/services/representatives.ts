@@ -64,6 +64,21 @@ export type RepresentativeOptions = {
     vehicles: RepresentativeVehicle[];
     warehouses: RepresentativeWarehouse[];
 };
+export type RepresentativeSummary = { active: number; signed_in: number; total: number; with_vehicle: number };
+export type RepresentativeOverview = {
+    representative: Representative;
+    visibility: { cash: boolean; sales: boolean; stock: boolean };
+    kpis: {
+        cash_hold: number | null;
+        pending_submission_count: number | null;
+        pending_submissions: number | null;
+        sales_30_days: number | null;
+        sales_transactions_30_days: number | null;
+        stock_products: number | null;
+        stock_units: number | null;
+    };
+    sales_chart: Array<{ amount: number; date: string; transactions: number }>;
+};
 
 export class RepresentativeApiError extends Error {
     constructor(
@@ -97,8 +112,10 @@ async function request<T>(operation: () => Promise<{ data: T }>) {
 }
 
 export const representativeApi = {
+    overview: (id: number) =>
+        request<RepresentativeOverview>(() => window.axios.get(`api/admin/representatives/${id}`)),
     list: (filters: RepresentativeFilters) =>
-        request<{ data: Representative[]; meta: PaginationMeta }>(() =>
+        request<{ data: Representative[]; meta: PaginationMeta; summary: RepresentativeSummary }>(() =>
             window.axios.get('api/admin/representatives', {
                 params: { ...filters, per_page: 20 },
             }),

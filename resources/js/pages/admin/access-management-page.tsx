@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { useSession } from '../../auth/session-context';
 import {
     AdministrationError,
     administrationApi,
@@ -9,6 +8,7 @@ import {
     type PaginationMeta,
     type UserFilters,
     type UserInput,
+    type UserSummary,
 } from '../../services/administration';
 import { Icon } from '../../ui/icons';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
@@ -26,6 +26,7 @@ const emptyOptions: AccessOptions = {
     roles: [],
     warehouses: [],
 };
+const emptySummary: UserSummary = { active: 0, roles: 0, total: 0, warehouse_assigned: 0 };
 
 function label(value: string) {
     return value
@@ -47,9 +48,6 @@ function errorMessage(error: unknown) {
 }
 
 export function AccessManagementPage() {
-    const { user: actor } = useSession();
-    const canManageRoles = Boolean(actor?.roles.includes('super-admin') || actor?.permissions.includes('role.manage'));
-    const [activeTab, setActiveTab] = useState<'roles' | 'users'>('users');
     const [appliedFilters, setAppliedFilters] = useState<UserFilters>({
         page: 1,
     });
@@ -59,16 +57,14 @@ export function AccessManagementPage() {
         status: '',
     });
     const [users, setUsers] = useState<ManagedUser[]>([]);
-    const [roles, setRoles] = useState<ManagedRole[]>([]);
     const [options, setOptions] = useState<AccessOptions>(emptyOptions);
     const [meta, setMeta] = useState(emptyMeta);
+    const [summary, setSummary] = useState(emptySummary);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
     const [userDialog, setUserDialog] = useState<'create' | 'edit' | 'access' | null>(null);
-    const [roleDialog, setRoleDialog] = useState<'create' | 'edit' | null>(null);
     const [selectedUser, setSelectedUser] = useState<ManagedUser | null>(null);
-    const [selectedRole, setSelectedRole] = useState<ManagedRole | null>(null);
 
     const loadUsers = useCallback(async () => {
         setLoading(true);
@@ -77,21 +73,13 @@ export function AccessManagementPage() {
             const response = await administrationApi.users(appliedFilters);
             setUsers(response.data);
             setMeta(response.meta);
+            setSummary(response.summary ?? emptySummary);
         } catch (requestError) {
             setError(errorMessage(requestError));
         } finally {
             setLoading(false);
         }
     }, [appliedFilters]);
-
-    const loadRoles = useCallback(async () => {
-        if (!canManageRoles) return;
-        try {
-            setRoles((await administrationApi.roles()).roles);
-        } catch (requestError) {
-            setError(errorMessage(requestError));
-        }
-    }, [canManageRoles]);
 
     useEffect(() => {
         let active = true;
@@ -103,20 +91,10 @@ export function AccessManagementPage() {
             .catch((requestError) => {
                 if (active) setError(errorMessage(requestError));
             });
-        if (canManageRoles) {
-            void administrationApi
-                .roles()
-                .then((response) => {
-                    if (active) setRoles(response.roles);
-                })
-                .catch((requestError) => {
-                    if (active) setError(errorMessage(requestError));
-                });
-        }
         return () => {
             active = false;
         };
-    }, [canManageRoles]);
+    }, []);
 
     useEffect(() => {
         let active = true;
@@ -126,6 +104,7 @@ export function AccessManagementPage() {
                 if (!active) return;
                 setUsers(response.data);
                 setMeta(response.meta);
+                setSummary(response.summary ?? emptySummary);
             })
             .catch((requestError) => {
                 if (active) setError(errorMessage(requestError));
@@ -144,20 +123,17 @@ export function AccessManagementPage() {
     };
 
     const refreshed = async (message: string) => {
-        await Promise.all([loadUsers(), loadRoles()]);
+        await loadUsers();
         showNotice(message);
     };
-
-    const activeCount = users.filter((managedUser) => managedUser.is_active).length;
-    const assignedCount = users.filter((managedUser) => managedUser.warehouses.length > 0).length;
 
     return (
         <div className="admin-page access-management">
             <header className="page-heading">
                 <div>
                     <p className="ui-eyebrow">Access control</p>
-                    <h1>Users & roles</h1>
-                    <p>Manage account status, warehouse scope, roles, and permissions.</p>
+                    <h1>Users</h1>
+                    <p>Manage account details, status, assigned roles, and warehouse scope.</p>
                 </div>
                 <Button
                     icon="plus"
@@ -176,20 +152,19 @@ export function AccessManagementPage() {
                     hint="Current filtered result"
                     icon="users"
                     label="User accounts"
-                    value={String(meta.total)}
+                    value={String(summary.total)}
                 />
-                <MetricCard hint="On this page" icon="dashboard" label="Active accounts" value={String(activeCount)} />
                 <MetricCard
-                    hint="On this page"
+                    hint="Current filtered result"
+                    icon="dashboard"
+                    label="Active accounts"
+                    value={String(summary.active)}
+                />
+                <MetricCard
+                    hint="Current filtered result"
                     icon="warehouse"
                     label="Warehouse assigned"
-                    value={String(assignedCount)}
-                />
-                <MetricCard
-                    hint="Available access profiles"
-                    icon="settings"
-                    label="Roles"
-                    value={String(options.roles.length)}
+                    value={String(summary.warehouse_assigned)}
                 />
             </div>
 
@@ -209,29 +184,7 @@ export function AccessManagementPage() {
                 </div>
             ) : null}
 
-            <div className="ui-tabs" role="tablist" aria-label="Access management sections">
-                <button
-                    aria-selected={activeTab === 'users'}
-                    onClick={() => setActiveTab('users')}
-                    role="tab"
-                    type="button"
-                >
-                    Users <span>{meta.total}</span>
-                </button>
-                {canManageRoles ? (
-                    <button
-                        aria-selected={activeTab === 'roles'}
-                        onClick={() => setActiveTab('roles')}
-                        role="tab"
-                        type="button"
-                    >
-                        Roles <span>{roles.length}</span>
-                    </button>
-                ) : null}
-            </div>
-
-            {activeTab === 'users' ? (
-                <Panel eyebrow="Directory" title="User accounts">
+            <Panel eyebrow="Directory" title="User accounts">
                     <form
                         className="filter-toolbar"
                         onSubmit={(event) => {
@@ -419,76 +372,7 @@ export function AccessManagementPage() {
                             Next
                         </button>
                     </footer>
-                </Panel>
-            ) : (
-                <Panel
-                    actions={
-                        <Button
-                            icon="plus"
-                            onClick={() => {
-                                setSelectedRole(null);
-                                setRoleDialog('create');
-                            }}
-                        >
-                            New role
-                        </Button>
-                    }
-                    eyebrow="Authorization"
-                    title="Roles & permissions"
-                >
-                    <div className="role-summary">
-                        Roles bundle permissions into reusable access profiles. Built-in role names stay fixed to
-                        preserve policy behavior.
-                    </div>
-                    <div className="ui-table-wrap">
-                        <table className="ui-table role-table">
-                            <thead>
-                                <tr>
-                                    <th>Role</th>
-                                    <th>Users</th>
-                                    <th>Permissions</th>
-                                    <th>Type</th>
-                                    <th className="ui-table__actions">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {roles.map((role) => (
-                                    <tr key={role.id}>
-                                        <td>
-                                            <strong>{label(role.name)}</strong>
-                                            <small>{role.name}</small>
-                                        </td>
-                                        <td className="is-numeric">{role.users_count}</td>
-                                        <td>
-                                            <strong>{role.permissions.length}</strong>
-                                            <small>
-                                                {role.permissions.slice(0, 3).map(label).join(', ') || 'No permissions'}
-                                                {role.permissions.length > 3 ? ` +${role.permissions.length - 3}` : ''}
-                                            </small>
-                                        </td>
-                                        <td>
-                                            <StatusBadge tone={role.system ? 'info' : 'neutral'}>
-                                                {role.system ? 'Built-in' : 'Custom'}
-                                            </StatusBadge>
-                                        </td>
-                                        <td className="ui-table__actions">
-                                            <IconButton
-                                                disabled={role.name === 'super-admin'}
-                                                icon="settings"
-                                                label={`Edit ${label(role.name)}`}
-                                                onClick={() => {
-                                                    setSelectedRole(role);
-                                                    setRoleDialog('edit');
-                                                }}
-                                            />
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </Panel>
-            )}
+            </Panel>
 
             <UserDialog
                 mode={userDialog}
@@ -500,12 +384,103 @@ export function AccessManagementPage() {
                 options={options}
                 user={selectedUser}
             />
+        </div>
+    );
+}
+
+export function RoleManagementSection() {
+    const [roles, setRoles] = useState<ManagedRole[]>([]);
+    const [options, setOptions] = useState<AccessOptions>(emptyOptions);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [notice, setNotice] = useState('');
+    const [roleDialog, setRoleDialog] = useState<'create' | 'edit' | null>(null);
+    const [selectedRole, setSelectedRole] = useState<ManagedRole | null>(null);
+
+    const loadRoles = useCallback(async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const [roleResponse, accessOptions] = await Promise.all([
+                administrationApi.roles(),
+                administrationApi.accessOptions(),
+            ]);
+            setRoles(roleResponse.roles);
+            setOptions(accessOptions);
+        } catch (requestError) {
+            setError(errorMessage(requestError));
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        void loadRoles();
+    }, [loadRoles]);
+
+    return (
+        <div className="settings-role-management">
+            <header className="settings-editor-heading settings-role-heading">
+                <div>
+                    <p className="ui-eyebrow">Authorization</p>
+                    <h2>Roles & permissions</h2>
+                    <p>Bundle permissions into reusable access profiles for user accounts.</p>
+                </div>
+                <Button
+                    icon="plus"
+                    onClick={() => {
+                        setSelectedRole(null);
+                        setRoleDialog('create');
+                    }}
+                >
+                    New role
+                </Button>
+            </header>
+
+            {notice ? <div className="ui-flash ui-flash--success" role="status">{notice}</div> : null}
+            {error ? (
+                <div className="ui-flash ui-flash--danger" role="alert">
+                    {error}
+                    <button onClick={() => void loadRoles()} type="button">Retry</button>
+                </div>
+            ) : null}
+
+            <section className="settings-subsection settings-role-card">
+                <div className="role-summary">
+                    Built-in role names stay fixed to preserve policy behavior. Permission changes apply immediately.
+                </div>
+                {loading ? (
+                    <div className="ui-loading" role="status"><span />Loading roles…</div>
+                ) : (
+                    <div className="ui-table-wrap">
+                        <table className="ui-table role-table">
+                            <thead><tr><th>Role</th><th>Users</th><th>Permissions</th><th>Type</th><th className="ui-table__actions">Actions</th></tr></thead>
+                            <tbody>
+                                {roles.map((role) => (
+                                    <tr key={role.id}>
+                                        <td><strong>{label(role.name)}</strong><small>{role.name}</small></td>
+                                        <td className="is-numeric">{role.users_count}</td>
+                                        <td><strong>{role.permissions.length}</strong><small>{role.permissions.slice(0, 3).map(label).join(', ') || 'No permissions'}{role.permissions.length > 3 ? ` +${role.permissions.length - 3}` : ''}</small></td>
+                                        <td><StatusBadge tone={role.system ? 'info' : 'neutral'}>{role.system ? 'Built-in' : 'Custom'}</StatusBadge></td>
+                                        <td className="ui-table__actions">
+                                            <IconButton disabled={role.name === 'super-admin'} icon="settings" label={`Edit ${label(role.name)}`} onClick={() => { setSelectedRole(role); setRoleDialog('edit'); }} />
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </section>
+
             <RoleDialog
                 mode={roleDialog}
                 onClose={() => setRoleDialog(null)}
                 onSaved={async (message) => {
                     setRoleDialog(null);
-                    await refreshed(message);
+                    await loadRoles();
+                    setNotice(message);
+                    window.setTimeout(() => setNotice(''), 4000);
                 }}
                 options={options}
                 role={selectedRole}

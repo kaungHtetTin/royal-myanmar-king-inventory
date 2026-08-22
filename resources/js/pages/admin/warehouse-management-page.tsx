@@ -7,6 +7,7 @@ import {
     type Warehouse,
     type WarehouseFilters,
     type WarehouseInput,
+    type WarehouseSummary,
 } from '../../services/warehouses';
 import { Icon } from '../../ui/icons';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
@@ -19,6 +20,7 @@ const emptyMeta: PaginationMeta = {
     to: null,
     total: 0,
 };
+const emptySummary: WarehouseSummary = { active: 0, assigned_users: 0, inactive: 0, total: 0 };
 
 function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : 'Unable to complete the request.';
@@ -39,6 +41,7 @@ export function WarehouseManagementPage() {
     const canEdit = Boolean(isSuperAdmin || user?.permissions.includes('warehouse.edit'));
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
     const [meta, setMeta] = useState(emptyMeta);
+    const [summary, setSummary] = useState(emptySummary);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
@@ -59,6 +62,7 @@ export function WarehouseManagementPage() {
             const response = await warehouseApi.list(filters);
             setWarehouses(response.data);
             setMeta(response.meta);
+            setSummary(response.summary ?? emptySummary);
         } catch (requestError) {
             setError(errorMessage(requestError));
         } finally {
@@ -74,6 +78,7 @@ export function WarehouseManagementPage() {
                 if (!active) return;
                 setWarehouses(response.data);
                 setMeta(response.meta);
+                setSummary(response.summary ?? emptySummary);
             })
             .catch((requestError) => {
                 if (active) setError(errorMessage(requestError));
@@ -90,10 +95,6 @@ export function WarehouseManagementPage() {
         setNotice(message);
         window.setTimeout(() => setNotice(''), 4000);
     };
-
-    const activeCount = warehouses.filter((warehouse) => warehouse.is_active).length;
-    const inactiveCount = warehouses.length - activeCount;
-    const assignedUsers = warehouses.reduce((total, warehouse) => total + warehouse.users_count, 0);
 
     return (
         <div className="admin-page warehouse-management">
@@ -122,15 +123,25 @@ export function WarehouseManagementPage() {
                     hint="Current filtered result"
                     icon="warehouse"
                     label="Warehouses"
-                    value={String(meta.total)}
+                    value={String(summary.total)}
                 />
-                <MetricCard hint="On this page" icon="dashboard" label="Active" value={String(activeCount)} />
-                <MetricCard hint="On this page" icon="adjustments" label="Inactive" value={String(inactiveCount)} />
                 <MetricCard
-                    hint="Assignments on this page"
+                    hint="Current filtered result"
+                    icon="dashboard"
+                    label="Active"
+                    value={String(summary.active)}
+                />
+                <MetricCard
+                    hint="Current filtered result"
+                    icon="adjustments"
+                    label="Inactive"
+                    value={String(summary.inactive)}
+                />
+                <MetricCard
+                    hint="Current filtered result"
                     icon="users"
                     label="Assigned users"
-                    value={String(assignedUsers)}
+                    value={String(summary.assigned_users)}
                 />
             </div>
 

@@ -52,7 +52,10 @@ class StockAdjustmentController extends Controller
                 ->where('reference', 'like', "%{$search}%")->orWhere('reason', 'like', "%{$search}%")))
             ->latest('id');
 
-        return StockAdjustmentResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString());
+        $matching = (clone $query)->get();
+        $summary = ['total' => $matching->count(), 'units' => (int) $matching->sum('quantity'), 'warehouses' => $matching->pluck('warehouse_id')->unique()->count(), 'products' => $matching->pluck('product_id')->unique()->count()];
+
+        return StockAdjustmentResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString())->additional(['summary' => $summary]);
     }
 
     public function store(Request $request): JsonResponse

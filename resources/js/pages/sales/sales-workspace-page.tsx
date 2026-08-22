@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useBranding } from '../../branding/branding-context';
+import type { PaginationMeta } from '../../services/administration';
+import { printInvoice } from '../../services/invoice-print';
 import { SaleApiError, saleApi, type Sale, type SaleInput, type SaleOptions } from '../../services/sales';
 import { Icon } from '../../ui/icons';
-import { Button, EmptyState, IconButton, StatusBadge } from '../../ui/primitives';
+import { Button, EmptyState, IconButton, Pagination, StatusBadge } from '../../ui/primitives';
 
 const emptyOptions: SaleOptions = {
     cash_hold: 0,
@@ -15,6 +18,14 @@ const emptyForm: SaleInput = {
     items: [],
     notes: '',
     payment_type: 'cash',
+};
+const emptyMeta: PaginationMeta = {
+    current_page: 1,
+    from: null,
+    last_page: 1,
+    per_page: 10,
+    to: null,
+    total: 0,
 };
 const wizardSteps = [
     { label: 'Information', number: 1 },
@@ -56,9 +67,12 @@ function formFromSale(sale: Sale): SaleInput {
 type SalesWorkspaceView = 'entry' | 'history';
 
 function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: SalesWorkspaceView }) {
+    const { branding } = useBranding();
     const navigate = useNavigate();
     const [options, setOptions] = useState(emptyOptions);
     const [sales, setSales] = useState<Sale[]>([]);
+    const [salesMeta, setSalesMeta] = useState(emptyMeta);
+    const [historyPage, setHistoryPage] = useState(1);
     const [form, setForm] = useState(emptyForm);
     const [editing, setEditing] = useState<Sale | null>(null);
     const [loading, setLoading] = useState(true);
@@ -72,16 +86,18 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
     const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
     const customerPickerRef = useRef<HTMLDivElement>(null);
     const load = useCallback(async () => {
-        setLoading(true);
-        setError('');
         try {
-            const [nextOptions, history] = await Promise.all([saleApi.options(), saleApi.ownSales()]);
-            const editSale =
-                view === 'entry' && editId
-                    ? history.data.find((item) => item.id === editId && item.status === 'draft')
-                    : undefined;
+            const [nextOptions, history, editResponse] = await Promise.all([
+                saleApi.options(),
+                view === 'history' ? saleApi.ownSales({ page: historyPage }) : Promise.resolve(null),
+                view === 'entry' && editId ? saleApi.ownSale(editId) : Promise.resolve(null),
+            ]);
+            const editSale = editResponse?.data.status === 'draft' ? editResponse.data : undefined;
             setOptions(nextOptions);
-            setSales(history.data);
+            if (history) {
+                setSales(history.data);
+                setSalesMeta(history.meta);
+            }
             if (editSale) setEditing(editSale);
             setForm((value) => ({
                 ...(editSale
@@ -95,48 +111,16 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                           })),
                       }),
             }));
+            setError('');
         } catch (requestError) {
             setError(message(requestError));
         } finally {
             setLoading(false);
         }
-    }, [editId, view]);
+    }, [editId, historyPage, view]);
     useEffect(() => {
-        let active = true;
-        void Promise.all([saleApi.options(), saleApi.ownSales()])
-            .then(([nextOptions, history]) => {
-                if (!active) return;
-                const editSale =
-                    view === 'entry' && editId
-                        ? history.data.find((item) => item.id === editId && item.status === 'draft')
-                        : undefined;
-                setOptions(nextOptions);
-                setSales(history.data);
-                if (editSale) setEditing(editSale);
-                setForm((value) => ({
-                    ...(editSale
-                        ? formFromSale(editSale)
-                        : {
-                              ...value,
-                              customer_id: value.customer_id,
-                              items: value.items.map((item) => ({
-                                  ...item,
-                                  product_id: item.product_id || nextOptions.products[0]?.id || 0,
-                              })),
-                          }),
-                }));
-                setError('');
-            })
-            .catch((requestError) => {
-                if (active) setError(message(requestError));
-            })
-            .finally(() => {
-                if (active) setLoading(false);
-            });
-        return () => {
-            active = false;
-        };
-    }, [editId, view]);
+        void Promise.resolve().then(load);
+    }, [load]);
     useEffect(() => {
         const closeActionMenu = (event: KeyboardEvent | PointerEvent) => {
             if (event instanceof KeyboardEvent) {
@@ -374,7 +358,7 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                     <h1>{view === 'entry' ? (editing ? `Edit ${editing.reference}` : 'New sale') : 'Sales history'}</h1>
                 </div>
                 <StatusBadge tone={view === 'entry' ? 'info' : 'neutral'}>
-                    {view === 'entry' ? 'Server priced' : `${sales.length} recent`}
+                    {view === 'entry' ? 'Server priced' : `${salesMeta.total} records`}
                 </StatusBadge>
             </header>
             {view === 'history' ? (
@@ -908,14 +892,25 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                     <div className="sales-history__end">
                                         <StatusBadge tone={tone(sale.status)}>{sale.status}</StatusBadge>
                                         {sale.status !== 'draft' ? (
-                                            <Link
-                                                aria-label={`View ${sale.reference}`}
-                                                className="ui-icon-button ui-icon-button--secondary sales-history__detail-link"
-                                                title={`View ${sale.reference}`}
-                                                to={`/sales/sales-history/${sale.id}`}
-                                            >
-                                                <Icon name="chevronRight" size={17} />
-                                            </Link>
+                                            <>
+                                                <IconButton
+                                                    icon="print"
+                                                    label={`Print invoice ${sale.reference}`}
+                                                    onClick={() => {
+                                                        if (!printInvoice(sale, branding)) {
+                                                            setError('Allow pop-ups to print the invoice.');
+                                                        }
+                                                    }}
+                                                />
+                                                <Link
+                                                    aria-label={`View ${sale.reference}`}
+                                                    className="ui-icon-button ui-icon-button--secondary sales-history__detail-link"
+                                                    title={`View ${sale.reference}`}
+                                                    to={`/sales/sales-history/${sale.id}`}
+                                                >
+                                                    <Icon name="chevronRight" size={17} />
+                                                </Link>
+                                            </>
                                         ) : null}
                                         {sale.status === 'draft' ? (
                                             <div className="sales-history__menu">
@@ -976,6 +971,15 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                             ))}
                         </div>
                     )}
+                    <Pagination
+                        label="Sales history"
+                        loading={loading}
+                        meta={salesMeta}
+                        onPageChange={(page) => {
+                            setLoading(true);
+                            setHistoryPage(page);
+                        }}
+                    />
                 </section>
             )}
         </div>

@@ -37,6 +37,7 @@ export type ProductFilters = {
 };
 
 export type ProductOptions = { categories: string[]; units: string[] };
+export type ProductSummary = { active: number; categories: number; inactive: number; total: number };
 
 export class ProductApiError extends Error {
     constructor(
@@ -71,7 +72,7 @@ async function request<T>(operation: () => Promise<{ data: T }>) {
 
 export const productApi = {
     list: (filters: ProductFilters) =>
-        request<{ data: Product[]; meta: PaginationMeta }>(() =>
+        request<{ data: Product[]; meta: PaginationMeta; summary: ProductSummary }>(() =>
             window.axios.get('api/admin/products', {
                 params: { ...filters, per_page: 20 },
             }),

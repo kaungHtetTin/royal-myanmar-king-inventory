@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useSession } from '../auth/session-context';
+import { useBranding } from '../branding/branding-context';
 import { Icon, type IconName } from '../ui/icons';
 import { IconButton } from '../ui/primitives';
 import { OfflineBanner } from '../ui/offline-banner';
@@ -14,6 +15,12 @@ const salesNavigation: Array<{ icon: IconName; label: string; to: string }> = [
     { icon: 'cash', label: 'Cash', to: '/sales/cash-hold' },
 ];
 
+const salesDesktopNavigation = [
+    ...salesNavigation.slice(0, 3),
+    { icon: 'sales' as const, label: 'Sales history', to: '/sales/sales-history' },
+    ...salesNavigation.slice(3),
+];
+
 export function SalesShell({ children }: { children: ReactNode }) {
     const location = useLocation();
     const profileMenuRef = useRef<HTMLDivElement>(null);
@@ -21,6 +28,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
     const online = useOnlineStatus();
     const { density, theme, toggleDensity, toggleTheme } = useUiPreferences();
     const { logout, user } = useSession();
+    const { branding } = useBranding();
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -54,18 +62,27 @@ export function SalesShell({ children }: { children: ReactNode }) {
     const roleLabel = user?.roles[0]?.replaceAll('-', ' ') ?? 'Representative';
 
     return (
-        <div className="sales-root" data-density={density} data-theme={theme}>
+        <div
+            className="sales-root"
+            data-density={density}
+            data-theme={theme}
+            style={{ '--color-primary': branding.primary_color } as CSSProperties}
+        >
             <a className="skip-link" href="#sales-content">
                 Skip to content
             </a>
             <div className="sales-app-frame">
                 <header className="sales-topbar">
-                    <Link aria-label="StockFlow home" className="sales-company-brand" to="/sales/dashboard">
+                    <Link
+                        aria-label={`${branding.business_name} home`}
+                        className="sales-company-brand"
+                        to="/sales/dashboard"
+                    >
                         <span className="sales-company-brand__mark" aria-hidden="true">
-                            <Icon name="box" size={18} />
+                            {branding.logo_url ? <img alt="" src={branding.logo_url} /> : <Icon name="box" size={18} />}
                         </span>
                         <span className="sales-company-brand__copy">
-                            <strong>StockFlow</strong>
+                            <strong>{branding.business_name}</strong>
                             <small>Sales workspace</small>
                         </span>
                     </Link>
@@ -156,8 +173,10 @@ export function SalesShell({ children }: { children: ReactNode }) {
                 <OfflineBanner />
 
                 <nav className="sales-desktop-nav" aria-label="Representative navigation">
-                    {salesNavigation.map((item) => {
-                        const active = location.pathname === item.to;
+                    {salesDesktopNavigation.map((item) => {
+                        const active =
+                            location.pathname === item.to ||
+                            (item.to === '/sales/sales-history' && location.pathname.startsWith(`${item.to}/`));
                         return (
                             <Link
                                 aria-current={active ? 'page' : undefined}

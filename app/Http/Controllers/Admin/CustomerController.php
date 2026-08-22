@@ -60,7 +60,16 @@ class CustomerController extends Controller
             ->when($data['warehouse_id'] ?? null, fn ($query, int $warehouseId) => $query->where('warehouse_id', $warehouseId))
             ->orderBy($data['sort'] ?? 'name', $data['direction'] ?? 'asc');
 
-        return CustomerResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString());
+        $summaryQuery = clone $query;
+        $summary = [
+            'total' => (clone $summaryQuery)->count(),
+            'active' => (clone $summaryQuery)->where('is_active', true)->count(),
+            'credit_enabled' => (clone $summaryQuery)->where('credit_allowed', true)->count(),
+            'credit_limit' => (int) (clone $summaryQuery)->where('credit_allowed', true)->sum('credit_limit'),
+        ];
+
+        return CustomerResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString())
+            ->additional(['summary' => $summary]);
     }
 
     public function options(Request $request): JsonResponse

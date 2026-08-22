@@ -41,7 +41,16 @@ class ProductController extends Controller
             ->when($data['unit'] ?? null, fn ($query, string $unit) => $query->where('unit', $unit))
             ->orderBy($data['sort'] ?? 'name', $data['direction'] ?? 'asc');
 
-        return ProductResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString());
+        $summaryQuery = clone $query;
+        $summary = [
+            'total' => (clone $summaryQuery)->count(),
+            'active' => (clone $summaryQuery)->where('is_active', true)->count(),
+            'inactive' => (clone $summaryQuery)->where('is_active', false)->count(),
+            'categories' => (clone $summaryQuery)->whereNotNull('category')->distinct()->count('category'),
+        ];
+
+        return ProductResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString())
+            ->additional(['summary' => $summary]);
     }
 
     public function options(): JsonResponse

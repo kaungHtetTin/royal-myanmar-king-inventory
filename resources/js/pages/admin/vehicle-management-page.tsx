@@ -8,6 +8,7 @@ import {
     type VehicleFilters,
     type VehicleInput,
     type VehicleOptions,
+    type VehicleSummary,
 } from '../../services/vehicles';
 import { Icon } from '../../ui/icons';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
@@ -21,6 +22,7 @@ const emptyMeta: PaginationMeta = {
     total: 0,
 };
 const emptyOptions: VehicleOptions = { representatives: [], types: [] };
+const emptySummary: VehicleSummary = { active: 0, assigned: 0, total: 0, unassigned: 0 };
 
 function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : 'Unable to complete the request.';
@@ -42,6 +44,7 @@ export function VehicleManagementPage() {
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [options, setOptions] = useState<VehicleOptions>(emptyOptions);
     const [meta, setMeta] = useState(emptyMeta);
+    const [summary, setSummary] = useState(emptySummary);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
@@ -64,6 +67,7 @@ export function VehicleManagementPage() {
             const [response, availableOptions] = await Promise.all([vehicleApi.list(filters), vehicleApi.options()]);
             setVehicles(response.data);
             setMeta(response.meta);
+            setSummary(response.summary ?? emptySummary);
             setOptions(availableOptions);
         } catch (requestError) {
             setError(errorMessage(requestError));
@@ -79,6 +83,7 @@ export function VehicleManagementPage() {
                 if (!active) return;
                 setVehicles(response.data);
                 setMeta(response.meta);
+                setSummary(response.summary ?? emptySummary);
                 setOptions(availableOptions);
             })
             .catch((requestError) => {
@@ -92,8 +97,6 @@ export function VehicleManagementPage() {
         };
     }, [filters]);
 
-    const activeCount = vehicles.filter((vehicle) => vehicle.is_active).length;
-    const assignedCount = vehicles.filter((vehicle) => vehicle.representative).length;
     const showNotice = (message: string) => {
         setNotice(message);
         window.setTimeout(() => setNotice(''), 4000);
@@ -122,14 +125,29 @@ export function VehicleManagementPage() {
             </header>
 
             <div className="metric-grid access-metrics">
-                <MetricCard hint="Current filtered result" icon="truck" label="Vehicles" value={String(meta.total)} />
-                <MetricCard hint="On this page" icon="dashboard" label="Active" value={String(activeCount)} />
-                <MetricCard hint="On this page" icon="users" label="Assigned" value={String(assignedCount)} />
                 <MetricCard
-                    hint="On this page"
+                    hint="Current filtered result"
+                    icon="truck"
+                    label="Vehicles"
+                    value={String(summary.total)}
+                />
+                <MetricCard
+                    hint="Current filtered result"
+                    icon="dashboard"
+                    label="Active"
+                    value={String(summary.active)}
+                />
+                <MetricCard
+                    hint="Current filtered result"
+                    icon="users"
+                    label="Assigned"
+                    value={String(summary.assigned)}
+                />
+                <MetricCard
+                    hint="Current filtered result"
                     icon="adjustments"
                     label="Unassigned"
-                    value={String(vehicles.length - assignedCount)}
+                    value={String(summary.unassigned)}
                 />
             </div>
 

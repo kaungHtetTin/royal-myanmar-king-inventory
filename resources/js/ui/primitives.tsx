@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactNode } f
 import { Icon, type IconName } from './icons';
 import { OFFLINE_TRANSACTION_MESSAGE } from './offline-banner';
 import { useOnlineStatus } from './preferences';
+import type { PaginationMeta } from '../services/administration';
 
 type ButtonTone = 'primary' | 'secondary' | 'danger' | 'ghost';
 
@@ -134,6 +135,45 @@ export function EmptyState({ description, title }: { description: string; title:
             <strong>{title}</strong>
             <p>{description}</p>
         </div>
+    );
+}
+
+export function Pagination({
+    label,
+    loading,
+    meta,
+    onPageChange,
+}: {
+    label: string;
+    loading: boolean;
+    meta: PaginationMeta;
+    onPageChange: (page: number) => void;
+}) {
+    if (meta.total === 0) return null;
+
+    return (
+        <nav aria-label={`${label} pagination`} className="table-footer">
+            <span>
+                {meta.from ?? 0}–{meta.to ?? 0} of {meta.total}
+            </span>
+            <button
+                disabled={meta.current_page <= 1 || loading}
+                onClick={() => onPageChange(meta.current_page - 1)}
+                type="button"
+            >
+                Previous
+            </button>
+            <strong>
+                Page {meta.current_page} of {meta.last_page}
+            </strong>
+            <button
+                disabled={meta.current_page >= meta.last_page || loading}
+                onClick={() => onPageChange(meta.current_page + 1)}
+                type="button"
+            >
+                Next
+            </button>
+        </nav>
     );
 }
 

@@ -6,6 +6,7 @@ use App\Enums\InventoryDocumentStatus;
 use App\Exceptions\DomainConflictException;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\StockImportResource;
+use App\Models\Product;
 use App\Models\StockImport;
 use App\Models\Warehouse;
 use App\Services\AuditLogger;
@@ -16,6 +17,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
 class StockImportController extends Controller
@@ -49,7 +51,10 @@ class StockImportController extends Controller
             ->when($data['date_to'] ?? null, fn ($query, $date) => $query->whereDate('created_at', '<=', $date))
             ->latest('id');
 
-        return StockImportResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString());
+        $matching = (clone $query)->get();
+        $summary = ['total' => $matching->count(), 'units' => (int) $matching->sum('total_quantity'), 'warehouses' => $matching->pluck('warehouse_id')->unique()->count(), 'products' => $matching->flatMap->items->pluck('product_id')->unique()->count()];
+
+        return StockImportResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString())->additional(['summary' => $summary]);
     }
 
     public function store(Request $request): JsonResponse
@@ -57,6 +62,7 @@ class StockImportController extends Controller
         $data = $request->validate($this->rules());
         $this->assertWarehouseAccess($request, (int) $data['warehouse_id']);
         $import = DB::transaction(function () use ($request, $data): StockImport {
+            $items = $this->applyPriceUpdates($request, $data['items']);
             $import = StockImport::query()->create([
                 'reference' => $this->references->next('stock_import', 'IMP'),
                 'warehouse_id' => $data['warehouse_id'],
@@ -64,7 +70,7 @@ class StockImportController extends Controller
                 'notes' => $data['notes'] ?? null,
                 'created_by' => $request->user()->id,
             ]);
-            $import->items()->createMany($data['items']);
+            $import->items()->createMany($items);
             $this->auditLogger->record($request, 'stock_import.created', $request->user(), $import, ['new' => $data]);
 
             return $import;
@@ -73,18 +79,26 @@ class StockImportController extends Controller
         return (new StockImportResource($this->load($import)))->response()->setStatusCode(201);
     }
 
+    public function show(Request $request, StockImport $stockImport): StockImportResource
+    {
+        $this->assertWarehouseAccess($request, $stockImport->warehouse_id);
+
+        return new StockImportResource($this->load($stockImport));
+    }
+
     public function update(Request $request, StockImport $stockImport): StockImportResource
     {
         $this->assertWarehouseAccess($request, $stockImport->warehouse_id);
         $data = $request->validate($this->rules());
         $this->assertWarehouseAccess($request, (int) $data['warehouse_id']);
         DB::transaction(function () use ($request, $stockImport, $data): void {
+            $items = $this->applyPriceUpdates($request, $data['items']);
             $stockImport = StockImport::query()->lockForUpdate()->findOrFail($stockImport->id);
             $this->requireDraft($stockImport);
             $old = $stockImport->load('items')->toArray();
             $stockImport->update(['warehouse_id' => $data['warehouse_id'], 'notes' => $data['notes'] ?? null]);
             $stockImport->items()->delete();
-            $stockImport->items()->createMany($data['items']);
+            $stockImport->items()->createMany($items);
             $this->auditLogger->record($request, 'stock_import.updated', $request->user(), $stockImport, ['old' => $old, 'new' => $data]);
         });
 
@@ -118,7 +132,34 @@ class StockImportController extends Controller
             'items' => ['required', 'array', 'min:1', 'max:100'],
             'items.*.product_id' => ['required', 'integer', 'distinct', Rule::exists('products', 'id')->where('is_active', true)],
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:4294967295'],
+            'items.*.selling_price' => ['nullable', 'integer', 'min:0', 'max:999999999999999'],
         ];
+    }
+
+    /** @param array<int, array<string, mixed>> $items
+     * @return array<int, array<string, mixed>>
+     */
+    private function applyPriceUpdates(Request $request, array $items): array
+    {
+        foreach ($items as &$item) {
+            if (array_key_exists('selling_price', $item) && $item['selling_price'] !== null) {
+                $product = Product::query()->lockForUpdate()->findOrFail($item['product_id']);
+                $newPrice = (int) $item['selling_price'];
+                if ($product->selling_price !== $newPrice) {
+                    Gate::authorize('update', $product);
+                    $oldPrice = $product->selling_price;
+                    $product->update(['selling_price' => $newPrice]);
+                    $this->auditLogger->record($request, 'product.price_updated', $request->user(), $product, [
+                        'old' => ['selling_price' => $oldPrice], 'new' => ['selling_price' => $newPrice],
+                        'source' => 'stock_import',
+                    ]);
+                }
+            }
+            unset($item['selling_price']);
+        }
+        unset($item);
+
+        return $items;
     }
 
     private function idempotencyKey(Request $request): string

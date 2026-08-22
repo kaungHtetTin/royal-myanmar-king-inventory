@@ -38,6 +38,7 @@ export type SessionContextValue = {
     login: (input: LoginInput) => Promise<SessionUser>;
     logout: () => Promise<void>;
     status: SessionStatus;
+    updateUser: (changes: Partial<SessionUser>) => void;
     user: SessionUser | null;
 };
 

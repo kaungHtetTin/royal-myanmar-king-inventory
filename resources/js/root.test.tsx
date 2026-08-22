@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import axios from 'axios';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -42,9 +42,69 @@ describe('application portals', () => {
 
         expect(screen.getByRole('heading', { name: 'Operations overview' })).toBeInTheDocument();
         expect(screen.getByRole('navigation', { name: 'Admin navigation' })).toBeInTheDocument();
+
+        const overviewGroup = screen.getByText('Overview').closest('.admin-nav-group');
+        expect(overviewGroup).not.toBeNull();
+        expect(
+            within(overviewGroup as HTMLElement)
+                .getAllByRole('link')
+                .map((link) => link.textContent),
+        ).toEqual(['Dashboard', 'Reports']);
     });
 
-    it('loads the user and role administration workspace', async () => {
+    it('loads the representative performance detail workspace', async () => {
+        const meta = { current_page: 1, from: null, last_page: 1, per_page: 10, to: null, total: 0 };
+        vi.spyOn(axios, 'get').mockImplementation((url) => {
+            if (url === 'api/admin/representatives/7')
+                return Promise.resolve({
+                    data: {
+                        kpis: {
+                            cash_hold: 1400,
+                            pending_submission_count: 1,
+                            pending_submissions: 400,
+                            sales_30_days: 12500,
+                            sales_transactions_30_days: 8,
+                            stock_products: 2,
+                            stock_units: 34,
+                        },
+                        representative: {
+                            account: { email: null, id: 2, is_active: true, last_login_at: null, username: 'koaung' },
+                            code: 'SR-001',
+                            created_at: null,
+                            email: null,
+                            id: 7,
+                            is_active: true,
+                            name: 'Ko Aung',
+                            notes: null,
+                            phone: '091234567',
+                            primary_warehouse: { code: 'YGN-MAIN', id: 1, name: 'Yangon Main Warehouse' },
+                            primary_warehouse_id: 1,
+                            region: 'Yangon',
+                            updated_at: null,
+                            vehicle: null,
+                        },
+                        sales_chart: [{ amount: 12500, date: '2026-08-22', transactions: 8 }],
+                        visibility: { cash: true, sales: true, stock: true },
+                    },
+                });
+            return Promise.resolve({ data: { data: [], meta } });
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/admin/representatives/7']}>
+                <Root initialUser={baseUser} />
+            </MemoryRouter>,
+        );
+
+        expect(await screen.findByRole('heading', { name: 'Ko Aung' })).toBeInTheDocument();
+        expect(screen.getByText('12,500 MMK')).toBeInTheDocument();
+        expect(screen.getByRole('img', { name: 'Daily posted sales for the last 30 days' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Holding stock' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Sale history' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Cash submission history' })).toBeInTheDocument();
+    });
+
+    it('loads user administration without the role workspace', async () => {
         vi.spyOn(axios, 'get').mockImplementation((url) => {
             if (url === 'api/admin/access-options')
                 return Promise.resolve({
@@ -101,10 +161,10 @@ describe('application portals', () => {
             </MemoryRouter>,
         );
 
-        expect(await screen.findByRole('heading', { name: 'Users & roles' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Users' })).toBeInTheDocument();
         expect(await screen.findByText(/admin@stockflow\.local/)).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('tab', { name: 'Roles 1' }));
-        expect(screen.getByRole('heading', { name: 'Roles & permissions' })).toBeInTheDocument();
+        expect(screen.queryByRole('tab', { name: /Roles/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Roles & permissions' })).not.toBeInTheDocument();
     });
 
     it('loads warehouse management and opens the creation dialog', async () => {
@@ -206,6 +266,7 @@ describe('application portals', () => {
                             {
                                 id: 1,
                                 name: 'Drinking Water 1 Litre',
+                                selling_price: 1000,
                                 sku: 'DW-1L',
                                 unit: 'bottle',
                             },
@@ -259,9 +320,32 @@ describe('application portals', () => {
 
         expect(await screen.findByRole('heading', { name: 'Warehouse inventory' })).toBeInTheDocument();
         expect(await screen.findByText('Drinking Water 1 Litre')).toBeInTheDocument();
+        expect(screen.queryByRole('combobox', { name: 'Product' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('columnheader', { name: 'Warehouse' })).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'New import' }));
-        expect(screen.getByRole('dialog', { name: 'Create stock import' })).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(await screen.findByRole('heading', { name: 'Create stock import' })).toBeInTheDocument();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(await screen.findByText('Basic information')).toBeInTheDocument();
+        const importForm = within(screen.getByRole('main'));
+        fireEvent.click(importForm.getByRole('button', { name: 'Next' }));
+        expect(importForm.getByText('Select products')).toBeInTheDocument();
+        expect(importForm.getByRole('searchbox', { name: 'Search import products' })).toBeInTheDocument();
+        fireEvent.click(importForm.getByRole('checkbox', { name: 'Select Drinking Water 1 Litre' }));
+        expect(importForm.getByText('1 selected')).toBeInTheDocument();
+        fireEvent.click(importForm.getByRole('button', { name: 'Next' }));
+        expect(importForm.getByText('Quantity and selling price')).toBeInTheDocument();
+        expect(importForm.getByRole('button', { name: 'Save draft' })).toBeInTheDocument();
+        fireEvent.change(importForm.getByRole('spinbutton', { name: 'Quantity' }), { target: { value: '12' } });
+        fireEvent.change(importForm.getByRole('spinbutton', { name: /^Selling price \(MMK\)/ }), {
+            target: { value: '1250' },
+        });
+        fireEvent.click(importForm.getByRole('button', { name: 'Review' }));
+        expect(importForm.getByText('12 total units')).toBeInTheDocument();
+        expect(importForm.getByText('Price will be updated')).toBeInTheDocument();
+        expect(importForm.getByRole('button', { name: 'Post import' })).toBeInTheDocument();
+        expect(importForm.queryByRole('button', { name: 'Save draft' })).not.toBeInTheDocument();
+        fireEvent.click(importForm.getByRole('button', { name: 'Cancel' }));
+        expect(await screen.findByRole('heading', { name: 'Warehouse inventory' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'New adjustment' }));
         expect(screen.getByRole('dialog', { name: 'Create stock adjustment' })).toBeInTheDocument();
     });
@@ -370,7 +454,7 @@ describe('application portals', () => {
     });
 
     it('loads representative stock and pending receiving in the sales app', async () => {
-        vi.spyOn(axios, 'get').mockImplementation((url) => {
+        const get = vi.spyOn(axios, 'get').mockImplementation((url) => {
             if (url === 'api/sales/receivings')
                 return Promise.resolve({
                     data: {
@@ -421,10 +505,10 @@ describe('application portals', () => {
                         meta: {
                             current_page: 1,
                             from: 1,
-                            last_page: 1,
-                            per_page: 20,
-                            to: 1,
-                            total: 1,
+                            last_page: 2,
+                            per_page: 10,
+                            to: 10,
+                            total: 11,
                         },
                     },
                 });
@@ -453,11 +537,12 @@ describe('application portals', () => {
                     meta: {
                         current_page: 1,
                         from: 1,
-                        last_page: 1,
-                        per_page: 50,
-                        to: 1,
-                        total: 1,
+                        last_page: 2,
+                        per_page: 10,
+                        to: 10,
+                        total: 11,
                     },
+                    summary: { incoming: 20, on_hand: 70 },
                 },
             });
         });
@@ -470,6 +555,14 @@ describe('application portals', () => {
         expect(await screen.findByRole('heading', { name: 'My stock' })).toBeInTheDocument();
         expect(await screen.findByText('RTR-000002')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Confirm all received' })).toBeInTheDocument();
+        fireEvent.click(within(screen.getByRole('navigation', { name: 'Pending stock pagination' })).getByText('Next'));
+        await waitFor(() =>
+            expect(get).toHaveBeenCalledWith('api/sales/receivings', { params: { page: 2, per_page: 10 } }),
+        );
+        fireEvent.click(
+            within(screen.getByRole('navigation', { name: 'Available products pagination' })).getByText('Next'),
+        );
+        await waitFor(() => expect(get).toHaveBeenCalledWith('api/sales/stock', { params: { page: 2, per_page: 10 } }));
     });
 
     it('loads the representative sale-entry workflow with stock and credit previews', async () => {
@@ -587,7 +680,7 @@ describe('application portals', () => {
     });
 
     it('shows draft sale actions in a right-aligned history menu', async () => {
-        vi.spyOn(axios, 'get').mockImplementation((url) => {
+        const get = vi.spyOn(axios, 'get').mockImplementation((url) => {
             if (url === 'api/sales/sale-options')
                 return Promise.resolve({
                     data: {
@@ -616,47 +709,47 @@ describe('application portals', () => {
                         representative: { code: 'SR-001', id: 1, name: 'Ko Aung' },
                     },
                 });
+            const sale = {
+                created_at: '2026-08-17T07:45:00Z',
+                customer: { code: 'CUS-ABC', id: 1, name: 'ABC Shop' },
+                id: 3,
+                items: [
+                    {
+                        id: 1,
+                        line_total: 1000,
+                        product: {
+                            id: 1,
+                            name: 'Drinking Water 1 Litre',
+                            sku: 'DW-1L',
+                            unit: 'bottle',
+                        },
+                        quantity: 1,
+                        unit_price: 1000,
+                    },
+                ],
+                notes: null,
+                payment_type: 'cash',
+                posted_at: null,
+                reference: 'SAL-000003',
+                representative: { code: 'SR-001', id: 1, name: 'Ko Aung' },
+                status: 'draft',
+                total_amount: 1000,
+                total_quantity: 1,
+                void_reason: null,
+                voided_at: null,
+                warehouse: { code: 'YGN-MAIN', id: 1, name: 'Yangon Main Warehouse' },
+            };
+            if (url === 'api/sales/sales/3') return Promise.resolve({ data: { data: sale } });
             return Promise.resolve({
                 data: {
-                    data: [
-                        {
-                            created_at: '2026-08-17T07:45:00Z',
-                            customer: { code: 'CUS-ABC', id: 1, name: 'ABC Shop' },
-                            id: 3,
-                            items: [
-                                {
-                                    id: 1,
-                                    line_total: 1000,
-                                    product: {
-                                        id: 1,
-                                        name: 'Drinking Water 1 Litre',
-                                        sku: 'DW-1L',
-                                        unit: 'bottle',
-                                    },
-                                    quantity: 1,
-                                    unit_price: 1000,
-                                },
-                            ],
-                            notes: null,
-                            payment_type: 'cash',
-                            posted_at: null,
-                            reference: 'SAL-000003',
-                            representative: { code: 'SR-001', id: 1, name: 'Ko Aung' },
-                            status: 'draft',
-                            total_amount: 1000,
-                            total_quantity: 1,
-                            void_reason: null,
-                            voided_at: null,
-                            warehouse: { code: 'YGN-MAIN', id: 1, name: 'Yangon Main Warehouse' },
-                        },
-                    ],
+                    data: [sale],
                     meta: {
                         current_page: 1,
                         from: 1,
-                        last_page: 1,
-                        per_page: 20,
-                        to: 1,
-                        total: 1,
+                        last_page: 2,
+                        per_page: 10,
+                        to: 10,
+                        total: 11,
                     },
                 },
             });
@@ -684,7 +777,11 @@ describe('application portals', () => {
         expect(trigger).toHaveAttribute('aria-expanded', 'false');
         expect(trigger).toHaveFocus();
 
-        fireEvent.click(trigger);
+        fireEvent.click(within(screen.getByRole('navigation', { name: 'Sales history pagination' })).getByText('Next'));
+        await waitFor(() => expect(get).toHaveBeenCalledWith('api/sales/sales', { params: { page: 2, per_page: 10 } }));
+
+        const refreshedTrigger = await screen.findByRole('button', { name: 'Actions for SAL-000003' });
+        fireEvent.click(refreshedTrigger);
         fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
         expect(await screen.findByRole('heading', { name: 'Edit SAL-000003' })).toBeInTheDocument();
     });
@@ -736,7 +833,10 @@ describe('application portals', () => {
         );
 
         expect(await screen.findByRole('heading', { name: 'SAL-000003' })).toBeInTheDocument();
-        expect(screen.getByRole('link', { name: 'Sales history' })).toHaveAttribute('href', '/sales/sales-history');
+        expect(within(screen.getByRole('main')).getByRole('link', { name: 'Sales history' })).toHaveAttribute(
+            'href',
+            '/sales/sales-history',
+        );
         expect(screen.getByRole('heading', { name: 'Sale information' })).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: 'Line items' })).toBeInTheDocument();
         expect(screen.getByText('Drinking Water 1 Litre')).toBeInTheDocument();
@@ -985,11 +1085,15 @@ describe('application portals', () => {
         );
 
         expect(await screen.findByRole('heading', { name: 'Route overview' })).toBeInTheDocument();
-        expect(
-            screen.getAllByRole('navigation', {
-                name: 'Representative navigation',
-            }),
-        ).toHaveLength(2);
+        const [desktopNavigation, mobileNavigation] = screen.getAllByRole('navigation', {
+            name: 'Representative navigation',
+        });
+        expect(desktopNavigation).toHaveClass('sales-desktop-nav');
+        expect(within(desktopNavigation).getByRole('link', { name: 'Sales history' })).toHaveAttribute(
+            'href',
+            '/sales/sales-history',
+        );
+        expect(within(mobileNavigation).queryByRole('link', { name: 'Sales history' })).not.toBeInTheDocument();
         expect(screen.getByRole('link', { name: 'StockFlow home' })).toHaveAttribute('href', '/sales/dashboard');
     });
 
@@ -1106,8 +1210,34 @@ describe('application portals', () => {
         expect(screen.getByRole('heading', { name: 'Route sign in' })).toBeInTheDocument();
     });
 
+    it('shows an incorrect-credentials error on the office admin login form', async () => {
+        vi.spyOn(axios, 'get').mockResolvedValue({ data: {} });
+        vi.spyOn(axios, 'post').mockRejectedValue({
+            isAxiosError: true,
+            response: {
+                data: {
+                    errors: { login: ['The provided credentials are incorrect.'] },
+                    message: 'The provided credentials are incorrect.',
+                },
+                status: 422,
+            },
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/admin/login']}>
+                <Root initialUser={null} />
+            </MemoryRouter>,
+        );
+
+        fireEvent.change(screen.getByLabelText('Username or email'), { target: { value: 'office.admin' } });
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'wrong-password' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Sign in securely' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('The provided credentials are incorrect.');
+    });
+
     it('loads the representative cash workspace and opens submission entry', async () => {
-        vi.spyOn(axios, 'get').mockImplementation((url) => {
+        const get = vi.spyOn(axios, 'get').mockImplementation((url) => {
             if (url === 'api/sales/cash-hold')
                 return Promise.resolve({
                     data: {
@@ -1119,7 +1249,12 @@ describe('application portals', () => {
                             id: 1,
                             name: 'Ko Aung',
                         },
-                        transactions: [
+                    },
+                });
+            if (url === 'api/sales/cash-transactions')
+                return Promise.resolve({
+                    data: {
+                        data: [
                             {
                                 actor: { id: 2, name: 'Ko Aung' },
                                 amount_delta: 5400,
@@ -1130,6 +1265,14 @@ describe('application portals', () => {
                                 type: 'cash_sale',
                             },
                         ],
+                        meta: {
+                            current_page: 1,
+                            from: 1,
+                            last_page: 2,
+                            per_page: 10,
+                            to: 10,
+                            total: 11,
+                        },
                     },
                 });
             return Promise.resolve({
@@ -1166,10 +1309,10 @@ describe('application portals', () => {
                     meta: {
                         current_page: 1,
                         from: 1,
-                        last_page: 1,
-                        per_page: 50,
-                        to: 1,
-                        total: 1,
+                        last_page: 2,
+                        per_page: 10,
+                        to: 10,
+                        total: 11,
                     },
                 },
             });
@@ -1181,6 +1324,16 @@ describe('application portals', () => {
         );
         expect(await screen.findByRole('heading', { name: 'Cash hold' })).toBeInTheDocument();
         expect(await screen.findByText('CSB-000002')).toBeInTheDocument();
+        fireEvent.click(
+            within(screen.getByRole('navigation', { name: 'Cash submissions pagination' })).getByText('Next'),
+        );
+        await waitFor(() =>
+            expect(get).toHaveBeenCalledWith('api/sales/cash-submissions', { params: { page: 2, per_page: 10 } }),
+        );
+        fireEvent.click(within(screen.getByRole('navigation', { name: 'Cash activity pagination' })).getByText('Next'));
+        await waitFor(() =>
+            expect(get).toHaveBeenCalledWith('api/sales/cash-transactions', { params: { page: 2, per_page: 10 } }),
+        );
         fireEvent.click(screen.getByRole('button', { name: 'Submit cash' }));
         expect(screen.getByRole('dialog', { name: 'Submit cash' })).toBeInTheDocument();
     });
@@ -1219,8 +1372,28 @@ describe('application portals', () => {
             if (url === 'api/admin/cash-submissions')
                 return Promise.resolve({
                     data: {
-                        data: [],
-                        meta: { ...meta, from: null, to: null, total: 0 },
+                        data: [
+                            {
+                                amount: 1000,
+                                cancel_reason: null,
+                                cancelled_at: null,
+                                cancelled_by: null,
+                                confirmed_at: null,
+                                confirmed_by: null,
+                                created_at: '2026-08-22T07:01:00Z',
+                                created_by: { id: 2, name: 'Ko Aung' },
+                                id: 1,
+                                notes: 'Morning handover',
+                                reference: 'CSB-000003',
+                                representative: { code: 'SR-001', id: 1, name: 'Ko Aung' },
+                                reversal_reason: null,
+                                reversed_at: null,
+                                reversed_by: null,
+                                status: 'pending',
+                                warehouse: { code: 'YGN-MAIN', id: 1, name: 'Yangon Main' },
+                            },
+                        ],
+                        meta,
                     },
                 });
             if (url === 'api/admin/customer-credit-balances')
@@ -1274,6 +1447,12 @@ describe('application portals', () => {
         );
         expect(await screen.findByRole('heading', { name: 'Cash & credit' })).toBeInTheDocument();
         expect(await screen.findByText('Ko Aung')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Representative cash holds' })).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Cash submissions' })).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('tab', { name: /Cash submissions/ }));
+        expect(screen.queryByRole('heading', { name: 'Representative cash holds' })).not.toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Cash submissions' })).toBeInTheDocument();
+        expect(screen.getByText('CSB-000003')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Record payment' }));
         expect(screen.getByRole('dialog', { name: 'Record customer payment' })).toBeInTheDocument();
     });
@@ -1334,48 +1513,39 @@ describe('application portals', () => {
             if (url === 'api/admin/report-options')
                 return Promise.resolve({
                     data: {
-                        categories: [],
-                        customers: [],
-                        products: [],
-                        regions: [],
-                        reports: ['warehouse-stock', 'sales'],
-                        representatives: [],
+                        reports: ['sales'],
                         warehouses: [{ code: 'YGN-MAIN', id: 1, name: 'Yangon Main' }],
                     },
                 });
-            return Promise.resolve({
-                data: {
-                    data: [
-                        {
-                            id: 1,
-                            product: {
-                                category: 'Water',
-                                id: 1,
-                                name: 'Water 1L',
-                                sku: 'DW-1L',
-                                unit: 'bottle',
-                            },
-                            quantity: 860,
-                            warehouse: {
-                                code: 'YGN-MAIN',
-                                id: 1,
-                                name: 'Yangon Main',
-                            },
+            if (url === 'api/admin/reports/sales')
+                return Promise.resolve({
+                    data: {
+                        analysis: {
+                            month_trend: [{ amount: 800, date: '2026-08-17', label: '17' }],
+                            top_products: [
+                                {
+                                    amount: 800,
+                                    product: { id: 1, name: 'Water 1L', sku: 'DW-1L', unit: 'bottle' },
+                                    units: 8,
+                                },
+                            ],
+                            year_trend: [{ amount: 800, label: 'Aug', month: 8 }],
                         },
-                    ],
-                    meta: {
-                        current_page: 1,
-                        from: 1,
-                        last_page: 1,
-                        per_page: 25,
-                        to: 1,
-                        total: 1,
+                        data: [{ id: 99, reference: 'SHOULD-NOT-RENDER' }],
+                        meta: { current_page: 1, from: 1, last_page: 1, per_page: 25, to: 1, total: 1 },
+                        report: 'sales',
+                        rules: { financial_totals: 'posted_only' },
+                        summary: {
+                            cash_sales: 500,
+                            credit_sales: 300,
+                            gross_sales: 800,
+                            month_sales: 800,
+                            units_sold: 8,
+                            year_sales: 800,
+                        },
                     },
-                    report: 'warehouse-stock',
-                    rules: { financial_totals: 'posted_only' },
-                    summary: { products: 1, units: 860 },
-                },
-            });
+                });
+            return Promise.reject(new Error(`Unexpected URL: ${url}`));
         });
         render(
             <MemoryRouter initialEntries={['/admin/reports']}>
@@ -1383,8 +1553,71 @@ describe('application portals', () => {
             </MemoryRouter>,
         );
         expect(await screen.findByRole('heading', { name: 'Reports' })).toBeInTheDocument();
-        expect(await screen.findByText('Water 1L')).toBeInTheDocument();
-        expect(screen.getByText('860', { selector: '.metric-card strong' })).toBeInTheDocument();
+        expect(await screen.findByRole('img', { name: 'Current month sales by day' })).toBeInTheDocument();
+        expect(screen.getByRole('img', { name: 'Current year sales by month' })).toBeInTheDocument();
+        expect(screen.getByRole('img', { name: 'Top-selling products by units sold' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Top-selling products' })).toBeInTheDocument();
+        expect(screen.getAllByText('800 MMK', { selector: '.metric-card strong' })).toHaveLength(3);
+        expect(screen.queryByRole('combobox', { name: 'Representative' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('combobox', { name: 'Customer' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('combobox', { name: 'Product' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('combobox', { name: 'Payment type' })).not.toBeInTheDocument();
+        expect(screen.queryByText('SHOULD-NOT-RENDER')).not.toBeInTheDocument();
+        expect(screen.queryByRole('table')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Warehouse stock' })).not.toBeInTheDocument();
+    });
+
+    it('filters the main admin sale register by duration', async () => {
+        const get = vi.spyOn(axios, 'get').mockResolvedValue({
+            data: {
+                data: [],
+                meta: { current_page: 1, from: null, last_page: 1, per_page: 20, to: null, total: 0 },
+            },
+        });
+        render(
+            <MemoryRouter initialEntries={['/admin/sales']}>
+                <Root initialUser={baseUser} />
+            </MemoryRouter>,
+        );
+        expect(await screen.findByRole('heading', { name: 'Sales' })).toBeInTheDocument();
+        fireEvent.change(screen.getByRole('combobox', { name: 'Sale duration' }), { target: { value: '7_days' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+        await waitFor(() =>
+            expect(get).toHaveBeenCalledWith('api/admin/sales', {
+                params: {
+                    date_from: undefined,
+                    date_to: undefined,
+                    page: 1,
+                    payment_type: '',
+                    period: '7_days',
+                    search: '',
+                    status: '',
+                    per_page: 20,
+                },
+            }),
+        );
+        expect(document.querySelector('.sales-filter-scroll')).toBeInTheDocument();
+
+        fireEvent.change(screen.getByRole('combobox', { name: 'Sale duration' }), {
+            target: { value: 'custom' },
+        });
+        fireEvent.change(screen.getByLabelText('Sale date from'), { target: { value: '2026-08-01' } });
+        fireEvent.change(screen.getByLabelText('Sale date to'), { target: { value: '2026-08-22' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+        await waitFor(() =>
+            expect(get).toHaveBeenCalledWith('api/admin/sales', {
+                params: {
+                    date_from: '2026-08-01',
+                    date_to: '2026-08-22',
+                    page: 1,
+                    payment_type: '',
+                    period: undefined,
+                    search: '',
+                    status: '',
+                    per_page: 20,
+                },
+            }),
+        );
     });
 
     it('loads searchable audit history with changes and source links', async () => {

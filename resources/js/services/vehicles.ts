@@ -41,6 +41,7 @@ export type VehicleOptions = {
     representatives: Array<VehicleRepresentative & { vehicle_id: number | null }>;
     types: string[];
 };
+export type VehicleSummary = { active: number; assigned: number; total: number; unassigned: number };
 
 export class VehicleApiError extends Error {
     constructor(
@@ -75,7 +76,7 @@ async function request<T>(operation: () => Promise<{ data: T }>) {
 
 export const vehicleApi = {
     list: (filters: VehicleFilters) =>
-        request<{ data: Vehicle[]; meta: PaginationMeta }>(() =>
+        request<{ data: Vehicle[]; meta: PaginationMeta; summary: VehicleSummary }>(() =>
             window.axios.get('api/admin/vehicles', {
                 params: { ...filters, per_page: 20 },
             }),

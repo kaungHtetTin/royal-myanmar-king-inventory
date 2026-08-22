@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\StockMovementType;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\StockMovementResource;
-use App\Http\Resources\WarehouseInventoryResource;
 use App\Models\Product;
 use App\Models\StockMovement;
 use App\Models\Warehouse;
@@ -20,11 +19,10 @@ class InventoryController extends Controller
 {
     public function __construct(private readonly WarehouseAccess $warehouseAccess) {}
 
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(Request $request): JsonResponse
     {
         $data = $request->validate([
             'warehouse_id' => ['nullable', 'integer', 'exists:warehouses,id'],
-            'product_id' => ['nullable', 'integer', 'exists:products,id'],
             'search' => ['nullable', 'string', 'max:100'],
             'stock' => ['nullable', Rule::in(['all', 'positive', 'zero'])],
             'per_page' => ['nullable', 'integer', 'min:10', 'max:100'],
@@ -34,17 +32,32 @@ class InventoryController extends Controller
             abort(403);
         }
 
-        $query = WarehouseInventory::query()->with(['warehouse', 'product'])
+        $query = WarehouseInventory::query()
+            ->selectRaw('product_id, SUM(quantity) as quantity, MAX(updated_at) as updated_at')
+            ->with('product')
             ->whereIn('warehouse_id', $warehouseIds)
             ->when($data['warehouse_id'] ?? null, fn ($query, $id) => $query->where('warehouse_id', $id))
-            ->when($data['product_id'] ?? null, fn ($query, $id) => $query->where('product_id', $id))
             ->when($data['search'] ?? null, fn ($query, $search) => $query->whereHas('product', fn ($product) => $product
                 ->where('sku', 'like', "%{$search}%")->orWhere('name', 'like', "%{$search}%")))
-            ->when(($data['stock'] ?? 'all') === 'positive', fn ($query) => $query->where('quantity', '>', 0))
-            ->when(($data['stock'] ?? 'all') === 'zero', fn ($query) => $query->where('quantity', 0))
-            ->orderBy('warehouse_id')->orderBy('product_id');
+            ->groupBy('product_id')
+            ->when(($data['stock'] ?? 'all') === 'positive', fn ($query) => $query->havingRaw('SUM(quantity) > 0'))
+            ->when(($data['stock'] ?? 'all') === 'zero', fn ($query) => $query->havingRaw('SUM(quantity) = 0'))
+            ->orderBy('product_id');
 
-        return WarehouseInventoryResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString());
+        $matching = (clone $query)->get();
+        $summary = ['total' => $matching->count(), 'units' => (int) $matching->sum('quantity'), 'warehouses' => isset($data['warehouse_id']) ? 1 : $warehouseIds->count(), 'products' => $matching->count()];
+        $paginator = $query->paginate($data['per_page'] ?? 20)->withQueryString();
+        $paginator->setCollection($paginator->getCollection()->map(fn ($row) => [
+            'id' => $row->product_id,
+            'product' => ['id' => $row->product->id, 'sku' => $row->product->sku, 'name' => $row->product->name, 'unit' => $row->product->unit],
+            'quantity' => (int) $row->quantity,
+            'updated_at' => $row->updated_at?->toISOString(),
+        ]));
+
+        return response()->json(['data' => $paginator->items(), 'meta' => [
+            'current_page' => $paginator->currentPage(), 'from' => $paginator->firstItem(), 'last_page' => $paginator->lastPage(),
+            'per_page' => $paginator->perPage(), 'to' => $paginator->lastItem(), 'total' => $paginator->total(),
+        ], 'summary' => $summary]);
     }
 
     public function movements(Request $request): AnonymousResourceCollection
@@ -77,14 +90,18 @@ class InventoryController extends Controller
             ->when($data['date_to'] ?? null, fn ($query, $date) => $query->whereDate('occurred_at', '<=', $date))
             ->latest('occurred_at')->latest('id');
 
-        return StockMovementResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString());
+        $matching = (clone $query)->get();
+        $warehouseCount = $matching->flatMap(fn ($row) => collect([$row->from_location_type === 'warehouse' ? $row->from_location_id : null, $row->to_location_type === 'warehouse' ? $row->to_location_id : null]))->filter()->unique()->count();
+        $summary = ['total' => $matching->count(), 'units' => (int) $matching->sum('quantity'), 'warehouses' => $warehouseCount, 'products' => $matching->pluck('product_id')->unique()->count()];
+
+        return StockMovementResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString())->additional(['summary' => $summary]);
     }
 
     public function options(Request $request): JsonResponse
     {
         return response()->json([
             'warehouses' => $this->warehouseAccess->scope(Warehouse::query(), $request->user())->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
-            'products' => Product::query()->where('is_active', true)->orderBy('name')->get(['id', 'sku', 'name', 'unit']),
+            'products' => Product::query()->where('is_active', true)->orderBy('name')->get(['id', 'sku', 'name', 'unit', 'selling_price']),
             'movement_types' => collect(StockMovementType::cases())->pluck('value'),
         ]);
     }

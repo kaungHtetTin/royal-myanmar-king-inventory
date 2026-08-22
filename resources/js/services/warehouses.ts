@@ -34,6 +34,7 @@ export type WarehouseFilters = {
     sort?: string;
     status?: string;
 };
+export type WarehouseSummary = { active: number; assigned_users: number; inactive: number; total: number };
 
 export class WarehouseApiError extends Error {
     constructor(
@@ -68,7 +69,7 @@ async function request<T>(operation: () => Promise<{ data: T }>) {
 
 export const warehouseApi = {
     list: (filters: WarehouseFilters) =>
-        request<{ data: Warehouse[]; meta: PaginationMeta }>(() =>
+        request<{ data: Warehouse[]; meta: PaginationMeta; summary: WarehouseSummary }>(() =>
             window.axios.get('api/admin/warehouses', {
                 params: { ...filters, per_page: 20 },
             }),

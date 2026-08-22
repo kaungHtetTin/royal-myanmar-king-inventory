@@ -26,6 +26,25 @@ class Phase3InventoryTest extends TestCase
         $this->seed(AccessControlSeeder::class);
     }
 
+    public function test_on_hand_groups_products_across_warehouses_and_scopes_selected_warehouse(): void
+    {
+        $admin = $this->superAdmin();
+        [$yangon, $mandalay] = Warehouse::factory()->count(2)->create();
+        [$water, $juice] = Product::factory()->count(2)->create();
+        WarehouseInventory::query()->create(['warehouse_id' => $yangon->id, 'product_id' => $water->id, 'quantity' => 10]);
+        WarehouseInventory::query()->create(['warehouse_id' => $mandalay->id, 'product_id' => $water->id, 'quantity' => 15]);
+        WarehouseInventory::query()->create(['warehouse_id' => $yangon->id, 'product_id' => $juice->id, 'quantity' => 4]);
+
+        $this->actingAs($admin)->getJson('/api/admin/inventory?stock=all')->assertOk()
+            ->assertJsonPath('meta.total', 2)->assertJsonPath('summary.products', 2)->assertJsonPath('summary.units', 29)
+            ->assertJsonPath('data.0.product.id', $water->id)->assertJsonPath('data.0.quantity', 25)
+            ->assertJsonMissingPath('data.0.warehouse');
+
+        $this->getJson('/api/admin/inventory?warehouse_id='.$yangon->id.'&stock=all')->assertOk()
+            ->assertJsonPath('meta.total', 2)->assertJsonPath('summary.products', 2)->assertJsonPath('summary.units', 14)
+            ->assertJsonPath('data.0.product.id', $water->id)->assertJsonPath('data.0.quantity', 10);
+    }
+
     public function test_draft_import_is_editable_stock_neutral_and_uses_unique_references(): void
     {
         $admin = $this->superAdmin();
@@ -48,6 +67,45 @@ class Phase3InventoryTest extends TestCase
         ]))->assertCreated()->assertJsonPath('data.reference', 'IMP-000002');
         $this->assertDatabaseHas('audit_logs', ['event' => 'stock_import.created', 'subject_id' => $id]);
         $this->assertDatabaseHas('audit_logs', ['event' => 'stock_import.updated', 'subject_id' => $id]);
+    }
+
+    public function test_import_can_update_product_price_when_user_is_authorized(): void
+    {
+        $admin = $this->superAdmin();
+        $warehouse = Warehouse::factory()->create();
+        $product = Product::factory()->create(['selling_price' => 1200]);
+
+        $this->actingAs($admin)->postJson('/api/admin/stock-imports', $this->importPayload($warehouse, [
+            ['product_id' => $product->id, 'quantity' => 10, 'selling_price' => 1500],
+        ]))->assertCreated()
+            ->assertJsonPath('data.items.0.product.selling_price', 1500);
+
+        $this->assertSame(1500, $product->fresh()->selling_price);
+        $this->assertDatabaseHas('audit_logs', [
+            'actor_id' => $admin->id,
+            'event' => 'product.price_updated',
+            'subject_id' => $product->id,
+        ]);
+        $this->assertDatabaseHas('stock_import_items', [
+            'product_id' => $product->id,
+            'quantity' => 10,
+        ]);
+    }
+
+    public function test_import_price_update_requires_product_edit_permission_and_rolls_back(): void
+    {
+        $importer = $this->officeUser(PermissionName::InventoryImport);
+        $warehouse = Warehouse::factory()->create();
+        $importer->warehouses()->attach($warehouse, ['assigned_by' => $importer->id]);
+        $product = Product::factory()->create(['selling_price' => 1200]);
+
+        $this->actingAs($importer)->postJson('/api/admin/stock-imports', $this->importPayload($warehouse, [
+            ['product_id' => $product->id, 'quantity' => 10, 'selling_price' => 1500],
+        ]))->assertForbidden();
+
+        $this->assertSame(1200, $product->fresh()->selling_price);
+        $this->assertDatabaseCount('stock_imports', 0);
+        $this->assertDatabaseMissing('audit_logs', ['event' => 'product.price_updated']);
     }
 
     public function test_post_import_is_atomic_audited_and_idempotent(): void

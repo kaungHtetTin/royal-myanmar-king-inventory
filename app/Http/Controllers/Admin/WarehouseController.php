@@ -43,7 +43,16 @@ class WarehouseController extends Controller
             ->when($data['status'] ?? null, fn ($query, string $status) => $query->where('is_active', $status === 'active'))
             ->orderBy($data['sort'] ?? 'name', $data['direction'] ?? 'asc');
 
-        return WarehouseResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString());
+        $summaryQuery = clone $query;
+        $summary = [
+            'total' => (clone $summaryQuery)->count(),
+            'active' => (clone $summaryQuery)->where('is_active', true)->count(),
+            'inactive' => (clone $summaryQuery)->where('is_active', false)->count(),
+            'assigned_users' => (int) (clone $summaryQuery)->get()->sum('users_count'),
+        ];
+
+        return WarehouseResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString())
+            ->additional(['summary' => $summary]);
     }
 
     public function store(Request $request): JsonResponse

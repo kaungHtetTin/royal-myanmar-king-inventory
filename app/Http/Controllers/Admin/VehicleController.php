@@ -47,7 +47,16 @@ class VehicleController extends Controller
             ->when($data['assignment'] ?? null, fn ($query, string $assignment) => $assignment === 'assigned' ? $query->whereNotNull('sales_representative_id') : $query->whereNull('sales_representative_id'))
             ->orderBy($data['sort'] ?? 'vehicle_number', $data['direction'] ?? 'asc');
 
-        return VehicleResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString());
+        $summaryQuery = clone $query;
+        $summary = [
+            'total' => (clone $summaryQuery)->count(),
+            'active' => (clone $summaryQuery)->where('is_active', true)->count(),
+            'assigned' => (clone $summaryQuery)->whereNotNull('sales_representative_id')->count(),
+            'unassigned' => (clone $summaryQuery)->whereNull('sales_representative_id')->count(),
+        ];
+
+        return VehicleResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString())
+            ->additional(['summary' => $summary]);
     }
 
     public function options(): JsonResponse

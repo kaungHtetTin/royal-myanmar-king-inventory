@@ -37,7 +37,6 @@ export type CashOverview = {
     cash_hold: number;
     pending_submissions: number;
     available_to_submit: number;
-    transactions: CashTransaction[];
 };
 export type RepresentativeCashBalance = {
     id: number;
@@ -131,15 +130,19 @@ async function request<T>(operation: () => Promise<{ data: T }>) {
     }
 }
 const headers = () => ({ 'Idempotency-Key': crypto.randomUUID() });
-const pageParams = { per_page: 50 };
+const pageParams = (page = 1) => ({ page, per_page: 10 });
 
 export const financeApi = {
     ownOverview: () => request<CashOverview>(() => window.axios.get('api/sales/cash-hold')),
-    ownSubmissions: () =>
+    ownSubmissions: (page = 1) =>
         request<{ data: CashSubmission[]; meta: PaginationMeta }>(() =>
             window.axios.get('api/sales/cash-submissions', {
-                params: pageParams,
+                params: pageParams(page),
             }),
+        ),
+    ownCashActivity: (page = 1) =>
+        request<{ data: CashTransaction[]; meta: PaginationMeta }>(() =>
+            window.axios.get('api/sales/cash-transactions', { params: pageParams(page) }),
         ),
     submitCash: (input: { amount: number; notes: string }) =>
         request<{ data: CashSubmission }>(() =>
@@ -152,15 +155,19 @@ export const financeApi = {
             window.axios.post(`api/sales/cash-submissions/${id}/cancel`, { reason }, { headers: headers() }),
         ),
     cashBalances: () =>
-        request<{ data: RepresentativeCashBalance[]; meta: PaginationMeta }>(() =>
+        request<{
+            data: RepresentativeCashBalance[];
+            meta: PaginationMeta;
+            summary: { cash_held: number; pending_handover: number };
+        }>(() =>
             window.axios.get('api/admin/cash-balances', {
-                params: pageParams,
+                params: pageParams(),
             }),
         ),
-    cashSubmissions: () =>
+    cashSubmissions: (page = 1, representativeId?: number) =>
         request<{ data: CashSubmission[]; meta: PaginationMeta }>(() =>
             window.axios.get('api/admin/cash-submissions', {
-                params: pageParams,
+                params: { ...pageParams(page), representative_id: representativeId },
             }),
         ),
     confirmSubmission: (id: number) =>
@@ -172,16 +179,16 @@ export const financeApi = {
             window.axios.post(`api/admin/cash-submissions/${id}/reverse`, { reason }, { headers: headers() }),
         ),
     creditBalances: () =>
-        request<{ data: CustomerCreditBalance[]; meta: PaginationMeta }>(() =>
+        request<{ data: CustomerCreditBalance[]; meta: PaginationMeta; summary: { outstanding: number } }>(() =>
             window.axios.get('api/admin/customer-credit-balances', {
-                params: pageParams,
+                params: pageParams(),
             }),
         ),
     paymentOptions: () => request<PaymentOptions>(() => window.axios.get('api/admin/customer-payment-options')),
     payments: () =>
-        request<{ data: CustomerPayment[]; meta: PaginationMeta }>(() =>
+        request<{ data: CustomerPayment[]; meta: PaginationMeta; summary: { draft_amount: number } }>(() =>
             window.axios.get('api/admin/customer-payments', {
-                params: pageParams,
+                params: pageParams(),
             }),
         ),
     createPayment: (input: CustomerPaymentInput) =>

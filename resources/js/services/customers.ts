@@ -52,6 +52,7 @@ export type CustomerOptions = {
     types: string[];
     warehouses: CustomerWarehouse[];
 };
+export type CustomerSummary = { active: number; credit_enabled: number; credit_limit: number; total: number };
 
 export class CustomerApiError extends Error {
     constructor(
@@ -86,7 +87,7 @@ async function request<T>(operation: () => Promise<{ data: T }>) {
 
 export const customerApi = {
     list: (filters: CustomerFilters) =>
-        request<{ data: Customer[]; meta: PaginationMeta }>(() =>
+        request<{ data: Customer[]; meta: PaginationMeta; summary: CustomerSummary }>(() =>
             window.axios.get('api/admin/customers', {
                 params: { ...filters, per_page: 20 },
             }),

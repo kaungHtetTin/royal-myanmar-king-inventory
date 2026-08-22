@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useSession } from '../../auth/session-context';
+import { useBranding } from '../../branding/branding-context';
 import type { PaginationMeta } from '../../services/administration';
-import { saleApi, type Sale, type SaleFilters } from '../../services/sales';
+import { printInvoice } from '../../services/invoice-print';
+import { saleApi, type Sale, type SaleFilters, type SaleSummary } from '../../services/sales';
 import { Icon } from '../../ui/icons';
 import { Button, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
 
@@ -13,6 +15,7 @@ const emptyMeta: PaginationMeta = {
     to: null,
     total: 0,
 };
+const emptySummary: SaleSummary = { cash_total: 0, credit_total: 0, posted_total: 0, total: 0 };
 function money(value: number) {
     return `${new Intl.NumberFormat('en-US').format(value)} MMK`;
 }
@@ -32,13 +35,18 @@ function tone(status: string) {
 }
 
 export function SalesManagementPage() {
+    const { branding } = useBranding();
     const { user } = useSession();
     const canVoid = Boolean(user?.roles.includes('super-admin') || user?.permissions.includes('sale.void'));
     const [rows, setRows] = useState<Sale[]>([]);
     const [meta, setMeta] = useState(emptyMeta);
+    const [summary, setSummary] = useState(emptySummary);
     const [filters, setFilters] = useState<SaleFilters>({ page: 1 });
     const [draft, setDraft] = useState({
+        date_from: '',
+        date_to: '',
         payment_type: '',
+        period: '',
         search: '',
         status: '',
     });
@@ -52,6 +60,7 @@ export function SalesManagementPage() {
             const response = await saleApi.adminSales(filters);
             setRows(response.data);
             setMeta(response.meta);
+            setSummary(response.summary ?? emptySummary);
         } catch (requestError) {
             setError(message(requestError));
         } finally {
@@ -66,6 +75,7 @@ export function SalesManagementPage() {
                 if (!active) return;
                 setRows(response.data);
                 setMeta(response.meta);
+                setSummary(response.summary ?? emptySummary);
                 setError('');
             })
             .catch((requestError) => {
@@ -80,7 +90,13 @@ export function SalesManagementPage() {
     }, [filters]);
     const submit = (event: FormEvent) => {
         event.preventDefault();
-        setFilters({ ...draft, page: 1 });
+        setFilters({
+            ...draft,
+            date_from: draft.period === 'custom' ? draft.date_from : undefined,
+            date_to: draft.period === 'custom' ? draft.date_to : undefined,
+            page: 1,
+            period: draft.period === 'custom' ? undefined : draft.period,
+        });
     };
     const voidSale = async (sale: Sale) => {
         const reason = window.prompt(
@@ -98,15 +114,6 @@ export function SalesManagementPage() {
             setLoading(false);
         }
     };
-    const posted = rows.filter((row) => row.status === 'posted');
-    const pageTotal = posted.reduce((sum, row) => sum + row.total_amount, 0);
-    const cashTotal = posted
-        .filter((row) => row.payment_type === 'cash')
-        .reduce((sum, row) => sum + row.total_amount, 0);
-    const creditTotal = posted
-        .filter((row) => row.payment_type === 'credit')
-        .reduce((sum, row) => sum + row.total_amount, 0);
-
     return (
         <div className="admin-page sales-management">
             <header className="page-heading">
@@ -124,20 +131,25 @@ export function SalesManagementPage() {
                     hint="Matching current filters"
                     icon="sales"
                     label="Sales records"
-                    value={String(meta.total)}
+                    value={String(summary.total)}
                 />
                 <MetricCard
-                    hint="Posted rows on this page"
+                    hint="Posted sales in current filtered result"
                     icon="reports"
-                    label="Page total"
-                    value={money(pageTotal)}
+                    label="Posted total"
+                    value={money(summary.posted_total)}
                 />
-                <MetricCard hint="Increases representative hold" icon="cash" label="Cash" value={money(cashTotal)} />
                 <MetricCard
-                    hint="Increases customer outstanding"
+                    hint="Current filtered posted sales"
+                    icon="cash"
+                    label="Cash"
+                    value={money(summary.cash_total)}
+                />
+                <MetricCard
+                    hint="Current filtered posted sales"
                     icon="customers"
                     label="Credit"
-                    value={money(creditTotal)}
+                    value={money(summary.credit_total)}
                 />
             </div>
             {notice ? (
@@ -155,50 +167,85 @@ export function SalesManagementPage() {
             ) : null}
             <Panel eyebrow="Sales register" title="Representative sales">
                 <form className="filter-toolbar sales-filters" onSubmit={submit}>
-                    <label className="filter-search">
-                        <Icon name="search" size={15} />
-                        <input
-                            aria-label="Search sale reference"
-                            onChange={(event) =>
-                                setDraft((value) => ({
-                                    ...value,
-                                    search: event.target.value,
-                                }))
-                            }
-                            placeholder="Sale reference"
-                            type="search"
-                            value={draft.search}
-                        />
-                    </label>
-                    <select
-                        aria-label="Sale status"
-                        onChange={(event) =>
-                            setDraft((value) => ({
-                                ...value,
-                                status: event.target.value,
-                            }))
-                        }
-                        value={draft.status}
-                    >
-                        <option value="">All statuses</option>
-                        <option value="draft">Draft</option>
-                        <option value="posted">Posted</option>
-                        <option value="voided">Voided</option>
-                    </select>
-                    <select
-                        aria-label="Payment type"
-                        onChange={(event) =>
-                            setDraft((value) => ({
-                                ...value,
-                                payment_type: event.target.value,
-                            }))
-                        }
-                        value={draft.payment_type}
-                    >
-                        <option value="">All payments</option>
-                        <option value="cash">Cash</option>
-                        <option value="credit">Credit</option>
-                    </select>
+                    <div className="sales-filter-scroll">
+                        <div className="sales-filter-fields">
+                            <label className="filter-search">
+                                <Icon name="search" size={15} />
+                                <input
+                                    aria-label="Search sale reference"
+                                    onChange={(event) =>
+                                        setDraft((value) => ({ ...value, search: event.target.value }))
+                                    }
+                                    placeholder="Sale reference"
+                                    type="search"
+                                    value={draft.search}
+                                />
+                            </label>
+                            <select
+                                aria-label="Sale status"
+                                onChange={(event) => setDraft((value) => ({ ...value, status: event.target.value }))}
+                                value={draft.status}
+                            >
+                                <option value="">All statuses</option>
+                                <option value="draft">Draft</option>
+                                <option value="posted">Posted</option>
+                                <option value="voided">Voided</option>
+                            </select>
+                            <select
+                                aria-label="Sale duration"
+                                onChange={(event) => setDraft((value) => ({ ...value, period: event.target.value }))}
+                                value={draft.period}
+                            >
+                                <option value="">All time</option>
+                                <option value="today">Today</option>
+                                <option value="7_days">Last 7 days</option>
+                                <option value="30_days">Last 30 days</option>
+                                <option value="this_month">This month</option>
+                                <option value="custom">Custom range</option>
+                            </select>
+                            {draft.period === 'custom' ? (
+                                <>
+                                    <label className="report-date">
+                                        <span>From</span>
+                                        <input
+                                            aria-label="Sale date from"
+                                            max={draft.date_to || undefined}
+                                            onChange={(event) =>
+                                                setDraft((value) => ({ ...value, date_from: event.target.value }))
+                                            }
+                                            required
+                                            type="date"
+                                            value={draft.date_from}
+                                        />
+                                    </label>
+                                    <label className="report-date">
+                                        <span>To</span>
+                                        <input
+                                            aria-label="Sale date to"
+                                            min={draft.date_from || undefined}
+                                            onChange={(event) =>
+                                                setDraft((value) => ({ ...value, date_to: event.target.value }))
+                                            }
+                                            required
+                                            type="date"
+                                            value={draft.date_to}
+                                        />
+                                    </label>
+                                </>
+                            ) : null}
+                            <select
+                                aria-label="Payment type"
+                                onChange={(event) =>
+                                    setDraft((value) => ({ ...value, payment_type: event.target.value }))
+                                }
+                                value={draft.payment_type}
+                            >
+                                <option value="">All payments</option>
+                                <option value="cash">Cash</option>
+                                <option value="credit">Credit</option>
+                            </select>
+                        </div>
+                    </div>
                     <Button icon="search" type="submit">
                         Apply
                     </Button>
@@ -268,17 +315,29 @@ export function SalesManagementPage() {
                                             <StatusBadge tone={tone(sale.status)}>{sale.status}</StatusBadge>
                                         </td>
                                         <td className="ui-table__actions">
-                                            {sale.status === 'posted' && canVoid ? (
-                                                <IconButton
-                                                    icon="reverse"
-                                                    label={`Void ${sale.reference}`}
-                                                    onClick={() => void voidSale(sale)}
-                                                    requiresOnline
-                                                    tone="danger"
-                                                />
-                                            ) : sale.status === 'voided' ? (
-                                                <small>{sale.void_reason}</small>
-                                            ) : null}
+                                            <div className="row-actions">
+                                                {sale.status !== 'draft' ? (
+                                                    <IconButton
+                                                        icon="print"
+                                                        label={`Print invoice ${sale.reference}`}
+                                                        onClick={() => {
+                                                            if (!printInvoice(sale, branding)) {
+                                                                setError('Allow pop-ups to print the invoice.');
+                                                            }
+                                                        }}
+                                                    />
+                                                ) : null}
+                                                {sale.status === 'posted' && canVoid ? (
+                                                    <IconButton
+                                                        icon="reverse"
+                                                        label={`Void ${sale.reference}`}
+                                                        onClick={() => void voidSale(sale)}
+                                                        requiresOnline
+                                                        tone="danger"
+                                                    />
+                                                ) : null}
+                                            </div>
+                                            {sale.status === 'voided' ? <small>{sale.void_reason}</small> : null}
                                         </td>
                                     </tr>
                                 ))}

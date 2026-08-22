@@ -26,13 +26,26 @@ class CashController extends Controller
         $representative = $this->representative($request);
         $hold = (int) RepresentativeCashBalance::query()->where('sales_representative_id', $representative->id)->value('amount');
         $pending = (int) CashSubmission::query()->where('sales_representative_id', $representative->id)->where('status', CashSubmissionStatus::Pending)->sum('amount');
-        $transactions = RepresentativeCashTransaction::query()->with('actor:id,name')->where('sales_representative_id', $representative->id)->latest('id')->limit(50)->get()->map(fn ($transaction) => [
+        return response()->json(['representative' => ['id' => $representative->id, 'code' => $representative->code, 'name' => $representative->name], 'cash_hold' => $hold, 'pending_submissions' => $pending, 'available_to_submit' => max(0, $hold - $pending)]);
+    }
+
+    public function transactions(Request $request): JsonResponse
+    {
+        $representative = $this->representative($request);
+        $data = $request->validate(['per_page' => ['nullable', 'integer', 'min:10', 'max:100']]);
+        $paginator = RepresentativeCashTransaction::query()->with('actor:id,name')
+            ->where('sales_representative_id', $representative->id)->latest('id')
+            ->paginate($data['per_page'] ?? 10)->withQueryString();
+        $rows = $paginator->getCollection()->map(fn ($transaction) => [
             'id' => $transaction->id, 'type' => $transaction->transaction_type->value, 'amount_delta' => $transaction->amount_delta,
             'reference' => $transaction->reference, 'notes' => $transaction->notes, 'actor' => $transaction->actor ? ['id' => $transaction->actor->id, 'name' => $transaction->actor->name] : null,
             'occurred_at' => $transaction->occurred_at->toISOString(),
-        ]);
+        ])->values();
 
-        return response()->json(['representative' => ['id' => $representative->id, 'code' => $representative->code, 'name' => $representative->name], 'cash_hold' => $hold, 'pending_submissions' => $pending, 'available_to_submit' => max(0, $hold - $pending), 'transactions' => $transactions]);
+        return response()->json(['data' => $rows, 'meta' => [
+            'current_page' => $paginator->currentPage(), 'from' => $paginator->firstItem(), 'last_page' => $paginator->lastPage(),
+            'per_page' => $paginator->perPage(), 'to' => $paginator->lastItem(), 'total' => $paginator->total(),
+        ]]);
     }
 
     public function index(Request $request): AnonymousResourceCollection

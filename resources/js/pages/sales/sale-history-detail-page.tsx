@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { useBranding } from '../../branding/branding-context';
+import { printInvoice } from '../../services/invoice-print';
 import { saleApi, type Sale, type SaleStatus } from '../../services/sales';
 import { Icon } from '../../ui/icons';
 import { Button, StatusBadge } from '../../ui/primitives';
@@ -26,6 +28,7 @@ function requestMessage(error: unknown) {
 }
 
 export function SaleHistoryDetailPage() {
+    const { branding } = useBranding();
     const { saleId } = useParams();
     const id = Number(saleId);
     const [sale, setSale] = useState<Sale | null>(null);
@@ -85,6 +88,18 @@ export function SaleHistoryDetailPage() {
                 {sale ? (
                     <div className="sale-detail-heading__actions">
                         <StatusBadge tone={statusTone(sale.status)}>{sale.status}</StatusBadge>
+                        {sale.status !== 'draft' ? (
+                            <Button
+                                icon="print"
+                                onClick={() => {
+                                    if (!printInvoice(sale, branding)) {
+                                        setError('Allow pop-ups to print the invoice.');
+                                    }
+                                }}
+                            >
+                                Print invoice
+                            </Button>
+                        ) : null}
                         {sale.status === 'draft' ? (
                             <Link className="ui-button ui-button--primary" to={`/sales/new-sale?edit=${sale.id}`}>
                                 <Icon name="edit" size={16} />

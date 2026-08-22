@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type CSSProperties, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { SessionError, useSession, type Portal } from '../../auth/session-context';
+import { useBranding } from '../../branding/branding-context';
 import { Icon } from '../../ui/icons';
 import { Button, IconButton } from '../../ui/primitives';
 import { useUiPreferences } from '../../ui/preferences';
@@ -28,12 +29,12 @@ export function LoginPage({ portal }: { portal: Portal }) {
     const navigate = useNavigate();
     const { login, status, user } = useSession();
     const { theme, toggleTheme } = useUiPreferences();
+    const { branding } = useBranding();
     const [identifier, setIdentifier] = useState('');
     const [password, setPassword] = useState('');
     const [remember, setRemember] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [fieldError, setFieldError] = useState<string | null>(null);
 
     if (status === 'authenticated' && user) return <Navigate replace to={`/${portal}/dashboard`} />;
 
@@ -45,7 +46,6 @@ export function LoginPage({ portal }: { portal: Portal }) {
     const submit = async (event: FormEvent) => {
         event.preventDefault();
         setError(null);
-        setFieldError(null);
         setSubmitting(true);
 
         try {
@@ -54,21 +54,28 @@ export function LoginPage({ portal }: { portal: Portal }) {
             navigate(destination, { replace: true });
         } catch (caught) {
             const sessionError = caught instanceof SessionError ? caught : new SessionError('Unable to sign in.');
-            setError(sessionError.code ? sessionError.message : null);
-            setFieldError(sessionError.fields?.login?.[0] ?? null);
+            setError(sessionError.fields?.login?.[0] ?? sessionError.message);
         } finally {
             setSubmitting(false);
         }
     };
 
     return (
-        <main className="login-root" data-theme={theme}>
-            <section className="login-brand-panel" aria-label="StockFlow">
+        <main
+            className="login-root"
+            data-theme={theme}
+            style={{ '--color-primary': branding.primary_color } as CSSProperties}
+        >
+            <section className="login-brand-panel" aria-label={branding.business_name}>
                 <div className="login-brand-lockup">
                     <span>
-                        <Icon name={portal === 'admin' ? 'building' : 'truck'} size={22} />
+                        {branding.logo_url ? (
+                            <img alt="" src={branding.logo_url} />
+                        ) : (
+                            <Icon name={portal === 'admin' ? 'building' : 'truck'} size={22} />
+                        )}
                     </span>
-                    <strong>StockFlow</strong>
+                    <strong>{branding.business_name}</strong>
                 </div>
                 <div className="login-brand-message">
                     <p className="ui-eyebrow">Simple management. Strict transactions.</p>
@@ -79,7 +86,7 @@ export function LoginPage({ portal }: { portal: Portal }) {
                     </h1>
                     <p>Secure, auditable access designed for daily inventory work.</p>
                 </div>
-                <small>Stock & Inventory Management System</small>
+                <small>{branding.business_tagline || 'Stock & Inventory Management System'}</small>
             </section>
 
             <section className="login-form-panel">
@@ -121,7 +128,6 @@ export function LoginPage({ portal }: { portal: Portal }) {
                             onChange={(event) => setIdentifier(event.target.value)}
                             required
                         />
-                        {fieldError ? <small className="ui-field__error">{fieldError}</small> : null}
                     </label>
                     <label className="ui-field">
                         <span>Password</span>

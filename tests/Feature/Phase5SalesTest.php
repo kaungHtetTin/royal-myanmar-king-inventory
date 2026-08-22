@@ -168,6 +168,17 @@ class Phase5SalesTest extends TestCase
         $viewer = $this->officeUser(PermissionName::SaleView);
         $viewer->warehouses()->attach($sale->warehouse_id, ['assigned_by' => $viewer->id]);
         $this->actingAs($viewer)->getJson('/api/admin/sales')->assertOk()->assertJsonCount(1, 'data');
+        $oldSale = $this->createSale($user, $customer, $product, 1, 'credit');
+        $oldSale->forceFill(['created_at' => now()->subDays(45)])->save();
+        $this->actingAs($viewer);
+        $this->getJson('/api/admin/sales?period=today')->assertOk()->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $sale->id);
+        $this->getJson('/api/admin/sales?period=30_days')->assertOk()->assertJsonCount(1, 'data');
+        $this->getJson('/api/admin/sales?date_from='.today()->toDateString().'&date_to='.today()->toDateString())
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $sale->id);
+        $this->getJson('/api/admin/sales?date_from='.today()->toDateString().'&date_to='.today()->subDay()->toDateString())
+            ->assertUnprocessable();
+        $this->getJson('/api/admin/sales')->assertOk()->assertJsonCount(2, 'data');
         $this->command("/api/admin/sales/{$sale->id}/void", 'viewer-void', ['reason' => 'Not authorized.'])->assertForbidden();
 
         $voider = $this->officeUser(PermissionName::SaleView, PermissionName::SaleVoid);

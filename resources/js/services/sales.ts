@@ -19,9 +19,9 @@ export type SaleItem = {
 export type Sale = {
     id: number;
     reference: string;
-    representative: { id: number; code: string; name: string };
-    warehouse: { id: number; code: string; name: string };
-    customer: { id: number; code: string; name: string };
+    representative: { id: number; code: string; name: string; phone?: string | null };
+    warehouse: { id: number; code: string; name: string; address?: string | null; phone?: string | null };
+    customer: { id: number; code: string; name: string; address?: string | null; phone?: string | null };
     payment_type: PaymentType;
     total_amount: number;
     status: SaleStatus;
@@ -59,14 +59,18 @@ export type SaleInput = {
     items: { product_id: number; quantity: number }[];
 };
 export type SaleFilters = {
+    date_from?: string;
+    date_to?: string;
     page?: number;
     warehouse_id?: number;
     representative_id?: number;
     customer_id?: number;
     payment_type?: string;
+    period?: string;
     status?: string;
     search?: string;
 };
+export type SaleSummary = { cash_total: number; credit_total: number; posted_total: number; total: number };
 
 export class SaleApiError extends Error {
     constructor(
@@ -109,7 +113,7 @@ export const saleApi = {
     options: () => request<SaleOptions>(() => window.axios.get('api/sales/sale-options')),
     ownSales: (filters: SaleFilters = {}) =>
         request<{ data: Sale[]; meta: PaginationMeta }>(() =>
-            window.axios.get('api/sales/sales', { params: pages(filters) }),
+            window.axios.get('api/sales/sales', { params: { ...filters, per_page: 10 } }),
         ),
     ownSale: (id: number) => request<{ data: Sale }>(() => window.axios.get(`api/sales/sales/${id}`)),
     create: (input: SaleInput) =>
@@ -119,7 +123,7 @@ export const saleApi = {
     post: (id: number) =>
         request<{ data: Sale }>(() => window.axios.post(`api/sales/sales/${id}/post`, {}, { headers: headers() })),
     adminSales: (filters: SaleFilters = {}) =>
-        request<{ data: Sale[]; meta: PaginationMeta }>(() =>
+        request<{ data: Sale[]; meta: PaginationMeta; summary: SaleSummary }>(() =>
             window.axios.get('api/admin/sales', { params: pages(filters) }),
         ),
     void: (id: number, reason: string) =>

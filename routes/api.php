@@ -16,6 +16,7 @@ use App\Http\Controllers\Admin\RepresentativeTransferController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SaleController as AdminSaleController;
 use App\Http\Controllers\Admin\SalesRepresentativeController as AdminSalesRepresentativeController;
+use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\StockAdjustmentController;
 use App\Http\Controllers\Admin\StockImportController;
 use App\Http\Controllers\Admin\TransferOptionController;
@@ -24,6 +25,7 @@ use App\Http\Controllers\Admin\VehicleController;
 use App\Http\Controllers\Admin\WarehouseController;
 use App\Http\Controllers\Admin\WarehouseTransferController;
 use App\Http\Controllers\Auth\SessionController;
+use App\Http\Controllers\BrandingController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\Sales\CashController as SalesCashController;
 use App\Http\Controllers\Sales\DashboardController as SalesDashboardController;
@@ -34,6 +36,8 @@ use App\Http\Controllers\SalesRepresentativeController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', HealthController::class)->name('api.health');
+Route::get('/branding', [BrandingController::class, 'show'])->name('api.branding');
+Route::get('/branding/assets/{asset}', [BrandingController::class, 'asset'])->whereIn('asset', ['logo', 'favicon']);
 
 Route::prefix('auth')->group(function (): void {
     Route::post('/login', [SessionController::class, 'store']);
@@ -49,7 +53,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
         Route::get('/me', [SessionController::class, 'show'])
             ->middleware('permission:'.PermissionName::DashboardView->value);
         Route::get('/dashboard', AdminDashboardController::class)->middleware('permission:'.PermissionName::DashboardView->value);
-        Route::get('/representatives/{salesRepresentative}', [SalesRepresentativeController::class, 'show'])
+        Route::get('/representatives/{salesRepresentative}', [AdminSalesRepresentativeController::class, 'show'])
             ->middleware('permission:'.PermissionName::RepresentativeView->value);
 
         Route::get('/representatives', [AdminSalesRepresentativeController::class, 'index'])
@@ -102,6 +106,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             Route::get('/inventory/options', [InventoryController::class, 'options']);
             Route::get('/inventory/movements', [InventoryController::class, 'movements']);
             Route::get('/stock-imports', [StockImportController::class, 'index']);
+            Route::get('/stock-imports/{stockImport}', [StockImportController::class, 'show']);
             Route::get('/stock-adjustments', [StockAdjustmentController::class, 'index']);
         });
 
@@ -175,8 +180,11 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
         });
         Route::get('/audit-logs', AuditLogController::class)->middleware('permission:'.PermissionName::AuditView->value);
 
+        Route::get('/access-options', AccessOptionController::class)->middleware(
+            'permission:'.PermissionName::UserManage->value.'|'.PermissionName::RoleManage->value,
+        );
+
         Route::middleware('permission:'.PermissionName::UserManage->value)->group(function (): void {
-            Route::get('/access-options', AccessOptionController::class);
             Route::get('/users', [UserController::class, 'index']);
             Route::post('/users', [UserController::class, 'store']);
             Route::put('/users/{user}', [UserController::class, 'update']);
@@ -187,6 +195,9 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             Route::get('/roles', [RoleController::class, 'index']);
             Route::post('/roles', [RoleController::class, 'store']);
             Route::put('/roles/{role}', [RoleController::class, 'update']);
+            Route::get('/settings', [SettingController::class, 'show']);
+            Route::post('/settings', [SettingController::class, 'update']);
+            Route::put('/settings/profile', [SettingController::class, 'updateProfile']);
         });
     });
 
@@ -213,6 +224,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             });
             Route::get('/cash-hold', [SalesCashController::class, 'overview'])->middleware('permission:'.PermissionName::CashView->value);
             Route::get('/cash-submissions', [SalesCashController::class, 'index'])->middleware('permission:'.PermissionName::CashView->value);
+            Route::get('/cash-transactions', [SalesCashController::class, 'transactions'])->middleware('permission:'.PermissionName::CashView->value);
             Route::middleware('permission:'.PermissionName::CashSubmit->value)->group(function (): void {
                 Route::post('/cash-submissions', [SalesCashController::class, 'store']);
                 Route::post('/cash-submissions/{cashSubmission}/cancel', [SalesCashController::class, 'cancel']);

@@ -13,9 +13,9 @@ class SaleResource extends JsonResource
         return [
             'id' => $this->id,
             'reference' => $this->reference,
-            'representative' => ['id' => $this->representative->id, 'code' => $this->representative->code, 'name' => $this->representative->name],
-            'warehouse' => ['id' => $this->warehouse->id, 'code' => $this->warehouse->code, 'name' => $this->warehouse->name],
-            'customer' => ['id' => $this->customer->id, 'code' => $this->customer->code, 'name' => $this->customer->name],
+            'representative' => ['id' => $this->representative->id, 'code' => $this->representative->code, 'name' => $this->representative->name, 'phone' => $this->representative->phone],
+            'warehouse' => ['id' => $this->warehouse->id, 'code' => $this->warehouse->code, 'name' => $this->warehouse->name, 'address' => $this->warehouse->address, 'phone' => $this->warehouse->phone],
+            'customer' => ['id' => $this->customer->id, 'code' => $this->customer->code, 'name' => $this->customer->name, 'address' => $this->customer->address, 'phone' => $this->customer->phone],
             'payment_type' => $this->payment_type->value,
             'total_amount' => $this->total_amount,
             'status' => $this->status->value,

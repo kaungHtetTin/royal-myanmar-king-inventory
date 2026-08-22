@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
+import type { PaginationMeta } from '../../services/administration';
 import { transferApi, type RepresentativeInventory, type RepresentativeTransfer } from '../../services/transfers';
 import { Icon } from '../../ui/icons';
-import { Button, EmptyState, StatusBadge } from '../../ui/primitives';
+import { Button, EmptyState, Pagination, StatusBadge } from '../../ui/primitives';
+
+const emptyMeta: PaginationMeta = {
+    current_page: 1,
+    from: null,
+    last_page: 1,
+    per_page: 10,
+    to: null,
+    total: 0,
+};
 
 function message(error: unknown) {
     return error instanceof Error ? error.message : 'Unable to load stock.';
@@ -13,6 +23,11 @@ function number(value: number) {
 export function RepresentativeStockPage() {
     const [stock, setStock] = useState<RepresentativeInventory[]>([]);
     const [pending, setPending] = useState<RepresentativeTransfer[]>([]);
+    const [stockMeta, setStockMeta] = useState(emptyMeta);
+    const [pendingMeta, setPendingMeta] = useState(emptyMeta);
+    const [summary, setSummary] = useState({ incoming: 0, on_hand: 0 });
+    const [stockPage, setStockPage] = useState(1);
+    const [receivingPage, setReceivingPage] = useState(1);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
@@ -21,22 +36,31 @@ export function RepresentativeStockPage() {
         setLoading(true);
         setError('');
         try {
-            const [inventory, receivings] = await Promise.all([transferApi.ownStock(), transferApi.ownReceivings()]);
+            const [inventory, receivings] = await Promise.all([
+                transferApi.ownStock(stockPage),
+                transferApi.ownReceivings(receivingPage),
+            ]);
             setStock(inventory.data);
             setPending(receivings.data);
+            setStockMeta(inventory.meta);
+            setPendingMeta(receivings.meta);
+            setSummary(inventory.summary);
         } catch (requestError) {
             setError(message(requestError));
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [receivingPage, stockPage]);
     useEffect(() => {
         let active = true;
-        void Promise.all([transferApi.ownStock(), transferApi.ownReceivings()])
+        void Promise.all([transferApi.ownStock(stockPage), transferApi.ownReceivings(receivingPage)])
             .then(([inventory, receivings]) => {
                 if (!active) return;
                 setStock(inventory.data);
                 setPending(receivings.data);
+                setStockMeta(inventory.meta);
+                setPendingMeta(receivings.meta);
+                setSummary(inventory.summary);
             })
             .catch((requestError) => {
                 if (active) setError(message(requestError));
@@ -47,7 +71,7 @@ export function RepresentativeStockPage() {
         return () => {
             active = false;
         };
-    }, []);
+    }, [receivingPage, stockPage]);
     const receive = async (transfer: RepresentativeTransfer) => {
         if (
             !window.confirm(
@@ -68,9 +92,6 @@ export function RepresentativeStockPage() {
             setReceiving(null);
         }
     };
-    const onHand = stock.reduce((sum, row) => sum + row.quantity, 0);
-    const incoming = stock.reduce((sum, row) => sum + row.pending_quantity, 0);
-
     return (
         <div className="sales-stock-page">
             <header className="sales-page-heading">
@@ -78,8 +99,8 @@ export function RepresentativeStockPage() {
                     <p>Inventory custody</p>
                     <h1>My stock</h1>
                 </div>
-                <StatusBadge tone={pending.length ? 'warning' : 'success'}>
-                    {pending.length ? `${pending.length} pending` : 'Up to date'}
+                <StatusBadge tone={pendingMeta.total ? 'warning' : 'success'}>
+                    {pendingMeta.total ? `${pendingMeta.total} pending` : 'Up to date'}
                 </StatusBadge>
             </header>
             <section className="sales-summary-grid" aria-label="Stock summary">
@@ -88,7 +109,7 @@ export function RepresentativeStockPage() {
                         <Icon name="box" size={18} />
                     </span>
                     <small>On hand</small>
-                    <strong>{number(onHand)}</strong>
+                    <strong>{number(summary.on_hand)}</strong>
                     <p>Units available for sales</p>
                 </article>
                 <article className="sales-summary-card">
@@ -96,7 +117,7 @@ export function RepresentativeStockPage() {
                         <Icon name="truck" size={18} />
                     </span>
                     <small>Incoming</small>
-                    <strong>{number(incoming)}</strong>
+                    <strong>{number(summary.incoming)}</strong>
                     <p>Units awaiting confirmation</p>
                 </article>
             </section>
@@ -119,7 +140,7 @@ export function RepresentativeStockPage() {
                         <p className="ui-eyebrow">Receiving</p>
                         <h2>Pending stock</h2>
                     </div>
-                    <StatusBadge tone="warning">{pending.length} transfers</StatusBadge>
+                    <StatusBadge tone="warning">{pendingMeta.total} transfers</StatusBadge>
                 </header>
                 {loading ? (
                     <div className="ui-loading">
@@ -166,6 +187,12 @@ export function RepresentativeStockPage() {
                         </article>
                     ))
                 )}
+                <Pagination
+                    label="Pending stock"
+                    loading={loading}
+                    meta={pendingMeta}
+                    onPageChange={setReceivingPage}
+                />
             </section>
             <section className="sales-section sales-available-stock-section">
                 <header>
@@ -225,6 +252,7 @@ export function RepresentativeStockPage() {
                         ))}
                     </div>
                 )}
+                <Pagination label="Available products" loading={loading} meta={stockMeta} onPageChange={setStockPage} />
             </section>
         </div>
     );

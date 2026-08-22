@@ -45,7 +45,18 @@ class UserController extends Controller
             ->when($validated['role'] ?? null, fn ($query, string $role) => $query->role($role))
             ->orderBy('name');
 
-        return UserResource::collection($query->paginate($validated['per_page'] ?? 20)->withQueryString());
+        $summaryQuery = clone $query;
+        $userIds = (clone $summaryQuery)->select('users.id');
+        $summary = [
+            'total' => (clone $summaryQuery)->count(),
+            'active' => (clone $summaryQuery)->where('is_active', true)->count(),
+            'warehouse_assigned' => (clone $summaryQuery)->whereHas('warehouses')->count(),
+            'roles' => DB::table('model_has_roles')->where('model_type', User::class)
+                ->whereIn('model_id', $userIds)->distinct()->count('role_id'),
+        ];
+
+        return UserResource::collection($query->paginate($validated['per_page'] ?? 20)->withQueryString())
+            ->additional(['summary' => $summary]);
     }
 
     public function store(Request $request): JsonResponse

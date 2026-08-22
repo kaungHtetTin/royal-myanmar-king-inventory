@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { ProtectedPortal } from './auth/protected-portal';
 import { SessionProvider } from './auth/session';
+import { BrandingProvider } from './branding/branding-provider';
 import type { SessionUser } from './auth/session-context';
 import { AdminShell } from './layouts/admin-shell';
 import { SalesShell } from './layouts/sales-shell';
@@ -36,6 +37,11 @@ const InventoryManagementPage = lazy(() =>
         default: module.InventoryManagementPage,
     })),
 );
+const StockImportFormPage = lazy(() =>
+    import('./pages/admin/inventory-management-page').then((module) => ({
+        default: module.StockImportFormPage,
+    })),
+);
 const ProductManagementPage = lazy(() =>
     import('./pages/admin/product-management-page').then((module) => ({
         default: module.ProductManagementPage,
@@ -49,6 +55,11 @@ const ReportsPage = lazy(() =>
 const RepresentativeManagementPage = lazy(() =>
     import('./pages/admin/representative-management-page').then((module) => ({
         default: module.RepresentativeManagementPage,
+    })),
+);
+const RepresentativeDetailPage = lazy(() =>
+    import('./pages/admin/representative-detail-page').then((module) => ({
+        default: module.RepresentativeDetailPage,
     })),
 );
 const SalesManagementPage = lazy(() =>
@@ -69,6 +80,11 @@ const VehicleManagementPage = lazy(() =>
 const WarehouseManagementPage = lazy(() =>
     import('./pages/admin/warehouse-management-page').then((module) => ({
         default: module.WarehouseManagementPage,
+    })),
+);
+const SettingsPage = lazy(() =>
+    import('./pages/admin/settings-page').then((module) => ({
+        default: module.SettingsPage,
     })),
 );
 const CashWorkspacePage = lazy(() =>
@@ -113,61 +129,73 @@ function RouteLoading() {
 
 export default function Root({ initialUser }: { initialUser?: SessionUser | null }) {
     return (
-        <SessionProvider initialUser={initialUser}>
-            <Routes>
-                <Route path="/admin/login" element={<LoginPage portal="admin" />} />
-                <Route path="/sales/login" element={<LoginPage portal="sales" />} />
-                <Route
-                    path="/admin/*"
-                    element={
-                        <ProtectedPortal portal="admin">
-                            <AdminShell>
-                                <Suspense fallback={<RouteLoading />}>
-                                    <Routes>
-                                        <Route path="dashboard" element={<AdminDashboardPage />} />
-                                        <Route path="reports" element={<ReportsPage />} />
-                                        <Route path="audit-logs" element={<AuditLogPage />} />
-                                        <Route path="inventory" element={<InventoryManagementPage />} />
-                                        <Route path="transfers" element={<TransferManagementPage />} />
-                                        <Route path="sales" element={<SalesManagementPage />} />
-                                        <Route path="cash" element={<FinanceManagementPage />} />
-                                        <Route path="customers" element={<CustomerManagementPage />} />
-                                        <Route path="representatives" element={<RepresentativeManagementPage />} />
-                                        <Route path="users" element={<AccessManagementPage />} />
-                                        <Route path="products" element={<ProductManagementPage />} />
-                                        <Route path="vehicles" element={<VehicleManagementPage />} />
-                                        <Route path="warehouses" element={<WarehouseManagementPage />} />
-                                        <Route path="*" element={<AdminFoundationPage />} />
-                                    </Routes>
-                                </Suspense>
-                            </AdminShell>
-                        </ProtectedPortal>
-                    }
-                />
-                <Route
-                    path="/sales/*"
-                    element={
-                        <ProtectedPortal portal="sales">
-                            <SalesShell>
-                                <Suspense fallback={<RouteLoading />}>
-                                    <Routes>
-                                        <Route path="dashboard" element={<RepresentativeDashboardPage />} />
-                                        <Route path="reports" element={<SalesReportPage />} />
-                                        <Route path="my-stock" element={<RepresentativeStockPage />} />
-                                        <Route path="new-sale" element={<NewSalePage />} />
-                                        <Route path="sales-history" element={<SalesHistoryPage />} />
-                                        <Route path="sales-history/:saleId" element={<SaleHistoryDetailPage />} />
-                                        <Route path="cash-hold" element={<CashWorkspacePage />} />
-                                        <Route path="cash-submissions" element={<CashWorkspacePage />} />
-                                        <Route path="*" element={<SalesFoundationPage />} />
-                                    </Routes>
-                                </Suspense>
-                            </SalesShell>
-                        </ProtectedPortal>
-                    }
-                />
-                <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
-            </Routes>
-        </SessionProvider>
+        <BrandingProvider>
+            <SessionProvider initialUser={initialUser}>
+                <Routes>
+                    <Route path="/admin/login" element={<LoginPage portal="admin" />} />
+                    <Route path="/sales/login" element={<LoginPage portal="sales" />} />
+                    <Route
+                        path="/admin/*"
+                        element={
+                            <ProtectedPortal portal="admin">
+                                <AdminShell>
+                                    <Suspense fallback={<RouteLoading />}>
+                                        <Routes>
+                                            <Route path="dashboard" element={<AdminDashboardPage />} />
+                                            <Route path="reports" element={<ReportsPage />} />
+                                            <Route path="audit-logs" element={<AuditLogPage />} />
+                                            <Route path="inventory" element={<InventoryManagementPage />} />
+                                            <Route path="inventory/imports/new" element={<StockImportFormPage />} />
+                                            <Route
+                                                path="inventory/imports/:importId/edit"
+                                                element={<StockImportFormPage />}
+                                            />
+                                            <Route path="transfers" element={<TransferManagementPage />} />
+                                            <Route path="sales" element={<SalesManagementPage />} />
+                                            <Route path="cash" element={<FinanceManagementPage />} />
+                                            <Route path="customers" element={<CustomerManagementPage />} />
+                                            <Route path="representatives" element={<RepresentativeManagementPage />} />
+                                            <Route
+                                                path="representatives/:representativeId"
+                                                element={<RepresentativeDetailPage />}
+                                            />
+                                            <Route path="users" element={<AccessManagementPage />} />
+                                            <Route path="products" element={<ProductManagementPage />} />
+                                            <Route path="vehicles" element={<VehicleManagementPage />} />
+                                            <Route path="warehouses" element={<WarehouseManagementPage />} />
+                                            <Route path="settings" element={<SettingsPage />} />
+                                            <Route path="*" element={<AdminFoundationPage />} />
+                                        </Routes>
+                                    </Suspense>
+                                </AdminShell>
+                            </ProtectedPortal>
+                        }
+                    />
+                    <Route
+                        path="/sales/*"
+                        element={
+                            <ProtectedPortal portal="sales">
+                                <SalesShell>
+                                    <Suspense fallback={<RouteLoading />}>
+                                        <Routes>
+                                            <Route path="dashboard" element={<RepresentativeDashboardPage />} />
+                                            <Route path="reports" element={<SalesReportPage />} />
+                                            <Route path="my-stock" element={<RepresentativeStockPage />} />
+                                            <Route path="new-sale" element={<NewSalePage />} />
+                                            <Route path="sales-history" element={<SalesHistoryPage />} />
+                                            <Route path="sales-history/:saleId" element={<SaleHistoryDetailPage />} />
+                                            <Route path="cash-hold" element={<CashWorkspacePage />} />
+                                            <Route path="cash-submissions" element={<CashWorkspacePage />} />
+                                            <Route path="*" element={<SalesFoundationPage />} />
+                                        </Routes>
+                                    </Suspense>
+                                </SalesShell>
+                            </ProtectedPortal>
+                        }
+                    />
+                    <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
+                </Routes>
+            </SessionProvider>
+        </BrandingProvider>
     );
 }

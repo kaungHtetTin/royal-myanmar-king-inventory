@@ -10,6 +10,7 @@ import {
     type RepresentativeTransferInput,
     type RepresentativeTransferOptions,
     type TransferFilters,
+    type TransferSummary,
     type WarehouseTransfer,
     type WarehouseTransferInput,
     type WarehouseTransferOptions,
@@ -26,6 +27,7 @@ const emptyMeta: PaginationMeta = {
     to: null,
     total: 0,
 };
+const emptySummary: TransferSummary = { in_transit: 0, products: 0, total: 0, units: 0 };
 const emptyWarehouseOptions: WarehouseTransferOptions = {
     destination_warehouses: [],
     products: [],
@@ -93,6 +95,7 @@ export function TransferManagementPage() {
     const [tab, setTab] = useState<Tab>(availableTabs[0] ?? 'warehouse');
     const [rows, setRows] = useState<(WarehouseTransfer | RepresentativeTransfer | RepresentativeInventory)[]>([]);
     const [meta, setMeta] = useState(emptyMeta);
+    const [summary, setSummary] = useState(emptySummary);
     const [filters, setFilters] = useState<TransferFilters>({ page: 1 });
     const [draft, setDraft] = useState({ search: '', status: '' });
     const [warehouseOptions, setWarehouseOptions] = useState(emptyWarehouseOptions);
@@ -116,6 +119,7 @@ export function TransferManagementPage() {
                 ]);
                 setRows(response.data);
                 setMeta(response.meta);
+                setSummary(response.summary ?? emptySummary);
                 setWarehouseOptions(options);
             } else if (tab === 'representative') {
                 const [response, options] = await Promise.all([
@@ -124,6 +128,7 @@ export function TransferManagementPage() {
                 ]);
                 setRows(response.data);
                 setMeta(response.meta);
+                setSummary(response.summary ?? emptySummary);
                 setRepresentativeOptions(options);
             } else {
                 const [response, options] = await Promise.all([
@@ -132,6 +137,7 @@ export function TransferManagementPage() {
                 ]);
                 setRows(response.data);
                 setMeta(response.meta);
+                setSummary(response.summary ?? emptySummary);
                 setRepresentativeOptions(options);
             }
         } catch (requestError) {
@@ -154,6 +160,7 @@ export function TransferManagementPage() {
                 if (!active) return;
                 setRows(response.data);
                 setMeta(response.meta);
+                setSummary(response.summary ?? emptySummary);
                 if (tab === 'warehouse') setWarehouseOptions(options as WarehouseTransferOptions);
                 else setRepresentativeOptions(options as RepresentativeTransferOptions);
                 setError('');
@@ -192,11 +199,6 @@ export function TransferManagementPage() {
         setFilters({ page: 1 });
         setDraft({ search: '', status: '' });
     };
-    const totalUnits = rows.reduce(
-        (sum, row) => sum + ('total_quantity' in row ? row.total_quantity : row.quantity),
-        0,
-    );
-
     return (
         <div className="admin-page transfer-management">
             <header className="page-heading">
@@ -226,20 +228,20 @@ export function TransferManagementPage() {
                     hint="Matching current filters"
                     icon="transfer"
                     label={labels[tab]}
-                    value={number(meta.total)}
+                    value={number(summary.total)}
                 />
-                <MetricCard hint="Visible rows" icon="box" label="Units" value={number(totalUnits)} />
+                <MetricCard hint="Matching current filters" icon="box" label="Units" value={number(summary.units)} />
                 <MetricCard
-                    hint="Active transfer products"
+                    hint="Matching current filters"
                     icon="reports"
                     label="Products"
-                    value={number((tab === 'warehouse' ? warehouseOptions : representativeOptions).products.length)}
+                    value={number(summary.products)}
                 />
                 <MetricCard
-                    hint="Current workflow stage"
+                    hint="Matching current filters"
                     icon="truck"
                     label="In transit rows"
-                    value={String(rows.filter((row) => 'status' in row && row.status === 'dispatched').length)}
+                    value={String(summary.in_transit)}
                 />
             </div>
             {notice ? (

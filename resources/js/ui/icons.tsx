@@ -19,6 +19,7 @@ export type IconName =
     | 'moreVertical'
     | 'moon'
     | 'plus'
+    | 'print'
     | 'reports'
     | 'reverse'
     | 'search'
@@ -139,6 +140,13 @@ const iconContent: Record<IconName, ReactNode> = {
         <>
             <path d="M12 5v14" />
             <path d="M5 12h14" />
+        </>
+    ),
+    print: (
+        <>
+            <path d="M6 9V2h12v7" />
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+            <path d="M6 14h12v8H6z" />
         </>
     ),
     reports: (

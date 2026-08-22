@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { useSession } from '../../auth/session-context';
 import type { PaginationMeta } from '../../services/administration';
 import {
@@ -8,6 +9,7 @@ import {
     type RepresentativeFilters,
     type RepresentativeInput,
     type RepresentativeOptions,
+    type RepresentativeSummary,
 } from '../../services/representatives';
 import { Icon } from '../../ui/icons';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
@@ -21,6 +23,7 @@ const emptyMeta: PaginationMeta = {
     total: 0,
 };
 const emptyOptions: RepresentativeOptions = { vehicles: [], warehouses: [] };
+const emptySummary: RepresentativeSummary = { active: 0, signed_in: 0, total: 0, with_vehicle: 0 };
 function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : 'Unable to complete the request.';
 }
@@ -40,6 +43,7 @@ export function RepresentativeManagementPage() {
     const [representatives, setRepresentatives] = useState<Representative[]>([]);
     const [options, setOptions] = useState<RepresentativeOptions>(emptyOptions);
     const [meta, setMeta] = useState(emptyMeta);
+    const [summary, setSummary] = useState(emptySummary);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
@@ -65,6 +69,7 @@ export function RepresentativeManagementPage() {
             ]);
             setRepresentatives(response.data);
             setMeta(response.meta);
+            setSummary(response.summary ?? emptySummary);
             setOptions(availableOptions);
         } catch (requestError) {
             setError(errorMessage(requestError));
@@ -80,6 +85,7 @@ export function RepresentativeManagementPage() {
                 if (!active) return;
                 setRepresentatives(response.data);
                 setMeta(response.meta);
+                setSummary(response.summary ?? emptySummary);
                 setOptions(availableOptions);
             })
             .catch((requestError) => {
@@ -93,9 +99,6 @@ export function RepresentativeManagementPage() {
         };
     }, [filters]);
 
-    const activeCount = representatives.filter((representative) => representative.is_active).length;
-    const vehicleCount = representatives.filter((representative) => representative.vehicle).length;
-    const loggedInCount = representatives.filter((representative) => representative.account.last_login_at).length;
     const showNotice = (message: string) => {
         setNotice(message);
         window.setTimeout(() => setNotice(''), 4000);
@@ -128,11 +131,26 @@ export function RepresentativeManagementPage() {
                     hint="Current filtered result"
                     icon="users"
                     label="Representatives"
-                    value={String(meta.total)}
+                    value={String(summary.total)}
                 />
-                <MetricCard hint="On this page" icon="dashboard" label="Active" value={String(activeCount)} />
-                <MetricCard hint="On this page" icon="truck" label="With vehicle" value={String(vehicleCount)} />
-                <MetricCard hint="On this page" icon="logout" label="Have signed in" value={String(loggedInCount)} />
+                <MetricCard
+                    hint="Current filtered result"
+                    icon="dashboard"
+                    label="Active"
+                    value={String(summary.active)}
+                />
+                <MetricCard
+                    hint="Current filtered result"
+                    icon="truck"
+                    label="With vehicle"
+                    value={String(summary.with_vehicle)}
+                />
+                <MetricCard
+                    hint="Current filtered result"
+                    icon="logout"
+                    label="Have signed in"
+                    value={String(summary.signed_in)}
+                />
             </div>
 
             {notice ? (
@@ -266,7 +284,12 @@ export function RepresentativeManagementPage() {
                                 {representatives.map((representative) => (
                                     <tr key={representative.id}>
                                         <td>
-                                            <strong>{representative.name}</strong>
+                                            <Link
+                                                className="table-identity-link"
+                                                to={`/admin/representatives/${representative.id}`}
+                                            >
+                                                {representative.name}
+                                            </Link>
                                             <small>{representative.code}</small>
                                         </td>
                                         <td>

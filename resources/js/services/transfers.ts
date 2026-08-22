@@ -142,6 +142,7 @@ async function request<T>(operation: () => Promise<{ data: T }>) {
 
 const headers = () => ({ 'Idempotency-Key': crypto.randomUUID() });
 const pages = (filters: TransferFilters) => ({ ...filters, per_page: 20 });
+export type TransferSummary = { in_transit: number; products: number; total: number; units: number };
 
 export const transferApi = {
     warehouseOptions: () =>
@@ -149,19 +150,19 @@ export const transferApi = {
     representativeOptions: () =>
         request<RepresentativeTransferOptions>(() => window.axios.get('api/admin/representative-transfer-options')),
     warehouseTransfers: (filters: TransferFilters) =>
-        request<{ data: WarehouseTransfer[]; meta: PaginationMeta }>(() =>
+        request<{ data: WarehouseTransfer[]; meta: PaginationMeta; summary: TransferSummary }>(() =>
             window.axios.get('api/admin/warehouse-transfers', {
                 params: pages(filters),
             }),
         ),
     representativeTransfers: (filters: TransferFilters) =>
-        request<{ data: RepresentativeTransfer[]; meta: PaginationMeta }>(() =>
+        request<{ data: RepresentativeTransfer[]; meta: PaginationMeta; summary: TransferSummary }>(() =>
             window.axios.get('api/admin/representative-transfers', {
                 params: pages(filters),
             }),
         ),
     representativeInventory: (filters: TransferFilters) =>
-        request<{ data: RepresentativeInventory[]; meta: PaginationMeta }>(() =>
+        request<{ data: RepresentativeInventory[]; meta: PaginationMeta; summary: TransferSummary }>(() =>
             window.axios.get('api/admin/representative-inventory', {
                 params: pages(filters),
             }),
@@ -196,11 +197,15 @@ export const transferApi = {
                 { headers: headers() },
             ),
         ),
-    ownStock: () =>
-        request<{ data: RepresentativeInventory[]; meta: PaginationMeta }>(() => window.axios.get('api/sales/stock')),
-    ownReceivings: () =>
+    ownStock: (page = 1) =>
+        request<{
+            data: RepresentativeInventory[];
+            meta: PaginationMeta;
+            summary: { incoming: number; on_hand: number };
+        }>(() => window.axios.get('api/sales/stock', { params: { page, per_page: 10 } })),
+    ownReceivings: (page = 1) =>
         request<{ data: RepresentativeTransfer[]; meta: PaginationMeta }>(() =>
-            window.axios.get('api/sales/receivings'),
+            window.axios.get('api/sales/receivings', { params: { page, per_page: 10 } }),
         ),
     receiveOwn: (id: number) =>
         request<{ data: RepresentativeTransfer }>(() =>

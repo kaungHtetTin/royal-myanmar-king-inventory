@@ -53,7 +53,10 @@ class WarehouseTransferController extends Controller
             ->when($data['date_to'] ?? null, fn ($query, $date) => $query->whereDate('created_at', '<=', $date))
             ->latest('id');
 
-        return WarehouseTransferResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString());
+        $matching = (clone $query)->get();
+        $summary = ['total' => $matching->count(), 'units' => (int) $matching->sum('total_quantity'), 'products' => $matching->flatMap->items->pluck('product_id')->unique()->count(), 'in_transit' => $matching->where('status', TransferStatus::Dispatched)->count()];
+
+        return WarehouseTransferResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString())->additional(['summary' => $summary]);
     }
 
     public function store(Request $request): JsonResponse

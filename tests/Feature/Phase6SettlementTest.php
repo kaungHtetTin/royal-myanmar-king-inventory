@@ -83,6 +83,35 @@ class Phase6SettlementTest extends TestCase
         $this->actingAs($confirmer)->command("/api/admin/cash-submissions/{$foreignId}/confirm", 'wrong-scope')->assertForbidden();
     }
 
+    public function test_representative_cash_activity_is_paginated_and_owned(): void
+    {
+        [$representative, $repUser] = $this->representativeFixture(500000);
+        [, $otherUser] = $this->representativeFixture(200000);
+
+        foreach (range(1, 11) as $sequence) {
+            RepresentativeCashTransaction::query()->create([
+                'sales_representative_id' => $representative->id,
+                'transaction_type' => 'cash_sale',
+                'amount_delta' => $sequence,
+                'source_type' => 'pagination_test',
+                'source_id' => $sequence,
+                'reference' => sprintf('PAGE-%02d', $sequence),
+                'created_by' => $repUser->id,
+                'occurred_at' => now(),
+            ]);
+        }
+
+        $this->actingAs($repUser)->getJson('/api/sales/cash-transactions?page=2&per_page=10')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('meta.current_page', 2)
+            ->assertJsonPath('meta.total', 12);
+
+        $this->actingAs($otherUser)->getJson('/api/sales/cash-transactions?per_page=10')
+            ->assertOk()
+            ->assertJsonPath('meta.total', 1);
+    }
+
     public function test_customer_payment_draft_is_neutral_then_post_reduces_outstanding(): void
     {
         [$customer, $warehouse] = $this->customerFixture(500000);

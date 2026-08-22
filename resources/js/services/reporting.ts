@@ -25,6 +25,8 @@ export type AdminDashboard = {
         pending_warehouse_transfers: number;
         pending_representative_receivings: number;
         pending_cash_submissions: number;
+        low_stock_products?: number;
+        low_stock_threshold?: number;
     };
     recent_movements: Array<{
         id: number;
@@ -68,22 +70,9 @@ export type SalesDashboard = {
         dispatched_at: string | null;
     }>;
 };
-export type ReportName =
-    | 'warehouse-stock'
-    | 'representative-stock'
-    | 'stock-movements'
-    | 'warehouse-transfers'
-    | 'representative-transfers'
-    | 'sales'
-    | 'cash-hold'
-    | 'customer-credit';
+export type ReportName = 'sales';
 export type ReportOptions = {
     warehouses: Identity[];
-    representatives: Array<Identity & { primary_warehouse_id: number; region: string | null }>;
-    customers: Array<Identity & { warehouse_id: number }>;
-    products: ProductIdentity[];
-    categories: string[];
-    regions: string[];
     reports: ReportName[];
 };
 export type ReportFilters = {
@@ -105,6 +94,19 @@ export type ReportFilters = {
 };
 export type ReportRow = Record<string, unknown>;
 export type ReportResponse = {
+    analysis?: {
+        month_trend?: Array<{
+            amount: number;
+            date: string;
+            label: string;
+        }>;
+        year_trend?: Array<{ amount: number; label: string; month: number }>;
+        top_products?: Array<{
+            amount: number;
+            product: ProductIdentity;
+            units: number;
+        }>;
+    };
     report: ReportName;
     data: ReportRow[];
     meta: PaginationMeta;

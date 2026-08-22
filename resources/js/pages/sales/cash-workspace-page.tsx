@@ -1,14 +1,28 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { financeApi, FinanceError, type CashOverview, type CashSubmission } from '../../services/finance';
+import type { PaginationMeta } from '../../services/administration';
+import {
+    financeApi,
+    FinanceError,
+    type CashOverview,
+    type CashSubmission,
+    type CashTransaction,
+} from '../../services/finance';
 import { Icon } from '../../ui/icons';
-import { Button, Dialog, EmptyState, IconButton, StatusBadge } from '../../ui/primitives';
+import { Button, Dialog, EmptyState, IconButton, Pagination, StatusBadge } from '../../ui/primitives';
 
 const emptyOverview: CashOverview = {
     representative: { id: 0, code: '', name: '' },
     cash_hold: 0,
     pending_submissions: 0,
     available_to_submit: 0,
-    transactions: [],
+};
+const emptyMeta: PaginationMeta = {
+    current_page: 1,
+    from: null,
+    last_page: 1,
+    per_page: 10,
+    to: null,
+    total: 0,
 };
 function money(value: number) {
     return new Intl.NumberFormat('en-US').format(value);
@@ -37,6 +51,11 @@ function message(error: unknown) {
 export function CashWorkspacePage() {
     const [overview, setOverview] = useState(emptyOverview);
     const [submissions, setSubmissions] = useState<CashSubmission[]>([]);
+    const [activity, setActivity] = useState<CashTransaction[]>([]);
+    const [submissionMeta, setSubmissionMeta] = useState(emptyMeta);
+    const [activityMeta, setActivityMeta] = useState(emptyMeta);
+    const [submissionPage, setSubmissionPage] = useState(1);
+    const [activityPage, setActivityPage] = useState(1);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
@@ -48,22 +67,36 @@ export function CashWorkspacePage() {
         setLoading(true);
         setError('');
         try {
-            const [cash, list] = await Promise.all([financeApi.ownOverview(), financeApi.ownSubmissions()]);
+            const [cash, list, ledger] = await Promise.all([
+                financeApi.ownOverview(),
+                financeApi.ownSubmissions(submissionPage),
+                financeApi.ownCashActivity(activityPage),
+            ]);
             setOverview(cash);
             setSubmissions(list.data);
+            setSubmissionMeta(list.meta);
+            setActivity(ledger.data);
+            setActivityMeta(ledger.meta);
         } catch (requestError) {
             setError(message(requestError));
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [activityPage, submissionPage]);
     useEffect(() => {
         let active = true;
-        void Promise.all([financeApi.ownOverview(), financeApi.ownSubmissions()])
-            .then(([cash, list]) => {
+        void Promise.all([
+            financeApi.ownOverview(),
+            financeApi.ownSubmissions(submissionPage),
+            financeApi.ownCashActivity(activityPage),
+        ])
+            .then(([cash, list, ledger]) => {
                 if (!active) return;
                 setOverview(cash);
                 setSubmissions(list.data);
+                setSubmissionMeta(list.meta);
+                setActivity(ledger.data);
+                setActivityMeta(ledger.meta);
                 setError('');
             })
             .catch((requestError) => {
@@ -75,7 +108,7 @@ export function CashWorkspacePage() {
         return () => {
             active = false;
         };
-    }, []);
+    }, [activityPage, submissionPage]);
     const open = () => {
         setForm({ amount: overview.available_to_submit, notes: '' });
         setFields({});
@@ -88,7 +121,18 @@ export function CashWorkspacePage() {
         try {
             await financeApi.submitCash(form);
             setDialog(false);
-            await load();
+            setSubmissionPage(1);
+            await Promise.all([
+                financeApi.ownOverview().then(setOverview),
+                financeApi.ownSubmissions(1).then((list) => {
+                    setSubmissions(list.data);
+                    setSubmissionMeta(list.meta);
+                }),
+                financeApi.ownCashActivity(activityPage).then((ledger) => {
+                    setActivity(ledger.data);
+                    setActivityMeta(ledger.meta);
+                }),
+            ]);
             setNotice('Cash submission is pending office confirmation.');
             window.setTimeout(() => setNotice(''), 4500);
         } catch (requestError) {
@@ -112,10 +156,7 @@ export function CashWorkspacePage() {
             setSaving(false);
         }
     };
-    const confirmed = useMemo(
-        () => submissions.filter((row) => row.status === 'confirmed').reduce((sum, row) => sum + row.amount, 0),
-        [submissions],
-    );
+    const pendingOnPage = useMemo(() => submissions.filter((row) => row.status === 'pending').length, [submissions]);
 
     return (
         <div className="sales-cash-page">
@@ -178,7 +219,9 @@ export function CashWorkspacePage() {
                             <p className="ui-eyebrow">Office handovers</p>
                             <h2>Cash submissions</h2>
                         </div>
-                        <small>{money(confirmed)} MMK confirmed</small>
+                        <small>
+                            {submissionMeta.total} records · {pendingOnPage} pending on this page
+                        </small>
                     </header>
                     {loading ? (
                         <div className="ui-loading">
@@ -223,6 +266,12 @@ export function CashWorkspacePage() {
                             ))}
                         </div>
                     )}
+                    <Pagination
+                        label="Cash submissions"
+                        loading={loading}
+                        meta={submissionMeta}
+                        onPageChange={setSubmissionPage}
+                    />
                 </section>
                 <section className="sales-section cash-activity-panel">
                     <header>
@@ -230,21 +279,21 @@ export function CashWorkspacePage() {
                             <p className="ui-eyebrow">Append-only ledger</p>
                             <h2>Cash activity</h2>
                         </div>
-                        <small>Last {overview.transactions.length}</small>
+                        <small>{activityMeta.total} entries</small>
                     </header>
                     {loading ? (
                         <div className="ui-loading">
                             <span />
                             Loading activity…
                         </div>
-                    ) : overview.transactions.length === 0 ? (
+                    ) : activity.length === 0 ? (
                         <EmptyState
                             description="Posted cash sales and office confirmations appear here."
                             title="No cash activity"
                         />
                     ) : (
                         <div className="cash-ledger-list">
-                            {overview.transactions.map((row) => (
+                            {activity.map((row) => (
                                 <article key={row.id}>
                                     <span className={row.amount_delta >= 0 ? 'is-in' : 'is-out'}>
                                         {row.amount_delta >= 0 ? '+' : '−'}
@@ -263,6 +312,12 @@ export function CashWorkspacePage() {
                             ))}
                         </div>
                     )}
+                    <Pagination
+                        label="Cash activity"
+                        loading={loading}
+                        meta={activityMeta}
+                        onPageChange={setActivityPage}
+                    />
                 </section>
             </div>
             <Dialog

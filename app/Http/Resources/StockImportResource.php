@@ -18,7 +18,7 @@ class StockImportResource extends JsonResource
             'notes' => $this->notes,
             'items' => $this->whenLoaded('items', fn () => $this->items->map(fn ($item) => [
                 'id' => $item->id,
-                'product' => ['id' => $item->product->id, 'sku' => $item->product->sku, 'name' => $item->product->name, 'unit' => $item->product->unit],
+                'product' => ['id' => $item->product->id, 'sku' => $item->product->sku, 'name' => $item->product->name, 'unit' => $item->product->unit, 'selling_price' => $item->product->selling_price],
                 'quantity' => $item->quantity,
             ])),
             'total_quantity' => (int) ($this->total_quantity ?? $this->items->sum('quantity')),

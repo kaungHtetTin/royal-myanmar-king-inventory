@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useSession } from '../../auth/session-context';
 import {
     financeApi,
@@ -13,7 +13,7 @@ import {
 import { Icon } from '../../ui/icons';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
 
-type Tab = 'cash' | 'credit' | 'payments';
+type Tab = 'cash-holds' | 'cash-submissions' | 'credit' | 'payments';
 const emptyOptions: PaymentOptions = {
     customers: [],
     warehouses: [],
@@ -62,11 +62,12 @@ export function FinanceManagementPage() {
     const canReverse = can('cash.reverse');
     const canCreatePayment = can('customer_payment.create');
     const canVoidPayment = can('customer_payment.void');
-    const [tab, setTab] = useState<Tab>(canCash ? 'cash' : 'credit');
+    const [tab, setTab] = useState<Tab>(canCash ? 'cash-holds' : 'credit');
     const [balances, setBalances] = useState<RepresentativeCashBalance[]>([]);
     const [submissions, setSubmissions] = useState<CashSubmission[]>([]);
     const [credit, setCredit] = useState<CustomerCreditBalance[]>([]);
     const [payments, setPayments] = useState<CustomerPayment[]>([]);
+    const [totals, setTotals] = useState({ cash: 0, credit: 0, draft: 0, pending: 0 });
     const [options, setOptions] = useState(emptyOptions);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState<number | null>(null);
@@ -89,11 +90,21 @@ export function FinanceManagementPage() {
             if (cashData) {
                 setBalances(cashData[0].data);
                 setSubmissions(cashData[1].data);
+                setTotals((value) => ({
+                    ...value,
+                    cash: cashData[0].summary?.cash_held ?? 0,
+                    pending: cashData[0].summary?.pending_handover ?? 0,
+                }));
             }
             if (paymentData) {
                 setCredit(paymentData[0].data);
                 setPayments(paymentData[1].data);
                 setOptions(paymentData[2]);
+                setTotals((value) => ({
+                    ...value,
+                    credit: paymentData[0].summary?.outstanding ?? 0,
+                    draft: paymentData[1].summary?.draft_amount ?? 0,
+                }));
             }
         } catch (requestError) {
             setError(message(requestError));
@@ -115,11 +126,21 @@ export function FinanceManagementPage() {
                 if (cashData) {
                     setBalances(cashData[0].data);
                     setSubmissions(cashData[1].data);
+                    setTotals((value) => ({
+                        ...value,
+                        cash: cashData[0].summary?.cash_held ?? 0,
+                        pending: cashData[0].summary?.pending_handover ?? 0,
+                    }));
                 }
                 if (paymentData) {
                     setCredit(paymentData[0].data);
                     setPayments(paymentData[1].data);
                     setOptions(paymentData[2]);
+                    setTotals((value) => ({
+                        ...value,
+                        credit: paymentData[0].summary?.outstanding ?? 0,
+                        draft: paymentData[1].summary?.draft_amount ?? 0,
+                    }));
                 }
                 setError('');
             })
@@ -204,16 +225,6 @@ export function FinanceManagementPage() {
         }
     };
     const selectedCustomer = options.customers.find((customer) => customer.id === form.customer_id);
-    const totals = useMemo(
-        () => ({
-            cash: balances.reduce((sum, row) => sum + row.cash_hold, 0),
-            pending: balances.reduce((sum, row) => sum + row.pending_submissions, 0),
-            credit: credit.reduce((sum, row) => sum + row.outstanding_amount, 0),
-            draft: payments.filter((row) => row.status === 'draft').reduce((sum, row) => sum + row.amount, 0),
-        }),
-        [balances, credit, payments],
-    );
-
     return (
         <div className="admin-page finance-management">
             <header className="page-heading">
@@ -266,13 +277,30 @@ export function FinanceManagementPage() {
                 </div>
             ) : null}
             <div
-                className={`section-tabs section-tabs--${Number(canCash) + (canPayments ? 2 : 0)} finance-tabs`}
+                className={`section-tabs section-tabs--${Number(canCash) * 2 + (canPayments ? 2 : 0)} finance-tabs`}
                 role="tablist"
             >
                 {canCash ? (
-                    <button aria-selected={tab === 'cash'} onClick={() => setTab('cash')} role="tab" type="button">
+                    <button
+                        aria-selected={tab === 'cash-holds'}
+                        onClick={() => setTab('cash-holds')}
+                        role="tab"
+                        type="button"
+                    >
                         <Icon name="cash" size={15} />
-                        <span>Representative cash</span>
+                        <span>Cash holds</span>
+                        <span className="section-tab-count">{balances.length}</span>
+                    </button>
+                ) : null}
+                {canCash ? (
+                    <button
+                        aria-selected={tab === 'cash-submissions'}
+                        onClick={() => setTab('cash-submissions')}
+                        role="tab"
+                        type="button"
+                    >
+                        <Icon name="transfer" size={15} />
+                        <span>Cash submissions</span>
                         <span className="section-tab-count">
                             {submissions.filter((row) => row.status === 'pending').length}
                         </span>
@@ -299,118 +327,115 @@ export function FinanceManagementPage() {
                     </button>
                 ) : null}
             </div>
-            {tab === 'cash' ? (
-                <div className="finance-panel-grid">
-                    <Panel eyebrow="Custody balances" title="Representative cash holds">
-                        {loading ? (
-                            <Loading />
-                        ) : balances.length === 0 ? (
-                            <EmptyState
-                                description="Posted cash sales create representative holds."
-                                title="No cash balances"
-                            />
-                        ) : (
-                            <div className="ui-table-wrap">
-                                <table className="ui-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Representative</th>
-                                            <th>Warehouse</th>
-                                            <th className="is-numeric">Hold</th>
-                                            <th className="is-numeric">Pending</th>
-                                            <th className="is-numeric">Available</th>
+            {tab === 'cash-holds' ? (
+                <Panel eyebrow="Custody balances" title="Representative cash holds">
+                    {loading ? (
+                        <Loading />
+                    ) : balances.length === 0 ? (
+                        <EmptyState
+                            description="Posted cash sales create representative holds."
+                            title="No cash balances"
+                        />
+                    ) : (
+                        <div className="ui-table-wrap">
+                            <table className="ui-table">
+                                <thead>
+                                    <tr>
+                                        <th>Representative</th>
+                                        <th>Warehouse</th>
+                                        <th className="is-numeric">Hold</th>
+                                        <th className="is-numeric">Pending</th>
+                                        <th className="is-numeric">Available</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {balances.map((row) => (
+                                        <tr key={row.id}>
+                                            <td>
+                                                <strong>{row.name}</strong>
+                                                <small>{row.code}</small>
+                                            </td>
+                                            <td>
+                                                {row.warehouse.name}
+                                                <small>{row.warehouse.code}</small>
+                                            </td>
+                                            <td className="is-numeric">
+                                                <strong>{money(row.cash_hold)}</strong>
+                                            </td>
+                                            <td className="is-numeric">{money(row.pending_submissions)}</td>
+                                            <td className="is-numeric">{money(row.available_to_submit)}</td>
                                         </tr>
-                                    </thead>
-                                    <tbody>
-                                        {balances.map((row) => (
-                                            <tr key={row.id}>
-                                                <td>
-                                                    <strong>{row.name}</strong>
-                                                    <small>{row.code}</small>
-                                                </td>
-                                                <td>
-                                                    {row.warehouse.name}
-                                                    <small>{row.warehouse.code}</small>
-                                                </td>
-                                                <td className="is-numeric">
-                                                    <strong>{money(row.cash_hold)}</strong>
-                                                </td>
-                                                <td className="is-numeric">{money(row.pending_submissions)}</td>
-                                                <td className="is-numeric">{money(row.available_to_submit)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </Panel>
-                    <Panel eyebrow="Office confirmation" title="Cash submissions">
-                        {loading ? (
-                            <Loading />
-                        ) : submissions.length === 0 ? (
-                            <EmptyState
-                                description="Representative handovers appear here."
-                                title="No cash submissions"
-                            />
-                        ) : (
-                            <div className="ui-table-wrap">
-                                <table className="ui-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Submission</th>
-                                            <th>Representative</th>
-                                            <th className="is-numeric">Amount</th>
-                                            <th>Status</th>
-                                            <th className="ui-table__actions">Actions</th>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </Panel>
+            ) : null}
+            {tab === 'cash-submissions' ? (
+                <Panel eyebrow="Office confirmation" title="Cash submissions">
+                    {loading ? (
+                        <Loading />
+                    ) : submissions.length === 0 ? (
+                        <EmptyState description="Representative handovers appear here." title="No cash submissions" />
+                    ) : (
+                        <div className="ui-table-wrap">
+                            <table className="ui-table">
+                                <thead>
+                                    <tr>
+                                        <th>Submission</th>
+                                        <th>Representative</th>
+                                        <th className="is-numeric">Amount</th>
+                                        <th>Status</th>
+                                        <th className="ui-table__actions">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {submissions.map((row) => (
+                                        <tr key={row.id}>
+                                            <td>
+                                                <strong>{row.reference}</strong>
+                                                <small>{dateTime(row.created_at)}</small>
+                                            </td>
+                                            <td>
+                                                {row.representative.name}
+                                                <small>{row.warehouse.code}</small>
+                                            </td>
+                                            <td className="is-numeric">
+                                                <strong>{money(row.amount)}</strong>
+                                            </td>
+                                            <td>
+                                                <StatusBadge tone={tone(row.status)}>{row.status}</StatusBadge>
+                                            </td>
+                                            <td className="ui-table__actions">
+                                                {row.status === 'pending' && canConfirm ? (
+                                                    <IconButton
+                                                        disabled={busy === row.id}
+                                                        icon="check"
+                                                        label={`Confirm ${row.reference}`}
+                                                        onClick={() => confirm(row)}
+                                                        requiresOnline
+                                                        tone="primary"
+                                                    />
+                                                ) : null}
+                                                {row.status === 'confirmed' && canReverse ? (
+                                                    <IconButton
+                                                        disabled={busy === row.id}
+                                                        icon="reverse"
+                                                        label={`Reverse ${row.reference}`}
+                                                        onClick={() => reverseCash(row)}
+                                                        requiresOnline
+                                                        tone="danger"
+                                                    />
+                                                ) : null}
+                                            </td>
                                         </tr>
-                                    </thead>
-                                    <tbody>
-                                        {submissions.map((row) => (
-                                            <tr key={row.id}>
-                                                <td>
-                                                    <strong>{row.reference}</strong>
-                                                    <small>{dateTime(row.created_at)}</small>
-                                                </td>
-                                                <td>
-                                                    {row.representative.name}
-                                                    <small>{row.warehouse.code}</small>
-                                                </td>
-                                                <td className="is-numeric">
-                                                    <strong>{money(row.amount)}</strong>
-                                                </td>
-                                                <td>
-                                                    <StatusBadge tone={tone(row.status)}>{row.status}</StatusBadge>
-                                                </td>
-                                                <td className="ui-table__actions">
-                                                    {row.status === 'pending' && canConfirm ? (
-                                                        <IconButton
-                                                            disabled={busy === row.id}
-                                                            icon="check"
-                                                            label={`Confirm ${row.reference}`}
-                                                            onClick={() => confirm(row)}
-                                                            requiresOnline
-                                                            tone="primary"
-                                                        />
-                                                    ) : null}
-                                                    {row.status === 'confirmed' && canReverse ? (
-                                                        <IconButton
-                                                            disabled={busy === row.id}
-                                                            icon="reverse"
-                                                            label={`Reverse ${row.reference}`}
-                                                            onClick={() => reverseCash(row)}
-                                                            requiresOnline
-                                                            tone="danger"
-                                                        />
-                                                    ) : null}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </Panel>
-                </div>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </Panel>
             ) : null}
             {tab === 'credit' ? (
                 <Panel

@@ -8,6 +8,7 @@ use App\Http\Controllers\Concerns\HandlesTransferCommands;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\RepresentativeInventoryResource;
 use App\Http\Resources\RepresentativeTransferResource;
+use App\Models\InTransitInventory;
 use App\Models\RepresentativeInventory;
 use App\Models\RepresentativeTransfer;
 use App\Services\RepresentativeTransferPostingService;
@@ -24,18 +25,28 @@ class RepresentativeStockController extends Controller
     {
         $representative = $request->user()->salesRepresentative;
         abort_unless($representative?->is_active, 403);
+        $data = $request->validate(['per_page' => ['nullable', 'integer', 'min:10', 'max:100']]);
         $query = RepresentativeInventoryController::withPending(RepresentativeInventory::query())
             ->with(['representative', 'product'])
             ->where('sales_representative_id', $representative->id)
             ->orderBy('product_id');
 
-        return RepresentativeInventoryResource::collection($query->paginate(50));
+        $summary = [
+            'on_hand' => (int) RepresentativeInventory::query()->where('sales_representative_id', $representative->id)->sum('quantity'),
+            'incoming' => (int) InTransitInventory::query()->where('transfer_type', 'representative_transfer')
+                ->whereIn('transfer_id', RepresentativeTransfer::query()->select('id')->where('sales_representative_id', $representative->id)->where('status', TransferStatus::Dispatched))
+                ->sum('quantity'),
+        ];
+
+        return RepresentativeInventoryResource::collection($query->paginate($data['per_page'] ?? 10)->withQueryString())
+            ->additional(['summary' => $summary]);
     }
 
     public function pending(Request $request): AnonymousResourceCollection
     {
         $representative = $request->user()->salesRepresentative;
         abort_unless($representative?->is_active, 403);
+        $data = $request->validate(['per_page' => ['nullable', 'integer', 'min:10', 'max:100']]);
         $query = RepresentativeTransfer::query()
             ->with(['sourceWarehouse', 'representative', 'items.product', 'transit', 'creator', 'dispatcher', 'receiver', 'canceller', 'reverser'])
             ->withSum('items as total_quantity', 'quantity')
@@ -43,7 +54,7 @@ class RepresentativeStockController extends Controller
             ->where('status', TransferStatus::Dispatched)
             ->oldest('dispatched_at');
 
-        return RepresentativeTransferResource::collection($query->paginate(20));
+        return RepresentativeTransferResource::collection($query->paginate($data['per_page'] ?? 10)->withQueryString());
     }
 
     public function receive(Request $request, RepresentativeTransfer $representativeTransfer): RepresentativeTransferResource

@@ -199,6 +199,9 @@ class AuthenticationTest extends TestCase
             ['POST', '/api/sales/sales'],
             ['PUT', '/api/sales/sales/999'],
             ['POST', '/api/sales/sales/999/post'],
+            ['GET', '/api/sales/cash-hold'],
+            ['GET', '/api/sales/cash-submissions'],
+            ['GET', '/api/sales/cash-transactions'],
         ];
 
         foreach ($endpoints as [$method, $uri]) {

@@ -45,6 +45,7 @@ export type UserFilters = {
     search?: string;
     status?: string;
 };
+export type UserSummary = { active: number; roles: number; total: number; warehouse_assigned: number };
 
 export type UserInput = {
     email: string;
@@ -91,7 +92,7 @@ async function request<T>(operation: () => Promise<{ data: T }>): Promise<T> {
 export const administrationApi = {
     accessOptions: () => request<AccessOptions>(() => window.axios.get('api/admin/access-options')),
     users: (filters: UserFilters) =>
-        request<{ data: ManagedUser[]; meta: PaginationMeta }>(() =>
+        request<{ data: ManagedUser[]; meta: PaginationMeta; summary: UserSummary }>(() =>
             window.axios.get('api/admin/users', {
                 params: { ...filters, per_page: 20 },
             }),

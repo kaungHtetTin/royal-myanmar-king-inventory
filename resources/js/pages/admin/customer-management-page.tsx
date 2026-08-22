@@ -8,6 +8,7 @@ import {
     type CustomerFilters,
     type CustomerInput,
     type CustomerOptions,
+    type CustomerSummary,
 } from '../../services/customers';
 import { Icon } from '../../ui/icons';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
@@ -21,6 +22,7 @@ const emptyMeta: PaginationMeta = {
     total: 0,
 };
 const emptyOptions: CustomerOptions = { types: [], warehouses: [] };
+const emptySummary: CustomerSummary = { active: 0, credit_enabled: 0, credit_limit: 0, total: 0 };
 
 function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : 'Unable to complete the request.';
@@ -45,6 +47,7 @@ export function CustomerManagementPage() {
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [options, setOptions] = useState<CustomerOptions>(emptyOptions);
     const [meta, setMeta] = useState(emptyMeta);
+    const [summary, setSummary] = useState(emptySummary);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
@@ -68,6 +71,7 @@ export function CustomerManagementPage() {
             const [response, availableOptions] = await Promise.all([customerApi.list(filters), customerApi.options()]);
             setCustomers(response.data);
             setMeta(response.meta);
+            setSummary(response.summary ?? emptySummary);
             setOptions(availableOptions);
         } catch (requestError) {
             setError(errorMessage(requestError));
@@ -83,6 +87,7 @@ export function CustomerManagementPage() {
                 if (!active) return;
                 setCustomers(response.data);
                 setMeta(response.meta);
+                setSummary(response.summary ?? emptySummary);
                 setOptions(availableOptions);
             })
             .catch((requestError) => {
@@ -96,9 +101,6 @@ export function CustomerManagementPage() {
         };
     }, [filters]);
 
-    const activeCount = customers.filter((customer) => customer.is_active).length;
-    const creditCustomers = customers.filter((customer) => customer.credit_allowed);
-    const creditLimit = creditCustomers.reduce((total, customer) => total + customer.credit_limit, 0);
     const showNotice = (message: string) => {
         setNotice(message);
         window.setTimeout(() => setNotice(''), 4000);
@@ -131,20 +133,25 @@ export function CustomerManagementPage() {
                     hint="Current filtered result"
                     icon="customers"
                     label="Customers"
-                    value={String(meta.total)}
+                    value={String(summary.total)}
                 />
-                <MetricCard hint="On this page" icon="dashboard" label="Active" value={String(activeCount)} />
                 <MetricCard
-                    hint="On this page"
+                    hint="Current filtered result"
+                    icon="dashboard"
+                    label="Active"
+                    value={String(summary.active)}
+                />
+                <MetricCard
+                    hint="Current filtered result"
                     icon="cash"
                     label="Credit enabled"
-                    value={String(creditCustomers.length)}
+                    value={String(summary.credit_enabled)}
                 />
                 <MetricCard
-                    hint="Enabled customers on page"
+                    hint="Current filtered result"
                     icon="reports"
                     label="Credit limits"
-                    value={money(creditLimit)}
+                    value={money(summary.credit_limit)}
                 />
             </div>
 

@@ -110,6 +110,14 @@ export function SessionProvider({ children, initialUser }: { children: ReactNode
                 }
             },
             status,
+            updateUser: (changes) => {
+                setUser((current) => {
+                    if (!current) return current;
+                    const next = { ...current, ...changes };
+                    rememberUser(next);
+                    return next;
+                });
+            },
             user,
         }),
         [status, user],

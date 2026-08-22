@@ -241,6 +241,16 @@ export function AdminDashboardPage() {
                                     <Icon name="chevronRight" />
                                 </Link>
                             </li>
+                            <li>
+                                <span className="attention-icon is-warning">{kpi.low_stock_products ?? 0}</span>
+                                <div>
+                                    <strong>Low-stock products</strong>
+                                    <small>At or below {kpi.low_stock_threshold ?? 10} warehouse units</small>
+                                </div>
+                                <Link aria-label="Review low-stock products" to="/admin/inventory">
+                                    <Icon name="chevronRight" />
+                                </Link>
+                            </li>
                         </ul>
                     </Panel>
                     <Panel className="dashboard-sales-composition" eyebrow="Sales composition" title="Today">
