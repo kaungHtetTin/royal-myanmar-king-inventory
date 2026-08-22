@@ -55,6 +55,14 @@ class SaleController extends Controller
         return SaleResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString());
     }
 
+    public function show(Request $request, Sale $sale): SaleResource
+    {
+        $representative = $this->representative($request);
+        $this->assertOwn($sale, $representative);
+
+        return new SaleResource($this->load($sale));
+    }
+
     public function options(Request $request): JsonResponse
     {
         $representative = $this->representative($request);

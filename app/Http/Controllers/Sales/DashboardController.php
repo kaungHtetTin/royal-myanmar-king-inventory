@@ -27,12 +27,15 @@ class DashboardController extends Controller
         $pendingQuery = RepresentativeTransfer::query()->where('sales_representative_id', $representative->id)->where('status', TransferStatus::Dispatched);
         $pendingCount = (clone $pendingQuery)->count();
         $pending = $pendingQuery->with(['sourceWarehouse:id,code,name', 'items.product:id,sku,name,unit'])->withSum('items as total_quantity', 'quantity')->latest('dispatched_at')->limit(5)->get();
+        $recentSales = Sale::query()->with('customer:id,code,name')->withSum('items as total_quantity', 'quantity')
+            ->where('sales_representative_id', $representative->id)->latest('id')->limit(5)->get();
 
         return response()->json([
             'as_of' => now()->toISOString(), 'representative' => ['id' => $representative->id, 'code' => $representative->code, 'name' => $representative->name],
             'kpis' => ['stock_units' => (int) RepresentativeInventory::query()->where('sales_representative_id', $representative->id)->sum('quantity'), 'stock_products' => RepresentativeInventory::query()->where('sales_representative_id', $representative->id)->where('quantity', '>', 0)->count(), 'pending_receivings' => $pendingCount, 'today_sales' => (int) $sales->total, 'today_cash_sales' => (int) $sales->cash, 'today_credit_sales' => (int) $sales->credit, 'cash_hold' => (int) RepresentativeCashBalance::query()->where('sales_representative_id', $representative->id)->value('amount')],
             'stock' => $stock->map(fn ($row) => ['id' => $row->id, 'quantity' => $row->quantity, 'product' => ['id' => $row->product->id, 'sku' => $row->product->sku, 'name' => $row->product->name, 'unit' => $row->product->unit]]),
             'pending_receivings' => $pending->map(fn (RepresentativeTransfer $transfer) => ['id' => $transfer->id, 'reference' => $transfer->reference, 'warehouse' => ['id' => $transfer->sourceWarehouse->id, 'code' => $transfer->sourceWarehouse->code, 'name' => $transfer->sourceWarehouse->name], 'total_quantity' => (int) $transfer->total_quantity, 'products' => $transfer->items->count(), 'dispatched_at' => $transfer->dispatched_at?->toISOString()]),
+            'recent_sales' => $recentSales->map(fn (Sale $sale) => ['id' => $sale->id, 'reference' => $sale->reference, 'customer' => ['id' => $sale->customer->id, 'code' => $sale->customer->code, 'name' => $sale->customer->name], 'payment_type' => $sale->payment_type->value, 'status' => $sale->status->value, 'total_amount' => (int) $sale->total_amount, 'total_quantity' => (int) $sale->total_quantity, 'created_at' => $sale->created_at?->toISOString()]),
         ]);
     }
 }

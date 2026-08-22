@@ -53,15 +53,12 @@ export function CustomerManagementPage() {
     const [draftFilters, setDraftFilters] = useState({
         credit: '',
         search: '',
-        sort: 'name:asc',
         status: '',
         type: '',
         warehouse_id: '',
     });
     const [filters, setFilters] = useState<CustomerFilters>({
-        direction: 'asc',
         page: 1,
-        sort: 'name',
     });
 
     const loadCustomers = useCallback(async () => {
@@ -172,14 +169,11 @@ export function CustomerManagementPage() {
                     className="filter-toolbar customer-filters"
                     onSubmit={(event) => {
                         event.preventDefault();
-                        const [sort, direction] = draftFilters.sort.split(':') as [string, 'asc' | 'desc'];
                         setLoading(true);
                         setFilters({
                             credit: draftFilters.credit,
-                            direction,
                             page: 1,
                             search: draftFilters.search,
-                            sort,
                             status: draftFilters.status,
                             type: draftFilters.type,
                             warehouse_id: draftFilters.warehouse_id,
@@ -267,24 +261,6 @@ export function CustomerManagementPage() {
                                     {warehouse.code}
                                 </option>
                             ))}
-                        </select>
-                    </label>
-                    <label>
-                        <span className="sr-only">Sort customers</span>
-                        <select
-                            onChange={(event) =>
-                                setDraftFilters((value) => ({
-                                    ...value,
-                                    sort: event.target.value,
-                                }))
-                            }
-                            value={draftFilters.sort}
-                        >
-                            <option value="name:asc">Name A-Z</option>
-                            <option value="name:desc">Name Z-A</option>
-                            <option value="code:asc">Code A-Z</option>
-                            <option value="credit_limit:desc">Highest credit</option>
-                            <option value="created_at:desc">Newest first</option>
                         </select>
                     </label>
                     <Button icon="search" type="submit">

@@ -38,7 +38,7 @@ class Phase2MasterDataTest extends TestCase
         ])->assertCreated()->json('data');
         $representative = $this->postJson('/api/admin/representatives', [
             'code' => 'SR-P2', 'name' => 'Phase Two Representative', 'phone' => '09-100000002', 'email' => null,
-            'username' => 'phase.two', 'password' => 'password1234', 'password_confirmation' => 'password1234',
+            'username' => 'phase.two', 'password' => 'password', 'password_confirmation' => 'password',
             'primary_warehouse_id' => $warehouse['id'], 'region' => 'Yangon', 'vehicle_id' => $vehicle['id'],
             'notes' => '', 'is_active' => true,
         ])->assertCreated()->json('data');

@@ -13,7 +13,7 @@ import {
     type StockImport,
     type StockMovement,
 } from '../../services/inventory';
-import { Icon } from '../../ui/icons';
+import { Icon, type IconName } from '../../ui/icons';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
 
 type Tab = 'stock' | 'imports' | 'adjustments' | 'movements';
@@ -35,6 +35,12 @@ const tabLabels: Record<Tab, string> = {
     imports: 'Imports',
     adjustments: 'Adjustments',
     movements: 'Movement history',
+};
+const tabIcons: Record<Tab, IconName> = {
+    stock: 'box',
+    imports: 'plus',
+    adjustments: 'adjustments',
+    movements: 'transfer',
 };
 
 function errorMessage(error: unknown) {
@@ -223,7 +229,11 @@ export function InventoryManagementPage() {
             ) : null}
 
             <Panel className="inventory-panel" eyebrow="Warehouse ledger" title={tabLabels[tab]}>
-                <div aria-label="Inventory sections" className="ui-tabs" role="tablist">
+                <div
+                    aria-label="Inventory sections"
+                    className="section-tabs section-tabs--4 inventory-tabs"
+                    role="tablist"
+                >
                     {(Object.keys(tabLabels) as Tab[]).map((value) => (
                         <button
                             aria-selected={tab === value}
@@ -232,8 +242,9 @@ export function InventoryManagementPage() {
                             role="tab"
                             type="button"
                         >
-                            {tabLabels[value]}
-                            <span>{value === tab ? meta.total : ''}</span>
+                            <Icon name={tabIcons[value]} size={15} />
+                            <span>{tabLabels[value]}</span>
+                            {value === tab ? <span className="section-tab-count">{meta.total}</span> : null}
                         </button>
                     ))}
                 </div>
@@ -555,11 +566,13 @@ function InventoryTable({
                                             {row.status === 'draft' ? (
                                                 <>
                                                     <IconButton
-                                                        icon="settings"
+                                                        icon="edit"
                                                         label={`Edit ${row.reference}`}
                                                         onClick={() => onImportEdit(row)}
                                                     />
-                                                    <Button
+                                                    <IconButton
+                                                        icon="check"
+                                                        label={`Post ${row.reference}`}
                                                         requiresOnline
                                                         onClick={() =>
                                                             void onCommand(
@@ -568,13 +581,13 @@ function InventoryTable({
                                                             )
                                                         }
                                                         tone="primary"
-                                                    >
-                                                        Post
-                                                    </Button>
+                                                    />
                                                 </>
                                             ) : null}
                                             {row.status === 'posted' ? (
-                                                <Button
+                                                <IconButton
+                                                    icon="reverse"
+                                                    label={`Void ${row.reference}`}
                                                     requiresOnline
                                                     onClick={() => {
                                                         const reason = window.prompt(
@@ -587,9 +600,7 @@ function InventoryTable({
                                                             );
                                                     }}
                                                     tone="danger"
-                                                >
-                                                    Void
-                                                </Button>
+                                                />
                                             ) : null}
                                         </div>
                                     </td>
@@ -650,11 +661,13 @@ function InventoryTable({
                                             {row.status === 'draft' ? (
                                                 <>
                                                     <IconButton
-                                                        icon="settings"
+                                                        icon="edit"
                                                         label={`Edit ${row.reference}`}
                                                         onClick={() => onAdjustEdit(row)}
                                                     />
-                                                    <Button
+                                                    <IconButton
+                                                        icon="check"
+                                                        label={`Post ${row.reference}`}
                                                         requiresOnline
                                                         onClick={() =>
                                                             void onCommand(
@@ -663,9 +676,7 @@ function InventoryTable({
                                                             )
                                                         }
                                                         tone="primary"
-                                                    >
-                                                        Post
-                                                    </Button>
+                                                    />
                                                 </>
                                             ) : null}
                                         </div>

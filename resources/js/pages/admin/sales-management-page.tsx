@@ -3,7 +3,7 @@ import { useSession } from '../../auth/session-context';
 import type { PaginationMeta } from '../../services/administration';
 import { saleApi, type Sale, type SaleFilters } from '../../services/sales';
 import { Icon } from '../../ui/icons';
-import { Button, EmptyState, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
+import { Button, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
 
 const emptyMeta: PaginationMeta = {
     current_page: 1,
@@ -269,13 +269,13 @@ export function SalesManagementPage() {
                                         </td>
                                         <td className="ui-table__actions">
                                             {sale.status === 'posted' && canVoid ? (
-                                                <Button
+                                                <IconButton
+                                                    icon="reverse"
+                                                    label={`Void ${sale.reference}`}
                                                     onClick={() => void voidSale(sale)}
                                                     requiresOnline
                                                     tone="danger"
-                                                >
-                                                    Void
-                                                </Button>
+                                                />
                                             ) : sale.status === 'voided' ? (
                                                 <small>{sale.void_reason}</small>
                                             ) : null}

@@ -14,7 +14,7 @@ import {
     type WarehouseTransferInput,
     type WarehouseTransferOptions,
 } from '../../services/transfers';
-import { Icon } from '../../ui/icons';
+import { Icon, type IconName } from '../../ui/icons';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
 
 type Tab = 'warehouse' | 'representative' | 'stock';
@@ -40,6 +40,11 @@ const labels: Record<Tab, string> = {
     warehouse: 'Warehouse transfers',
     representative: 'Representative issues',
     stock: 'Representative stock',
+};
+const tabIcons: Record<Tab, IconName> = {
+    warehouse: 'warehouse',
+    representative: 'users',
+    stock: 'box',
 };
 function message(error: unknown) {
     return error instanceof Error ? error.message : 'Unable to complete the request.';
@@ -252,8 +257,8 @@ export function TransferManagementPage() {
                     </button>
                 </div>
             ) : null}
-            <Panel eyebrow="Custody register" title={labels[tab]}>
-                <div className="ui-tabs" role="tablist">
+            <Panel className="transfer-panel" eyebrow="Custody register" title={labels[tab]}>
+                <div className={`section-tabs section-tabs--${availableTabs.length} transfer-tabs`} role="tablist">
                     {availableTabs.map((value) => (
                         <button
                             aria-selected={tab === value}
@@ -262,8 +267,9 @@ export function TransferManagementPage() {
                             role="tab"
                             type="button"
                         >
-                            {labels[value]}
-                            <span>{tab === value ? meta.total : ''}</span>
+                            <Icon name={tabIcons[value]} size={15} />
+                            <span>{labels[value]}</span>
+                            {tab === value ? <span className="section-tab-count">{meta.total}</span> : null}
                         </button>
                     ))}
                 </div>
@@ -477,11 +483,13 @@ function WarehouseTable({
                                     {row.status === 'draft' && canCreate ? (
                                         <>
                                             <IconButton
-                                                icon="settings"
+                                                icon="edit"
                                                 label={`Edit ${row.reference}`}
                                                 onClick={() => edit(row)}
                                             />
-                                            <Button
+                                            <IconButton
+                                                icon="x"
+                                                label={`Cancel ${row.reference}`}
                                                 requiresOnline
                                                 onClick={() => {
                                                     const reason = window.prompt(
@@ -498,13 +506,13 @@ function WarehouseTable({
                                                             `${row.reference} cancelled.`,
                                                         );
                                                 }}
-                                            >
-                                                Cancel
-                                            </Button>
+                                            />
                                         </>
                                     ) : null}
                                     {row.status === 'draft' && canDispatch ? (
-                                        <Button
+                                        <IconButton
+                                            icon="truck"
+                                            label={`Dispatch ${row.reference}`}
                                             requiresOnline
                                             onClick={() =>
                                                 void command(
@@ -513,12 +521,12 @@ function WarehouseTable({
                                                 )
                                             }
                                             tone="primary"
-                                        >
-                                            Dispatch
-                                        </Button>
+                                        />
                                     ) : null}
                                     {row.status === 'dispatched' && canReceive ? (
-                                        <Button
+                                        <IconButton
+                                            icon="check"
+                                            label={`Receive ${row.reference}`}
                                             requiresOnline
                                             onClick={() =>
                                                 void command(
@@ -527,12 +535,12 @@ function WarehouseTable({
                                                 )
                                             }
                                             tone="primary"
-                                        >
-                                            Receive
-                                        </Button>
+                                        />
                                     ) : null}
                                     {['dispatched', 'received'].includes(row.status) && canReverse ? (
-                                        <Button
+                                        <IconButton
+                                            icon="reverse"
+                                            label={`Reverse ${row.reference}`}
                                             requiresOnline
                                             onClick={() => {
                                                 const reason = window.prompt(`Reason for reversing ${row.reference}`);
@@ -548,9 +556,7 @@ function WarehouseTable({
                                                     );
                                             }}
                                             tone="danger"
-                                        >
-                                            Reverse
-                                        </Button>
+                                        />
                                     ) : null}
                                 </div>
                             </td>
@@ -627,11 +633,13 @@ function RepresentativeTable({
                                     {row.status === 'draft' && canIssue ? (
                                         <>
                                             <IconButton
-                                                icon="settings"
+                                                icon="edit"
                                                 label={`Edit ${row.reference}`}
                                                 onClick={() => edit(row)}
                                             />
-                                            <Button
+                                            <IconButton
+                                                icon="x"
+                                                label={`Cancel ${row.reference}`}
                                                 requiresOnline
                                                 onClick={() => {
                                                     const reason = window.prompt(
@@ -648,10 +656,10 @@ function RepresentativeTable({
                                                             `${row.reference} cancelled.`,
                                                         );
                                                 }}
-                                            >
-                                                Cancel
-                                            </Button>
-                                            <Button
+                                            />
+                                            <IconButton
+                                                icon="truck"
+                                                label={`Dispatch ${row.reference}`}
                                                 requiresOnline
                                                 onClick={() =>
                                                     void command(
@@ -660,13 +668,13 @@ function RepresentativeTable({
                                                     )
                                                 }
                                                 tone="primary"
-                                            >
-                                                Dispatch
-                                            </Button>
+                                            />
                                         </>
                                     ) : null}
                                     {['dispatched', 'received'].includes(row.status) && canIssue ? (
-                                        <Button
+                                        <IconButton
+                                            icon="reverse"
+                                            label={`Reverse ${row.reference}`}
                                             requiresOnline
                                             onClick={() => {
                                                 const reason = window.prompt(`Reason for reversing ${row.reference}`);
@@ -682,9 +690,7 @@ function RepresentativeTable({
                                                     );
                                             }}
                                             tone="danger"
-                                        >
-                                            Reverse
-                                        </Button>
+                                        />
                                     ) : null}
                                 </div>
                             </td>

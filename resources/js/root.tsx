@@ -86,9 +86,19 @@ const SalesReportPage = lazy(() =>
         default: module.SalesReportPage,
     })),
 );
-const SalesWorkspacePage = lazy(() =>
+const NewSalePage = lazy(() =>
     import('./pages/sales/sales-workspace-page').then((module) => ({
-        default: module.SalesWorkspacePage,
+        default: module.NewSalePage,
+    })),
+);
+const SalesHistoryPage = lazy(() =>
+    import('./pages/sales/sales-workspace-page').then((module) => ({
+        default: module.SalesHistoryPage,
+    })),
+);
+const SaleHistoryDetailPage = lazy(() =>
+    import('./pages/sales/sale-history-detail-page').then((module) => ({
+        default: module.SaleHistoryDetailPage,
     })),
 );
 
@@ -144,11 +154,9 @@ export default function Root({ initialUser }: { initialUser?: SessionUser | null
                                         <Route path="dashboard" element={<RepresentativeDashboardPage />} />
                                         <Route path="reports" element={<SalesReportPage />} />
                                         <Route path="my-stock" element={<RepresentativeStockPage />} />
-                                        <Route path="new-sale" element={<SalesWorkspacePage initialView="entry" />} />
-                                        <Route
-                                            path="sales-history"
-                                            element={<SalesWorkspacePage initialView="history" />}
-                                        />
+                                        <Route path="new-sale" element={<NewSalePage />} />
+                                        <Route path="sales-history" element={<SalesHistoryPage />} />
+                                        <Route path="sales-history/:saleId" element={<SaleHistoryDetailPage />} />
                                         <Route path="cash-hold" element={<CashWorkspacePage />} />
                                         <Route path="cash-submissions" element={<CashWorkspacePage />} />
                                         <Route path="*" element={<SalesFoundationPage />} />

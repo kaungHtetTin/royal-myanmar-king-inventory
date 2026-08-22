@@ -175,7 +175,7 @@ export function ReportsPage() {
                     <span>Financial totals include Posted records only.</span>
                 </div>
             </header>
-            <nav aria-label="Report types" className="report-tabs">
+            <nav aria-label="Report types" className="section-tabs section-tabs--4 report-tabs">
                 {(Object.keys(labels) as ReportName[]).map((name) => (
                     <button
                         aria-current={report === name ? 'page' : undefined}
@@ -236,162 +236,166 @@ export function ReportsPage() {
             ) : null}
             <Panel eyebrow="Server-side report" title={labels[report]}>
                 <form className="filter-toolbar report-filters" onSubmit={apply}>
-                    <label className="filter-search">
-                        <Icon name="search" size={15} />
-                        <input
-                            aria-label="Search report"
-                            onChange={(event) =>
-                                setDraft((value) => ({
-                                    ...value,
-                                    search: event.target.value,
-                                }))
-                            }
-                            placeholder="Reference, code, or name"
-                            type="search"
-                            value={draft.search ?? ''}
-                        />
-                    </label>
-                    <select
-                        aria-label="Warehouse"
-                        onChange={(event) =>
-                            setDraft((value) => ({
-                                ...value,
-                                warehouse_id: Number(event.target.value) || undefined,
-                            }))
-                        }
-                        value={draft.warehouse_id ?? 0}
-                    >
-                        <option value={0}>All warehouses</option>
-                        {options.warehouses.map((row) => (
-                            <option key={row.id} value={row.id}>
-                                {row.code} · {row.name}
-                            </option>
-                        ))}
-                    </select>
-                    {needsRepresentative(report) ? (
-                        <select
-                            aria-label="Representative"
-                            onChange={(event) =>
-                                setDraft((value) => ({
-                                    ...value,
-                                    representative_id: Number(event.target.value) || undefined,
-                                }))
-                            }
-                            value={draft.representative_id ?? 0}
-                        >
-                            <option value={0}>All representatives</option>
-                            {options.representatives.map((row) => (
-                                <option key={row.id} value={row.id}>
-                                    {row.code} · {row.name}
-                                </option>
-                            ))}
-                        </select>
-                    ) : null}
-                    {needsCustomer(report) ? (
-                        <select
-                            aria-label="Customer"
-                            onChange={(event) =>
-                                setDraft((value) => ({
-                                    ...value,
-                                    customer_id: Number(event.target.value) || undefined,
-                                }))
-                            }
-                            value={draft.customer_id ?? 0}
-                        >
-                            <option value={0}>All customers</option>
-                            {options.customers.map((row) => (
-                                <option key={row.id} value={row.id}>
-                                    {row.code} · {row.name}
-                                </option>
-                            ))}
-                        </select>
-                    ) : null}
-                    {needsProduct(report) ? (
-                        <select
-                            aria-label="Product"
-                            onChange={(event) =>
-                                setDraft((value) => ({
-                                    ...value,
-                                    product_id: Number(event.target.value) || undefined,
-                                }))
-                            }
-                            value={draft.product_id ?? 0}
-                        >
-                            <option value={0}>All products</option>
-                            {options.products.map((row) => (
-                                <option key={row.id} value={row.id}>
-                                    {row.sku} · {row.name}
-                                </option>
-                            ))}
-                        </select>
-                    ) : null}
-                    {report === 'sales' ? (
-                        <select
-                            aria-label="Payment type"
-                            onChange={(event) =>
-                                setDraft((value) => ({
-                                    ...value,
-                                    payment_type: event.target.value || undefined,
-                                }))
-                            }
-                            value={draft.payment_type ?? ''}
-                        >
-                            <option value="">Cash & credit</option>
-                            <option value="cash">Cash</option>
-                            <option value="credit">Credit</option>
-                        </select>
-                    ) : null}
-                    {hasStatus(report) ? (
-                        <select
-                            aria-label="Status"
-                            onChange={(event) =>
-                                setDraft((value) => ({
-                                    ...value,
-                                    status: event.target.value || undefined,
-                                }))
-                            }
-                            value={draft.status ?? ''}
-                        >
-                            <option value="">All statuses</option>
-                            {statusOptions(report).map((status) => (
-                                <option key={status} value={status}>
-                                    {status}
-                                </option>
-                            ))}
-                        </select>
-                    ) : null}
-                    {hasDates(report) ? (
-                        <>
-                            <label className="report-date">
-                                <span>From</span>
+                    <div className="report-filter-scroll">
+                        <div className="report-filter-fields">
+                            <label className="filter-search">
+                                <Icon name="search" size={15} />
                                 <input
-                                    aria-label="Date from"
+                                    aria-label="Search report"
                                     onChange={(event) =>
                                         setDraft((value) => ({
                                             ...value,
-                                            date_from: event.target.value || undefined,
+                                            search: event.target.value,
                                         }))
                                     }
-                                    type="date"
-                                    value={draft.date_from ?? ''}
+                                    placeholder="Reference, code, or name"
+                                    type="search"
+                                    value={draft.search ?? ''}
                                 />
                             </label>
-                            <label className="report-date">
-                                <span>To</span>
-                                <input
-                                    aria-label="Date to"
+                            <select
+                                aria-label="Warehouse"
+                                onChange={(event) =>
+                                    setDraft((value) => ({
+                                        ...value,
+                                        warehouse_id: Number(event.target.value) || undefined,
+                                    }))
+                                }
+                                value={draft.warehouse_id ?? 0}
+                            >
+                                <option value={0}>All warehouses</option>
+                                {options.warehouses.map((row) => (
+                                    <option key={row.id} value={row.id}>
+                                        {row.code} · {row.name}
+                                    </option>
+                                ))}
+                            </select>
+                            {needsRepresentative(report) ? (
+                                <select
+                                    aria-label="Representative"
                                     onChange={(event) =>
                                         setDraft((value) => ({
                                             ...value,
-                                            date_to: event.target.value || undefined,
+                                            representative_id: Number(event.target.value) || undefined,
                                         }))
                                     }
-                                    type="date"
-                                    value={draft.date_to ?? ''}
-                                />
-                            </label>
-                        </>
-                    ) : null}
+                                    value={draft.representative_id ?? 0}
+                                >
+                                    <option value={0}>All representatives</option>
+                                    {options.representatives.map((row) => (
+                                        <option key={row.id} value={row.id}>
+                                            {row.code} · {row.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            ) : null}
+                            {needsCustomer(report) ? (
+                                <select
+                                    aria-label="Customer"
+                                    onChange={(event) =>
+                                        setDraft((value) => ({
+                                            ...value,
+                                            customer_id: Number(event.target.value) || undefined,
+                                        }))
+                                    }
+                                    value={draft.customer_id ?? 0}
+                                >
+                                    <option value={0}>All customers</option>
+                                    {options.customers.map((row) => (
+                                        <option key={row.id} value={row.id}>
+                                            {row.code} · {row.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            ) : null}
+                            {needsProduct(report) ? (
+                                <select
+                                    aria-label="Product"
+                                    onChange={(event) =>
+                                        setDraft((value) => ({
+                                            ...value,
+                                            product_id: Number(event.target.value) || undefined,
+                                        }))
+                                    }
+                                    value={draft.product_id ?? 0}
+                                >
+                                    <option value={0}>All products</option>
+                                    {options.products.map((row) => (
+                                        <option key={row.id} value={row.id}>
+                                            {row.sku} · {row.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            ) : null}
+                            {report === 'sales' ? (
+                                <select
+                                    aria-label="Payment type"
+                                    onChange={(event) =>
+                                        setDraft((value) => ({
+                                            ...value,
+                                            payment_type: event.target.value || undefined,
+                                        }))
+                                    }
+                                    value={draft.payment_type ?? ''}
+                                >
+                                    <option value="">Cash & credit</option>
+                                    <option value="cash">Cash</option>
+                                    <option value="credit">Credit</option>
+                                </select>
+                            ) : null}
+                            {hasStatus(report) ? (
+                                <select
+                                    aria-label="Status"
+                                    onChange={(event) =>
+                                        setDraft((value) => ({
+                                            ...value,
+                                            status: event.target.value || undefined,
+                                        }))
+                                    }
+                                    value={draft.status ?? ''}
+                                >
+                                    <option value="">All statuses</option>
+                                    {statusOptions(report).map((status) => (
+                                        <option key={status} value={status}>
+                                            {status}
+                                        </option>
+                                    ))}
+                                </select>
+                            ) : null}
+                            {hasDates(report) ? (
+                                <>
+                                    <label className="report-date">
+                                        <span>From</span>
+                                        <input
+                                            aria-label="Date from"
+                                            onChange={(event) =>
+                                                setDraft((value) => ({
+                                                    ...value,
+                                                    date_from: event.target.value || undefined,
+                                                }))
+                                            }
+                                            type="date"
+                                            value={draft.date_from ?? ''}
+                                        />
+                                    </label>
+                                    <label className="report-date">
+                                        <span>To</span>
+                                        <input
+                                            aria-label="Date to"
+                                            onChange={(event) =>
+                                                setDraft((value) => ({
+                                                    ...value,
+                                                    date_to: event.target.value || undefined,
+                                                }))
+                                            }
+                                            type="date"
+                                            value={draft.date_to ?? ''}
+                                        />
+                                    </label>
+                                </>
+                            ) : null}
+                        </div>
+                    </div>
                     <Button icon="search" type="submit">
                         Apply
                     </Button>

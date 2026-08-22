@@ -243,7 +243,7 @@ export function AdminDashboardPage() {
                             </li>
                         </ul>
                     </Panel>
-                    <Panel eyebrow="Sales composition" title="Today">
+                    <Panel className="dashboard-sales-composition" eyebrow="Sales composition" title="Today">
                         <div className="dashboard-sales-split">
                             <div>
                                 <span>Cash</span>

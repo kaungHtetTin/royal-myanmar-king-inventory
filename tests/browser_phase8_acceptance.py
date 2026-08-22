@@ -292,7 +292,7 @@ def main() -> None:
 
         driver.delete_all_cookies()
         driver.execute_script("localStorage.clear(); sessionStorage.clear();")
-        login(driver, "sales", "koaung", os.getenv("PHASE8_SALES_PASSWORD", "password1234"))
+        login(driver, "sales", "koaung", os.getenv("PHASE8_SALES_PASSWORD", "password"))
         capture(
             driver,
             pages,

@@ -111,6 +111,7 @@ export const saleApi = {
         request<{ data: Sale[]; meta: PaginationMeta }>(() =>
             window.axios.get('api/sales/sales', { params: pages(filters) }),
         ),
+    ownSale: (id: number) => request<{ data: Sale }>(() => window.axios.get(`api/sales/sales/${id}`)),
     create: (input: SaleInput) =>
         request<{ data: Sale }>(() => window.axios.post('api/sales/sales', input, { headers: headers() })),
     update: (id: number, input: SaleInput) =>

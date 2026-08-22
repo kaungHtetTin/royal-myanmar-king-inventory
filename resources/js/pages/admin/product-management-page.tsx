@@ -54,14 +54,11 @@ export function ProductManagementPage() {
     const [draftFilters, setDraftFilters] = useState({
         category: '',
         search: '',
-        sort: 'name:asc',
         status: '',
         unit: '',
     });
     const [filters, setFilters] = useState<ProductFilters>({
-        direction: 'asc',
         page: 1,
-        sort: 'name',
     });
 
     const loadProducts = useCallback(async () => {
@@ -161,14 +158,11 @@ export function ProductManagementPage() {
                     className="filter-toolbar product-filters"
                     onSubmit={(event) => {
                         event.preventDefault();
-                        const [sort, direction] = draftFilters.sort.split(':') as [string, 'asc' | 'desc'];
                         setLoading(true);
                         setFilters({
                             category: draftFilters.category,
-                            direction,
                             page: 1,
                             search: draftFilters.search,
-                            sort,
                             status: draftFilters.status,
                             unit: draftFilters.unit,
                         });
@@ -237,24 +231,6 @@ export function ProductManagementPage() {
                             {options.units.map((unit) => (
                                 <option key={unit}>{unit}</option>
                             ))}
-                        </select>
-                    </label>
-                    <label>
-                        <span className="sr-only">Sort products</span>
-                        <select
-                            onChange={(event) =>
-                                setDraftFilters((value) => ({
-                                    ...value,
-                                    sort: event.target.value,
-                                }))
-                            }
-                            value={draftFilters.sort}
-                        >
-                            <option value="name:asc">Name A-Z</option>
-                            <option value="name:desc">Name Z-A</option>
-                            <option value="sku:asc">SKU A-Z</option>
-                            <option value="selling_price:desc">Highest price</option>
-                            <option value="created_at:desc">Newest first</option>
                         </select>
                     </label>
                     <Button icon="search" type="submit">

@@ -204,6 +204,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             Route::post('/receivings/{representativeTransfer}/receive', [RepresentativeStockController::class, 'receive'])
                 ->middleware('permission:'.PermissionName::RepresentativeStockReceive->value);
             Route::get('/sales', [SalesSaleController::class, 'index'])->middleware('permission:'.PermissionName::SaleView->value);
+            Route::get('/sales/{sale}', [SalesSaleController::class, 'show'])->middleware('permission:'.PermissionName::SaleView->value);
             Route::get('/sale-options', [SalesSaleController::class, 'options'])->middleware('permission:'.PermissionName::SaleCreate->value);
             Route::middleware('permission:'.PermissionName::SaleCreate->value)->group(function (): void {
                 Route::post('/sales', [SalesSaleController::class, 'store']);

@@ -1,16 +1,23 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useSession, type SessionUser } from '../auth/session-context';
+import { reportingApi } from '../services/reporting';
 import { Icon, type IconName } from '../ui/icons';
 import { IconButton } from '../ui/primitives';
 import { OfflineBanner } from '../ui/offline-banner';
 import { useOnlineStatus, useUiPreferences } from '../ui/preferences';
 
 type NavItem = {
+    alert?: keyof NavAlertCounts;
     icon: IconName;
     label: string;
-    permission: string;
+    permission?: string;
     to: string;
+};
+
+type NavAlertCounts = {
+    cash: number;
+    transfers: number;
 };
 
 type NavGroup = {
@@ -40,6 +47,7 @@ const navigation: NavGroup[] = [
                 to: '/admin/inventory',
             },
             {
+                alert: 'transfers',
                 icon: 'transfer',
                 label: 'Transfers',
                 permission: 'warehouse_transfer.view|representative_stock.view',
@@ -81,6 +89,7 @@ const navigation: NavGroup[] = [
                 to: '/admin/representatives',
             },
             {
+                alert: 'cash',
                 icon: 'cash',
                 label: 'Cash & credit',
                 permission: 'cash.view|customer_payment.view',
@@ -121,6 +130,11 @@ const navigation: NavGroup[] = [
                 permission: 'role.manage',
                 to: '/admin/settings',
             },
+            {
+                icon: 'truck',
+                label: 'Representative app',
+                to: '/sales/dashboard',
+            },
         ],
     },
 ];
@@ -129,9 +143,11 @@ const routeTitles: Record<string, string> = Object.fromEntries(
     navigation.flatMap((group) => group.items.map((item) => [item.to, item.label])),
 );
 
-function canAccess(permission: string, user: SessionUser | null) {
+function canAccess(permission: string | undefined, user: SessionUser | null) {
     return Boolean(
-        user?.roles.includes('super-admin') || permission.split('|').some((name) => user?.permissions.includes(name)),
+        !permission ||
+        user?.roles.includes('super-admin') ||
+        permission.split('|').some((name) => user?.permissions.includes(name)),
     );
 }
 
@@ -141,8 +157,11 @@ type AdminShellProps = {
 
 export function AdminShell({ children }: AdminShellProps) {
     const location = useLocation();
+    const profileMenuRef = useRef<HTMLDivElement>(null);
     const searchRef = useRef<HTMLInputElement>(null);
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const [navAlerts, setNavAlerts] = useState<NavAlertCounts>({ cash: 0, transfers: 0 });
+    const [profileMenuOpen, setProfileMenuOpen] = useState(false);
     const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('inventory.sidebar') === 'collapsed');
     const { density, theme, toggleDensity, toggleTheme } = useUiPreferences();
     const online = useOnlineStatus();
@@ -160,6 +179,7 @@ export function AdminShell({ children }: AdminShellProps) {
 
             if (event.key === 'Escape') {
                 setMobileNavOpen(false);
+                setProfileMenuOpen(false);
             }
 
             if (event.key === '/' && !isTyping) {
@@ -171,6 +191,54 @@ export function AdminShell({ children }: AdminShellProps) {
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
+
+    useEffect(() => {
+        if (!profileMenuOpen) return;
+
+        const handlePointerDown = (event: PointerEvent) => {
+            if (!profileMenuRef.current?.contains(event.target as Node)) {
+                setProfileMenuOpen(false);
+            }
+        };
+
+        document.addEventListener('pointerdown', handlePointerDown);
+        return () => document.removeEventListener('pointerdown', handlePointerDown);
+    }, [profileMenuOpen]);
+
+    useEffect(() => {
+        if (!online || !canAccess('dashboard.view', user)) return;
+
+        let active = true;
+        const loadAlerts = async () => {
+            try {
+                const dashboard = await reportingApi.adminDashboard();
+                if (!active) return;
+                setNavAlerts({
+                    cash: dashboard.kpis.pending_cash_submissions,
+                    transfers:
+                        dashboard.kpis.pending_warehouse_transfers + dashboard.kpis.pending_representative_receivings,
+                });
+            } catch {
+                // Navigation remains usable when alert counts cannot be refreshed.
+            }
+        };
+
+        void loadAlerts();
+        const refreshTimer = window.setInterval(() => void loadAlerts(), 60_000);
+        return () => {
+            active = false;
+            window.clearInterval(refreshTimer);
+        };
+    }, [location.pathname, online, user]);
+
+    const initials =
+        user?.name
+            .split(/\s+/)
+            .map((part) => part[0])
+            .join('')
+            .slice(0, 2)
+            .toUpperCase() ?? 'U';
+    const roleLabel = user?.roles[0]?.replaceAll('-', ' ') ?? 'Authenticated';
 
     return (
         <div
@@ -222,10 +290,15 @@ export function AdminShell({ children }: AdminShellProps) {
                                 .map((item) => {
                                     const active =
                                         location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
+                                    const alertCount = item.alert ? navAlerts[item.alert] : 0;
+                                    const alertLabel = alertCount
+                                        ? `${item.label}, ${alertCount} ${alertCount === 1 ? 'action needs' : 'actions need'} attention`
+                                        : item.label;
 
                                     return (
                                         <Link
                                             aria-current={active ? 'page' : undefined}
+                                            aria-label={alertLabel}
                                             className={`admin-nav-item ${active ? 'is-active' : ''}`}
                                             key={item.to}
                                             onClick={() => setMobileNavOpen(false)}
@@ -233,7 +306,14 @@ export function AdminShell({ children }: AdminShellProps) {
                                             to={item.to}
                                         >
                                             <Icon name={item.icon} size={17} />
-                                            <span>{item.label}</span>
+                                            <span className="admin-nav-item__label">{item.label}</span>
+                                            {alertCount > 0 ? (
+                                                <>
+                                                    <span aria-hidden="true" className="admin-nav-alert">
+                                                        {alertCount > 99 ? '99+' : alertCount}
+                                                    </span>
+                                                </>
+                                            ) : null}
                                         </Link>
                                     );
                                 })}
@@ -242,23 +322,17 @@ export function AdminShell({ children }: AdminShellProps) {
                 </nav>
 
                 <div className="admin-sidebar__footer">
-                    <Link
-                        className="portal-switch"
-                        onClick={() => setMobileNavOpen(false)}
-                        to="/sales/dashboard"
-                        title="Open representative app"
-                    >
-                        <Icon name="truck" size={17} />
-                        <span>Representative app</span>
-                        <Icon className="portal-switch__arrow" name="chevronRight" size={14} />
-                    </Link>
                     <button
+                        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                         className="admin-nav-item admin-collapse-control"
                         onClick={() => setCollapsed((value) => !value)}
+                        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                         type="button"
                     >
                         <Icon name={collapsed ? 'chevronRight' : 'chevronLeft'} size={17} />
-                        <span>Collapse sidebar</span>
+                        <span className="admin-nav-item__label">
+                            {collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                        </span>
                     </button>
                 </div>
             </aside>
@@ -289,37 +363,96 @@ export function AdminShell({ children }: AdminShellProps) {
                     </label>
 
                     <div className="admin-topbar__actions">
-                        <span className={`connection-state ${online ? 'is-online' : 'is-offline'}`}>
-                            <span aria-hidden="true" />
-                            {online ? 'Online' : 'Offline'}
-                        </span>
-                        <IconButton
-                            icon={theme === 'light' ? 'moon' : 'sun'}
-                            label={`Use ${theme === 'light' ? 'dark' : 'light'} theme`}
-                            onClick={toggleTheme}
-                        />
-                        <IconButton
-                            icon="density"
-                            label={`Use ${density === 'compact' ? 'comfortable' : 'compact'} density`}
-                            onClick={toggleDensity}
-                        />
-                        <IconButton icon="bell" label="Notifications" />
-                        <IconButton icon="logout" label="Sign out" onClick={() => void logout()} />
-                        <button className="admin-profile" type="button">
-                            <span className="admin-profile__avatar">
-                                {user?.name
-                                    .split(/\s+/)
-                                    .map((part) => part[0])
-                                    .join('')
-                                    .slice(0, 2)
-                                    .toUpperCase() ?? 'U'}
+                        <div className="admin-topbar__utilities">
+                            <span className={`connection-state ${online ? 'is-online' : 'is-offline'}`}>
+                                <span aria-hidden="true" />
+                                {online ? 'Online' : 'Offline'}
                             </span>
-                            <span className="admin-profile__copy">
-                                <strong>{user?.name ?? 'User'}</strong>
-                                <small>{user?.roles[0]?.replaceAll('-', ' ') ?? 'Authenticated'}</small>
-                            </span>
-                            <Icon name="chevronDown" size={13} />
-                        </button>
+                            <IconButton icon="bell" label="Notifications" />
+                        </div>
+                        <div className="admin-profile-menu" ref={profileMenuRef}>
+                            <button
+                                aria-controls="admin-profile-dropdown"
+                                aria-expanded={profileMenuOpen}
+                                aria-haspopup="menu"
+                                aria-label="Profile menu"
+                                className="admin-profile"
+                                onClick={() => setProfileMenuOpen((value) => !value)}
+                                type="button"
+                            >
+                                <span className="admin-profile__avatar">{initials}</span>
+                                <span className="admin-profile__copy">
+                                    <strong>{user?.name ?? 'User'}</strong>
+                                    <small>{roleLabel}</small>
+                                </span>
+                                <Icon name="chevronDown" size={13} />
+                            </button>
+                            {profileMenuOpen ? (
+                                <div
+                                    aria-label="Profile options"
+                                    className="admin-profile-dropdown"
+                                    id="admin-profile-dropdown"
+                                    role="menu"
+                                >
+                                    <div className="admin-profile-dropdown__identity">
+                                        <span className="admin-profile__avatar">{initials}</span>
+                                        <span>
+                                            <strong>{user?.name ?? 'User'}</strong>
+                                            <small>
+                                                @{user?.username ?? 'user'} · {roleLabel}
+                                            </small>
+                                        </span>
+                                    </div>
+                                    <div className="admin-profile-dropdown__section">
+                                        <button
+                                            onClick={() => {
+                                                toggleTheme();
+                                                setProfileMenuOpen(false);
+                                            }}
+                                            role="menuitem"
+                                            type="button"
+                                        >
+                                            <Icon name={theme === 'light' ? 'moon' : 'sun'} size={16} />
+                                            <span>Use {theme === 'light' ? 'dark' : 'light'} theme</span>
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                toggleDensity();
+                                                setProfileMenuOpen(false);
+                                            }}
+                                            role="menuitem"
+                                            type="button"
+                                        >
+                                            <Icon name="density" size={16} />
+                                            <span>Use {density === 'compact' ? 'comfortable' : 'compact'} density</span>
+                                        </button>
+                                        {canAccess('role.manage', user) ? (
+                                            <Link
+                                                onClick={() => setProfileMenuOpen(false)}
+                                                role="menuitem"
+                                                to="/admin/settings"
+                                            >
+                                                <Icon name="settings" size={16} />
+                                                <span>Settings</span>
+                                            </Link>
+                                        ) : null}
+                                    </div>
+                                    <div className="admin-profile-dropdown__section admin-profile-dropdown__section--signout">
+                                        <button
+                                            onClick={() => {
+                                                setProfileMenuOpen(false);
+                                                void logout();
+                                            }}
+                                            role="menuitem"
+                                            type="button"
+                                        >
+                                            <Icon name="logout" size={16} />
+                                            <span>Sign out</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : null}
+                        </div>
                     </div>
                 </header>
 

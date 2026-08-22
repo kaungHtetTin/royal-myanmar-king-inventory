@@ -47,15 +47,12 @@ export function RepresentativeManagementPage() {
     const [selected, setSelected] = useState<Representative | null>(null);
     const [draftFilters, setDraftFilters] = useState({
         search: '',
-        sort: 'name:asc',
         status: '',
         vehicle: '',
         warehouse_id: '',
     });
     const [filters, setFilters] = useState<RepresentativeFilters>({
-        direction: 'asc',
         page: 1,
-        sort: 'name',
     });
 
     const loadRepresentatives = useCallback(async () => {
@@ -159,13 +156,10 @@ export function RepresentativeManagementPage() {
                     className="filter-toolbar representative-filters"
                     onSubmit={(event) => {
                         event.preventDefault();
-                        const [sort, direction] = draftFilters.sort.split(':') as [string, 'asc' | 'desc'];
                         setLoading(true);
                         setFilters({
-                            direction,
                             page: 1,
                             search: draftFilters.search,
-                            sort,
                             status: draftFilters.status,
                             vehicle: draftFilters.vehicle,
                             warehouse_id: draftFilters.warehouse_id,
@@ -236,24 +230,6 @@ export function RepresentativeManagementPage() {
                             <option value="">All vehicles</option>
                             <option value="assigned">Assigned</option>
                             <option value="unassigned">Unassigned</option>
-                        </select>
-                    </label>
-                    <label>
-                        <span className="sr-only">Sort representatives</span>
-                        <select
-                            onChange={(event) =>
-                                setDraftFilters((value) => ({
-                                    ...value,
-                                    sort: event.target.value,
-                                }))
-                            }
-                            value={draftFilters.sort}
-                        >
-                            <option value="name:asc">Name A-Z</option>
-                            <option value="name:desc">Name Z-A</option>
-                            <option value="code:asc">Code A-Z</option>
-                            <option value="region:asc">Region A-Z</option>
-                            <option value="created_at:desc">Newest first</option>
                         </select>
                     </label>
                     <Button icon="search" type="submit">
@@ -550,10 +526,13 @@ function RepresentativeDialog({
                         <FieldError errors={errors} name="email" />
                     </label>
                     <label className="ui-field">
-                        <span>{representative ? 'New password (optional)' : 'Password'}</span>
+                        <span>
+                            {representative ? 'New password (optional, 8 characters)' : 'Password (8 characters)'}
+                        </span>
                         <input
                             autoComplete="new-password"
-                            minLength={12}
+                            maxLength={8}
+                            minLength={8}
                             onChange={(event) => change('password', event.target.value)}
                             required={!representative}
                             type="password"
@@ -565,7 +544,8 @@ function RepresentativeDialog({
                         <span>Confirm password</span>
                         <input
                             autoComplete="new-password"
-                            minLength={12}
+                            maxLength={8}
+                            minLength={8}
                             onChange={(event) => change('password_confirmation', event.target.value)}
                             required={!representative || Boolean(form.password)}
                             type="password"

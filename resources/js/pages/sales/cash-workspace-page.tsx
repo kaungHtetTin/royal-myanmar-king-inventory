@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { financeApi, FinanceError, type CashOverview, type CashSubmission } from '../../services/finance';
 import { Icon } from '../../ui/icons';
-import { Button, Dialog, EmptyState, StatusBadge } from '../../ui/primitives';
+import { Button, Dialog, EmptyState, IconButton, StatusBadge } from '../../ui/primitives';
 
 const emptyOverview: CashOverview = {
     representative: { id: 0, code: '', name: '' },
@@ -124,14 +124,13 @@ export function CashWorkspacePage() {
                     <p>Financial custody</p>
                     <h1>Cash hold</h1>
                 </div>
-                <Button
+                <IconButton
                     disabled={loading || overview.available_to_submit <= 0}
                     icon="plus"
+                    label="Submit cash"
                     onClick={open}
                     tone="primary"
-                >
-                    Submit cash
-                </Button>
+                />
             </header>
             <section aria-label="Cash hold summary" className="sales-summary-grid sales-cash-summary">
                 <article className="sales-summary-card is-primary">
@@ -142,7 +141,7 @@ export function CashWorkspacePage() {
                     <strong>{money(overview.cash_hold)}</strong>
                     <p>MMK in your custody</p>
                 </article>
-                <article className="sales-summary-card">
+                <article className="sales-summary-card cash-pending-card">
                     <span>
                         <Icon name="transfer" size={18} />
                     </span>
@@ -150,7 +149,7 @@ export function CashWorkspacePage() {
                     <strong>{money(overview.pending_submissions)}</strong>
                     <p>Declared, awaiting office</p>
                 </article>
-                <article className="sales-summary-card">
+                <article className="sales-summary-card cash-available-card">
                     <span>
                         <Icon name="sales" size={18} />
                     </span>
@@ -173,7 +172,7 @@ export function CashWorkspacePage() {
                 </div>
             ) : null}
             <div className="sales-cash-grid">
-                <section className="sales-section">
+                <section className="sales-section cash-submissions-panel">
                     <header>
                         <div>
                             <p className="ui-eyebrow">Office handovers</p>
@@ -204,21 +203,28 @@ export function CashWorkspacePage() {
                                             <small>{dateTime(row.created_at)}</small>
                                         </div>
                                     </div>
-                                    <strong className="cash-card-list__amount">
-                                        {money(row.amount)} <small>MMK</small>
-                                    </strong>
-                                    <StatusBadge tone={tone(row.status)}>{row.status}</StatusBadge>
-                                    {row.status === 'pending' ? (
-                                        <Button disabled={saving} onClick={() => void cancel(row)} requiresOnline>
-                                            Cancel
-                                        </Button>
-                                    ) : null}
+                                    <div className="cash-card-list__details">
+                                        <StatusBadge tone={tone(row.status)}>{row.status}</StatusBadge>
+                                        <strong className="cash-card-list__amount">
+                                            {money(row.amount)} <small>MMK</small>
+                                        </strong>
+                                        {row.status === 'pending' ? (
+                                            <IconButton
+                                                disabled={saving}
+                                                icon="x"
+                                                label={`Cancel ${row.reference}`}
+                                                onClick={() => void cancel(row)}
+                                                requiresOnline
+                                                tone="danger"
+                                            />
+                                        ) : null}
+                                    </div>
                                 </article>
                             ))}
                         </div>
                     )}
                 </section>
-                <section className="sales-section">
+                <section className="sales-section cash-activity-panel">
                     <header>
                         <div>
                             <p className="ui-eyebrow">Append-only ledger</p>

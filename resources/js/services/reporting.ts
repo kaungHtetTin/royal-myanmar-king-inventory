@@ -49,6 +49,16 @@ export type SalesDashboard = {
         cash_hold: number;
     };
     stock: Array<{ id: number; quantity: number; product: ProductIdentity }>;
+    recent_sales: Array<{
+        id: number;
+        reference: string;
+        customer: Identity;
+        payment_type: 'cash' | 'credit';
+        status: 'draft' | 'posted' | 'voided';
+        total_amount: number;
+        total_quantity: number;
+        created_at: string | null;
+    }>;
     pending_receivings: Array<{
         id: number;
         reference: string;

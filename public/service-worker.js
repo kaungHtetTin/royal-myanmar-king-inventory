@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'stockflow-shell-v2';
+const CACHE_VERSION = 'stockflow-shell-v3';
 const scopeUrl = new URL(self.registration.scope);
 const shellUrl = new URL('admin/login', scopeUrl).href;
 const offlineAssets = [
@@ -27,16 +27,43 @@ async function productionAssets() {
     }
 }
 
-self.addEventListener('install', (event) => {
-    event.waitUntil((async () => {
+async function cacheResponse(request, response) {
+    if (!response.ok) return response;
+
+    try {
+        const cacheCopy = response.clone();
         const cache = await caches.open(CACHE_VERSION);
-        await cache.addAll([...offlineAssets, ...(await productionAssets())]);
-        await self.skipWaiting();
-    })());
+        await cache.put(request, cacheCopy);
+    } catch {
+        // A cache failure must not replace a successful network response.
+    }
+
+    return response;
+}
+
+self.addEventListener('install', (event) => {
+    event.waitUntil(
+        (async () => {
+            const cache = await caches.open(CACHE_VERSION);
+            await cache.addAll([...offlineAssets, ...(await productionAssets())]);
+            await self.skipWaiting();
+        })(),
+    );
 });
 
 self.addEventListener('activate', (event) => {
-    event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith('stockflow-shell-') && key !== CACHE_VERSION).map((key) => caches.delete(key)))).then(() => self.clients.claim()));
+    event.waitUntil(
+        caches
+            .keys()
+            .then((keys) =>
+                Promise.all(
+                    keys
+                        .filter((key) => key.startsWith('stockflow-shell-') && key !== CACHE_VERSION)
+                        .map((key) => caches.delete(key)),
+                ),
+            )
+            .then(() => self.clients.claim()),
+    );
 });
 
 self.addEventListener('fetch', (event) => {
@@ -53,17 +80,23 @@ self.addEventListener('fetch', (event) => {
     }
 
     if (request.mode === 'navigate') {
-        event.respondWith(fetch(request).then((response) => {
-            if (response.ok) caches.open(CACHE_VERSION).then((cache) => cache.put(request, response.clone()));
-            return response;
-        }).catch(async () => (await caches.match(request)) || (await caches.match(shellUrl))));
+        event.respondWith(
+            fetch(request)
+                .then((response) => cacheResponse(request, response))
+                .catch(async () => (await caches.match(request)) || (await caches.match(shellUrl))),
+        );
         return;
     }
 
-    if (relativePath.startsWith('build/') || relativePath.startsWith('icons/') || relativePath === 'manifest.webmanifest') {
-        event.respondWith(caches.match(request).then((cached) => cached || fetch(request).then((response) => {
-            if (response.ok) caches.open(CACHE_VERSION).then((cache) => cache.put(request, response.clone()));
-            return response;
-        })));
+    if (
+        relativePath.startsWith('build/') ||
+        relativePath.startsWith('icons/') ||
+        relativePath === 'manifest.webmanifest'
+    ) {
+        event.respondWith(
+            caches
+                .match(request)
+                .then((cached) => cached || fetch(request).then((response) => cacheResponse(request, response))),
+        );
     }
 });

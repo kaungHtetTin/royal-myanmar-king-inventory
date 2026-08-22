@@ -46,13 +46,10 @@ export function WarehouseManagementPage() {
     const [selected, setSelected] = useState<Warehouse | null>(null);
     const [draftFilters, setDraftFilters] = useState({
         search: '',
-        sort: 'name:asc',
         status: '',
     });
     const [filters, setFilters] = useState<WarehouseFilters>({
-        direction: 'asc',
         page: 1,
-        sort: 'name',
     });
 
     const loadWarehouses = useCallback(async () => {
@@ -155,16 +152,13 @@ export function WarehouseManagementPage() {
 
             <Panel eyebrow="Locations" title="Warehouse directory">
                 <form
-                    className="filter-toolbar"
+                    className="filter-toolbar warehouse-filters"
                     onSubmit={(event) => {
                         event.preventDefault();
-                        const [sort, direction] = draftFilters.sort.split(':') as [string, 'asc' | 'desc'];
                         setLoading(true);
                         setFilters({
-                            direction,
                             page: 1,
                             search: draftFilters.search,
-                            sort,
                             status: draftFilters.status,
                         });
                     }}
@@ -198,23 +192,6 @@ export function WarehouseManagementPage() {
                             <option value="">All statuses</option>
                             <option value="active">Active</option>
                             <option value="inactive">Inactive</option>
-                        </select>
-                    </label>
-                    <label>
-                        <span className="sr-only">Sort warehouses</span>
-                        <select
-                            onChange={(event) =>
-                                setDraftFilters((value) => ({
-                                    ...value,
-                                    sort: event.target.value,
-                                }))
-                            }
-                            value={draftFilters.sort}
-                        >
-                            <option value="name:asc">Name A–Z</option>
-                            <option value="name:desc">Name Z–A</option>
-                            <option value="code:asc">Code A–Z</option>
-                            <option value="created_at:desc">Newest first</option>
                         </select>
                     </label>
                     <Button icon="search" type="submit">

@@ -93,100 +93,104 @@ export function AuditLogPage() {
             ) : null}
             <Panel eyebrow="Authorized history" title="Critical events">
                 <form className="filter-toolbar audit-filters" onSubmit={apply}>
-                    <label className="filter-search">
-                        <Icon name="search" size={15} />
-                        <input
-                            aria-label="Search audit log"
-                            onChange={(event) =>
-                                setDraft((value) => ({
-                                    ...value,
-                                    search: event.target.value,
-                                }))
-                            }
-                            placeholder="Actor, event, or record ID"
-                            type="search"
-                            value={draft.search ?? ''}
-                        />
-                    </label>
-                    <select
-                        aria-label="Audit module"
-                        onChange={(event) =>
-                            setDraft((value) => ({
-                                ...value,
-                                module: event.target.value || undefined,
-                            }))
-                        }
-                        value={draft.module ?? ''}
-                    >
-                        <option value="">All modules</option>
-                        {response.filters.modules.map((module) => (
-                            <option key={module} value={module}>
-                                {module.replaceAll('_', ' ')}
-                            </option>
-                        ))}
-                    </select>
-                    <select
-                        aria-label="Audit actor"
-                        onChange={(event) =>
-                            setDraft((value) => ({
-                                ...value,
-                                actor_id: Number(event.target.value) || undefined,
-                            }))
-                        }
-                        value={draft.actor_id ?? 0}
-                    >
-                        <option value={0}>All actors</option>
-                        {response.filters.actors.map((actor) => (
-                            <option key={actor.id} value={actor.id}>
-                                {actor.name} · {actor.username}
-                            </option>
-                        ))}
-                    </select>
-                    <select
-                        aria-label="Audit warehouse"
-                        onChange={(event) =>
-                            setDraft((value) => ({
-                                ...value,
-                                warehouse_id: Number(event.target.value) || undefined,
-                            }))
-                        }
-                        value={draft.warehouse_id ?? 0}
-                    >
-                        <option value={0}>All warehouses</option>
-                        {response.filters.warehouses.map((warehouse) => (
-                            <option key={warehouse.id} value={warehouse.id}>
-                                {warehouse.code} · {warehouse.name}
-                            </option>
-                        ))}
-                    </select>
-                    <label className="report-date">
-                        <span>From</span>
-                        <input
-                            aria-label="Audit date from"
-                            onChange={(event) =>
-                                setDraft((value) => ({
-                                    ...value,
-                                    date_from: event.target.value || undefined,
-                                }))
-                            }
-                            type="date"
-                            value={draft.date_from ?? ''}
-                        />
-                    </label>
-                    <label className="report-date">
-                        <span>To</span>
-                        <input
-                            aria-label="Audit date to"
-                            onChange={(event) =>
-                                setDraft((value) => ({
-                                    ...value,
-                                    date_to: event.target.value || undefined,
-                                }))
-                            }
-                            type="date"
-                            value={draft.date_to ?? ''}
-                        />
-                    </label>
+                    <div className="audit-filter-scroll">
+                        <div className="audit-filter-fields">
+                            <label className="filter-search">
+                                <Icon name="search" size={15} />
+                                <input
+                                    aria-label="Search audit log"
+                                    onChange={(event) =>
+                                        setDraft((value) => ({
+                                            ...value,
+                                            search: event.target.value,
+                                        }))
+                                    }
+                                    placeholder="Actor, event, or record ID"
+                                    type="search"
+                                    value={draft.search ?? ''}
+                                />
+                            </label>
+                            <select
+                                aria-label="Audit module"
+                                onChange={(event) =>
+                                    setDraft((value) => ({
+                                        ...value,
+                                        module: event.target.value || undefined,
+                                    }))
+                                }
+                                value={draft.module ?? ''}
+                            >
+                                <option value="">All modules</option>
+                                {response.filters.modules.map((module) => (
+                                    <option key={module} value={module}>
+                                        {module.replaceAll('_', ' ')}
+                                    </option>
+                                ))}
+                            </select>
+                            <select
+                                aria-label="Audit actor"
+                                onChange={(event) =>
+                                    setDraft((value) => ({
+                                        ...value,
+                                        actor_id: Number(event.target.value) || undefined,
+                                    }))
+                                }
+                                value={draft.actor_id ?? 0}
+                            >
+                                <option value={0}>All actors</option>
+                                {response.filters.actors.map((actor) => (
+                                    <option key={actor.id} value={actor.id}>
+                                        {actor.name} · {actor.username}
+                                    </option>
+                                ))}
+                            </select>
+                            <select
+                                aria-label="Audit warehouse"
+                                onChange={(event) =>
+                                    setDraft((value) => ({
+                                        ...value,
+                                        warehouse_id: Number(event.target.value) || undefined,
+                                    }))
+                                }
+                                value={draft.warehouse_id ?? 0}
+                            >
+                                <option value={0}>All warehouses</option>
+                                {response.filters.warehouses.map((warehouse) => (
+                                    <option key={warehouse.id} value={warehouse.id}>
+                                        {warehouse.code} · {warehouse.name}
+                                    </option>
+                                ))}
+                            </select>
+                            <label className="report-date">
+                                <span>From</span>
+                                <input
+                                    aria-label="Audit date from"
+                                    onChange={(event) =>
+                                        setDraft((value) => ({
+                                            ...value,
+                                            date_from: event.target.value || undefined,
+                                        }))
+                                    }
+                                    type="date"
+                                    value={draft.date_from ?? ''}
+                                />
+                            </label>
+                            <label className="report-date">
+                                <span>To</span>
+                                <input
+                                    aria-label="Audit date to"
+                                    onChange={(event) =>
+                                        setDraft((value) => ({
+                                            ...value,
+                                            date_to: event.target.value || undefined,
+                                        }))
+                                    }
+                                    type="date"
+                                    value={draft.date_to ?? ''}
+                                />
+                            </label>
+                        </div>
+                    </div>
                     <Button icon="search" type="submit">
                         Apply
                     </Button>

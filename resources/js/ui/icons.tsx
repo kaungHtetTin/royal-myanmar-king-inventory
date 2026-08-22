@@ -6,17 +6,21 @@ export type IconName =
     | 'box'
     | 'building'
     | 'cash'
+    | 'check'
     | 'chevronDown'
     | 'chevronLeft'
     | 'chevronRight'
     | 'customers'
     | 'dashboard'
     | 'density'
+    | 'edit'
     | 'logout'
     | 'menu'
+    | 'moreVertical'
     | 'moon'
     | 'plus'
     | 'reports'
+    | 'reverse'
     | 'search'
     | 'sales'
     | 'settings'
@@ -71,6 +75,12 @@ const iconContent: Record<IconName, ReactNode> = {
             <circle cx="12" cy="12" r="2" />
         </>
     ),
+    check: (
+        <>
+            <circle cx="12" cy="12" r="9" />
+            <path d="m8 12 2.5 2.5L16.5 8.5" />
+        </>
+    ),
     chevronDown: <path d="m6 9 6 6 6-6" />,
     chevronLeft: <path d="m15 18-6-6 6-6" />,
     chevronRight: <path d="m9 18 6-6-6-6" />,
@@ -97,6 +107,12 @@ const iconContent: Record<IconName, ReactNode> = {
             <path d="M4 18h16" />
         </>
     ),
+    edit: (
+        <>
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
+        </>
+    ),
     logout: (
         <>
             <path d="M10 17l5-5-5-5" />
@@ -109,6 +125,13 @@ const iconContent: Record<IconName, ReactNode> = {
             <path d="M4 6h16" />
             <path d="M4 12h16" />
             <path d="M4 18h16" />
+        </>
+    ),
+    moreVertical: (
+        <>
+            <circle cx="12" cy="5" r="1" fill="currentColor" stroke="none" />
+            <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+            <circle cx="12" cy="19" r="1" fill="currentColor" stroke="none" />
         </>
     ),
     moon: <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />,
@@ -124,6 +147,12 @@ const iconContent: Record<IconName, ReactNode> = {
             <path d="M10 19V5" />
             <path d="M16 19v-7" />
             <path d="M22 19H2" />
+        </>
+    ),
+    reverse: (
+        <>
+            <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+            <path d="M3 3v5h5" />
         </>
     ),
     search: (

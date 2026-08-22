@@ -54,7 +54,8 @@ class Phase7ReportingTest extends TestCase
             ->assertJsonPath('representative.id', $fixture['representative']->id)->assertJsonPath('kpis.stock_units', 20)
             ->assertJsonPath('kpis.pending_receivings', 1)->assertJsonPath('kpis.today_sales', 800)
             ->assertJsonPath('kpis.today_cash_sales', 500)->assertJsonPath('kpis.today_credit_sales', 300)->assertJsonPath('kpis.cash_hold', 500)
-            ->assertJsonCount(1, 'stock')->assertJsonCount(1, 'pending_receivings');
+            ->assertJsonCount(1, 'stock')->assertJsonCount(1, 'pending_receivings')->assertJsonCount(4, 'recent_sales')
+            ->assertJsonPath('recent_sales.0.reference', 'P7-VOID');
     }
 
     public function test_admin_reports_are_scoped_filterable_paginated_and_reconciled(): void

@@ -194,6 +194,7 @@ class AuthenticationTest extends TestCase
             ['GET', '/api/sales/receivings'],
             ['POST', '/api/sales/receivings/999/receive'],
             ['GET', '/api/sales/sales'],
+            ['GET', '/api/sales/sales/999'],
             ['GET', '/api/sales/sale-options'],
             ['POST', '/api/sales/sales'],
             ['PUT', '/api/sales/sales/999'],

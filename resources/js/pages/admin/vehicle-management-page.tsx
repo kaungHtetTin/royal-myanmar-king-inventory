@@ -50,14 +50,11 @@ export function VehicleManagementPage() {
     const [draftFilters, setDraftFilters] = useState({
         assignment: '',
         search: '',
-        sort: 'vehicle_number:asc',
         status: '',
         type: '',
     });
     const [filters, setFilters] = useState<VehicleFilters>({
-        direction: 'asc',
         page: 1,
-        sort: 'vehicle_number',
     });
 
     const loadVehicles = useCallback(async () => {
@@ -157,14 +154,11 @@ export function VehicleManagementPage() {
                     className="filter-toolbar master-data-filters"
                     onSubmit={(event) => {
                         event.preventDefault();
-                        const [sort, direction] = draftFilters.sort.split(':') as [string, 'asc' | 'desc'];
                         setLoading(true);
                         setFilters({
                             assignment: draftFilters.assignment,
-                            direction,
                             page: 1,
                             search: draftFilters.search,
-                            sort,
                             status: draftFilters.status,
                             type: draftFilters.type,
                         });
@@ -232,24 +226,6 @@ export function VehicleManagementPage() {
                             <option value="">All assignments</option>
                             <option value="assigned">Assigned</option>
                             <option value="unassigned">Unassigned</option>
-                        </select>
-                    </label>
-                    <label>
-                        <span className="sr-only">Sort vehicles</span>
-                        <select
-                            onChange={(event) =>
-                                setDraftFilters((value) => ({
-                                    ...value,
-                                    sort: event.target.value,
-                                }))
-                            }
-                            value={draftFilters.sort}
-                        >
-                            <option value="vehicle_number:asc">Number A-Z</option>
-                            <option value="vehicle_number:desc">Number Z-A</option>
-                            <option value="vehicle_type:asc">Type A-Z</option>
-                            <option value="brand:asc">Brand A-Z</option>
-                            <option value="created_at:desc">Newest first</option>
                         </select>
                     </label>
                     <Button icon="search" type="submit">

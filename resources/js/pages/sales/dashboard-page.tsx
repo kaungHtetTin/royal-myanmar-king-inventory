@@ -17,6 +17,7 @@ const empty: SalesDashboard = {
         cash_hold: 0,
     },
     stock: [],
+    recent_sales: [],
     pending_receivings: [],
 };
 function money(value: number) {
@@ -32,6 +33,9 @@ function dateTime(value: string | null) {
 }
 function message(error: unknown) {
     return error instanceof Error ? error.message : 'Unable to load dashboard.';
+}
+function saleTone(status: string) {
+    return status === 'posted' ? 'success' : status === 'draft' ? 'warning' : 'neutral';
 }
 
 export function RepresentativeDashboardPage() {
@@ -121,6 +125,48 @@ export function RepresentativeDashboardPage() {
                 </div>
                 <Icon name="chevronRight" />
             </Link>
+            <section className="sales-section sales-dashboard-history">
+                <header>
+                    <div>
+                        <p className="ui-eyebrow">Own transactions</p>
+                        <h2>Recent sales</h2>
+                    </div>
+                    <Link to="/sales/sales-history">View sales history</Link>
+                </header>
+                {loading ? (
+                    <div className="ui-loading">
+                        <span />
+                        Loading salesâ€¦
+                    </div>
+                ) : data.recent_sales.length === 0 ? (
+                    <EmptyState description="Drafts and posted sales will appear here." title="No recent sales" />
+                ) : (
+                    <div className="sales-dashboard-history-list">
+                        {data.recent_sales.map((sale) => (
+                            <article key={sale.id}>
+                                <Link className="sales-history__identity" to={`/sales/sales-history/${sale.id}`}>
+                                    <span>
+                                        <Icon name={sale.payment_type === 'cash' ? 'cash' : 'customers'} size={16} />
+                                    </span>
+                                    <div>
+                                        <strong>{sale.reference}</strong>
+                                        <small>
+                                            {sale.customer.name} Â· {dateTime(sale.created_at)}
+                                        </small>
+                                    </div>
+                                </Link>
+                                <div className="sales-history__amount">
+                                    <strong>{money(sale.total_amount)} MMK</strong>
+                                    <small>
+                                        {sale.total_quantity} units Â· {sale.payment_type}
+                                    </small>
+                                </div>
+                                <StatusBadge tone={saleTone(sale.status)}>{sale.status}</StatusBadge>
+                            </article>
+                        ))}
+                    </div>
+                )}
+            </section>
             <div className="representative-dashboard-grid">
                 <section className="sales-section">
                     <header>

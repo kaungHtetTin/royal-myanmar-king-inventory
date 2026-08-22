@@ -23,7 +23,7 @@ class SalesRepresentativeSeeder extends Seeder
             DB::transaction(function () use ($record): void {
                 $warehouse = Warehouse::query()->where('code', $record['warehouse'])->firstOrFail();
                 $user = User::query()->updateOrCreate(['username' => $record['username']], [
-                    'name' => $record['name'], 'email' => $record['email'], 'password' => 'password1234', 'is_active' => true, 'deactivated_at' => null,
+                    'name' => $record['name'], 'email' => $record['email'], 'password' => 'password', 'is_active' => true, 'deactivated_at' => null,
                 ]);
                 $user->syncRoles([RoleName::SalesRepresentative->value]);
                 $user->warehouses()->syncWithPivotValues([$warehouse->id], ['assigned_by' => User::query()->where('username', 'superadmin')->value('id')]);

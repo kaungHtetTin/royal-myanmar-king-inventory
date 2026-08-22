@@ -1,12 +1,6 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import {
-    SaleApiError,
-    saleApi,
-    type PaymentType,
-    type Sale,
-    type SaleInput,
-    type SaleOptions,
-} from '../../services/sales';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { SaleApiError, saleApi, type Sale, type SaleInput, type SaleOptions } from '../../services/sales';
 import { Icon } from '../../ui/icons';
 import { Button, EmptyState, IconButton, StatusBadge } from '../../ui/primitives';
 
@@ -18,10 +12,17 @@ const emptyOptions: SaleOptions = {
 };
 const emptyForm: SaleInput = {
     customer_id: 0,
-    items: [{ product_id: 0, quantity: 1 }],
+    items: [],
     notes: '',
     payment_type: 'cash',
 };
+const wizardSteps = [
+    { label: 'Information', number: 1 },
+    { label: 'Products', number: 2 },
+    { label: 'Quantity', number: 3 },
+    { label: 'Review & submit', number: 4 },
+] as const;
+type SaleWizardStep = (typeof wizardSteps)[number]['number'];
 function money(value: number) {
     return `${new Intl.NumberFormat('en-US').format(value)} MMK`;
 }
@@ -40,8 +41,22 @@ function tone(status: string) {
     return status === 'posted' ? 'success' : status === 'draft' ? 'warning' : 'neutral';
 }
 
-export function SalesWorkspacePage({ initialView = 'entry' }: { initialView?: 'entry' | 'history' }) {
-    const [view, setView] = useState(initialView);
+function formFromSale(sale: Sale): SaleInput {
+    return {
+        customer_id: sale.customer.id,
+        payment_type: sale.payment_type,
+        notes: sale.notes ?? '',
+        items: sale.items.map((item) => ({
+            product_id: item.product.id,
+            quantity: item.quantity,
+        })),
+    };
+}
+
+type SalesWorkspaceView = 'entry' | 'history';
+
+function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: SalesWorkspaceView }) {
+    const navigate = useNavigate();
     const [options, setOptions] = useState(emptyOptions);
     const [sales, setSales] = useState<Sale[]>([]);
     const [form, setForm] = useState(emptyForm);
@@ -51,41 +66,64 @@ export function SalesWorkspacePage({ initialView = 'entry' }: { initialView?: 'e
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
     const [fields, setFields] = useState<Record<string, string[]>>({});
+    const [actionMenuSaleId, setActionMenuSaleId] = useState<number | null>(null);
+    const [wizardStep, setWizardStep] = useState<SaleWizardStep>(1);
+    const [customerQuery, setCustomerQuery] = useState('');
+    const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
+    const customerPickerRef = useRef<HTMLDivElement>(null);
     const load = useCallback(async () => {
         setLoading(true);
         setError('');
         try {
             const [nextOptions, history] = await Promise.all([saleApi.options(), saleApi.ownSales()]);
+            const editSale =
+                view === 'entry' && editId
+                    ? history.data.find((item) => item.id === editId && item.status === 'draft')
+                    : undefined;
             setOptions(nextOptions);
             setSales(history.data);
+            if (editSale) setEditing(editSale);
             setForm((value) => ({
-                ...value,
-                customer_id: value.customer_id || nextOptions.customers[0]?.id || 0,
-                items: value.items.map((item) => ({
-                    ...item,
-                    product_id: item.product_id || nextOptions.products[0]?.id || 0,
-                })),
+                ...(editSale
+                    ? formFromSale(editSale)
+                    : {
+                          ...value,
+                          customer_id: value.customer_id,
+                          items: value.items.map((item) => ({
+                              ...item,
+                              product_id: item.product_id || nextOptions.products[0]?.id || 0,
+                          })),
+                      }),
             }));
         } catch (requestError) {
             setError(message(requestError));
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [editId, view]);
     useEffect(() => {
         let active = true;
         void Promise.all([saleApi.options(), saleApi.ownSales()])
             .then(([nextOptions, history]) => {
                 if (!active) return;
+                const editSale =
+                    view === 'entry' && editId
+                        ? history.data.find((item) => item.id === editId && item.status === 'draft')
+                        : undefined;
                 setOptions(nextOptions);
                 setSales(history.data);
+                if (editSale) setEditing(editSale);
                 setForm((value) => ({
-                    ...value,
-                    customer_id: value.customer_id || nextOptions.customers[0]?.id || 0,
-                    items: value.items.map((item) => ({
-                        ...item,
-                        product_id: item.product_id || nextOptions.products[0]?.id || 0,
-                    })),
+                    ...(editSale
+                        ? formFromSale(editSale)
+                        : {
+                              ...value,
+                              customer_id: value.customer_id,
+                              items: value.items.map((item) => ({
+                                  ...item,
+                                  product_id: item.product_id || nextOptions.products[0]?.id || 0,
+                              })),
+                          }),
                 }));
                 setError('');
             })
@@ -98,8 +136,59 @@ export function SalesWorkspacePage({ initialView = 'entry' }: { initialView?: 'e
         return () => {
             active = false;
         };
+    }, [editId, view]);
+    useEffect(() => {
+        const closeActionMenu = (event: KeyboardEvent | PointerEvent) => {
+            if (event instanceof KeyboardEvent) {
+                if (event.key !== 'Escape') return;
+                const trigger = document.querySelector<HTMLButtonElement>(
+                    '.sales-history__menu-trigger[aria-expanded="true"]',
+                );
+                setActionMenuSaleId(null);
+                trigger?.focus();
+                return;
+            }
+            if (
+                event instanceof PointerEvent &&
+                event.target instanceof Element &&
+                event.target.closest('.sales-history__menu')
+            )
+                return;
+            setActionMenuSaleId(null);
+        };
+        document.addEventListener('keydown', closeActionMenu);
+        document.addEventListener('pointerdown', closeActionMenu);
+        return () => {
+            document.removeEventListener('keydown', closeActionMenu);
+            document.removeEventListener('pointerdown', closeActionMenu);
+        };
     }, []);
     const selectedCustomer = options.customers.find((customer) => customer.id === form.customer_id);
+    const filteredCustomers = useMemo(() => {
+        const query = customerQuery.trim().toLowerCase();
+        if (!query) return options.customers;
+        return options.customers.filter((customer) =>
+            `${customer.code} ${customer.name}`.toLowerCase().includes(query),
+        );
+    }, [customerQuery, options.customers]);
+    useEffect(() => {
+        const closeCustomerPicker = (event: KeyboardEvent | PointerEvent) => {
+            if (event instanceof KeyboardEvent) {
+                if (event.key !== 'Escape') return;
+                setCustomerPickerOpen(false);
+                document.getElementById('sale-customer-search')?.focus();
+                return;
+            }
+            if (event.target instanceof Node && customerPickerRef.current?.contains(event.target)) return;
+            setCustomerPickerOpen(false);
+        };
+        document.addEventListener('keydown', closeCustomerPicker);
+        document.addEventListener('pointerdown', closeCustomerPicker);
+        return () => {
+            document.removeEventListener('keydown', closeCustomerPicker);
+            document.removeEventListener('pointerdown', closeCustomerPicker);
+        };
+    }, []);
     const preview = useMemo(
         () =>
             form.items.reduce(
@@ -111,7 +200,18 @@ export function SalesWorkspacePage({ initialView = 'entry' }: { initialView?: 'e
             ),
         [form.items, options.products],
     );
-    const quantity = form.items.reduce((sum, line) => sum + line.quantity, 0);
+    const chooseCustomer = (customerId: number) => {
+        const customer = options.customers.find((option) => option.id === customerId);
+        if (!customer) return;
+        setForm((value) => ({
+            ...value,
+            customer_id: customer.id,
+            payment_type: !customer.credit_allowed && value.payment_type === 'credit' ? 'cash' : value.payment_type,
+        }));
+        setFields((value) => ({ ...value, customer_id: [] }));
+        setCustomerQuery(`${customer.code} · ${customer.name}`);
+        setCustomerPickerOpen(false);
+    };
     const showNotice = (value: string) => {
         setNotice(value);
         window.setTimeout(() => setNotice(''), 4500);
@@ -121,9 +221,13 @@ export function SalesWorkspacePage({ initialView = 'entry' }: { initialView?: 'e
         setFields({});
         setForm({
             ...emptyForm,
-            customer_id: options.customers[0]?.id ?? 0,
-            items: [{ product_id: options.products[0]?.id ?? 0, quantity: 1 }],
+            customer_id: 0,
+            items: [],
         });
+        setCustomerQuery('');
+        setCustomerPickerOpen(false);
+        setWizardStep(1);
+        navigate('/sales/new-sale', { replace: true });
     };
     const validate = (forPosting: boolean) => {
         const next: Record<string, string[]> = {};
@@ -156,6 +260,55 @@ export function SalesWorkspacePage({ initialView = 'entry' }: { initialView?: 'e
             return false;
         }
         return true;
+    };
+    const validateWizardStep = (step: SaleWizardStep) => {
+        const next: Record<string, string[]> = {};
+        if (step === 1 && !form.customer_id) next.customer_id = ['Select a customer.'];
+        if (step === 2) {
+            if (form.items.length === 0) next.items = ['Select at least one product.'];
+            const selected = new Set<number>();
+            form.items.forEach((line, index) => {
+                if (!options.products.some((product) => product.id === line.product_id))
+                    next[`items.${index}.product_id`] = ['Select an available product.'];
+                else if (selected.has(line.product_id))
+                    next[`items.${index}.product_id`] = ['Each product can appear only once.'];
+                else selected.add(line.product_id);
+            });
+        }
+        if (step === 3) {
+            form.items.forEach((line, index) => {
+                const product = options.products.find((item) => item.id === line.product_id);
+                if (!Number.isInteger(line.quantity) || line.quantity < 1)
+                    next[`items.${index}.quantity`] = ['Enter a whole quantity of at least 1.'];
+                else if (product && line.quantity > product.quantity)
+                    next[`items.${index}.quantity`] = [`Only ${product.quantity} units are currently available.`];
+            });
+        }
+        setFields(next);
+        if (Object.keys(next).length > 0) {
+            setError(`Complete the ${wizardSteps[step - 1].label.toLowerCase()} step before continuing.`);
+            return false;
+        }
+        setError('');
+        return true;
+    };
+    const continueWizard = () => {
+        if (wizardStep === 4 || !validateWizardStep(wizardStep)) return;
+        setWizardStep((wizardStep + 1) as SaleWizardStep);
+    };
+    const goBack = () => {
+        setError('');
+        setFields({});
+        setWizardStep((wizardStep - 1) as SaleWizardStep);
+    };
+    const toggleProduct = (productId: number) => {
+        setFields({});
+        setForm((value) => ({
+            ...value,
+            items: value.items.some((item) => item.product_id === productId)
+                ? value.items.filter((item) => item.product_id !== productId)
+                : [...value.items, { product_id: productId, quantity: 1 }],
+        }));
     };
     const save = async (postAfter: boolean) => {
         if (!validate(postAfter)) return;
@@ -191,23 +344,15 @@ export function SalesWorkspacePage({ initialView = 'entry' }: { initialView?: 'e
     };
     const submit = (event: FormEvent) => {
         event.preventDefault();
-        void save(false);
+        if (wizardStep < 4) continueWizard();
+        else void save(false);
     };
     const edit = (sale: Sale) => {
-        setEditing(sale);
-        setForm({
-            customer_id: sale.customer.id,
-            payment_type: sale.payment_type,
-            notes: sale.notes ?? '',
-            items: sale.items.map((item) => ({
-                product_id: item.product.id,
-                quantity: item.quantity,
-            })),
-        });
-        setView('entry');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setActionMenuSaleId(null);
+        navigate(`/sales/new-sale?edit=${sale.id}`);
     };
     const postDraft = async (sale: Sale) => {
+        setActionMenuSaleId(null);
         if (!window.confirm(`Post ${sale.reference} for ${money(sale.total_amount)}?`)) return;
         setSaving(true);
         try {
@@ -232,32 +377,26 @@ export function SalesWorkspacePage({ initialView = 'entry' }: { initialView?: 'e
                     {view === 'entry' ? 'Server priced' : `${sales.length} recent`}
                 </StatusBadge>
             </header>
-            <div className="sales-view-tabs" role="tablist">
-                <button aria-selected={view === 'entry'} onClick={() => setView('entry')} role="tab">
-                    New sale
-                </button>
-                <button aria-selected={view === 'history'} onClick={() => setView('history')} role="tab">
-                    History
-                </button>
-            </div>
-            <section className="sales-summary-grid" aria-label="Sales summary">
-                <article className="sales-summary-card is-primary">
-                    <span>
-                        <Icon name="cash" size={18} />
-                    </span>
-                    <small>Cash hold</small>
-                    <strong>{money(options.cash_hold)}</strong>
-                    <p>From posted cash sales</p>
-                </article>
-                <article className="sales-summary-card">
-                    <span>
-                        <Icon name="box" size={18} />
-                    </span>
-                    <small>Sale-ready stock</small>
-                    <strong>{options.products.reduce((sum, product) => sum + product.quantity, 0)}</strong>
-                    <p>{options.products.length} active products</p>
-                </article>
-            </section>
+            {view === 'history' ? (
+                <section className="sales-summary-grid" aria-label="Sales summary">
+                    <article className="sales-summary-card is-primary">
+                        <span>
+                            <Icon name="cash" size={18} />
+                        </span>
+                        <small>Cash hold</small>
+                        <strong>{money(options.cash_hold)}</strong>
+                        <p>From posted cash sales</p>
+                    </article>
+                    <article className="sales-summary-card">
+                        <span>
+                            <Icon name="box" size={18} />
+                        </span>
+                        <small>Sale-ready stock</small>
+                        <strong>{options.products.reduce((sum, product) => sum + product.quantity, 0)}</strong>
+                        <p>{options.products.length} active products</p>
+                    </article>
+                </section>
+            ) : null}
             {notice ? (
                 <div className="ui-flash ui-flash--success">
                     <Icon name="sales" size={15} />
@@ -293,247 +432,433 @@ export function SalesWorkspacePage({ initialView = 'entry' }: { initialView?: 'e
                             />
                         ) : (
                             <>
-                                <div className="sale-header-fields">
-                                    <label className="ui-field">
-                                        <span>Customer</span>
-                                        <select
-                                            onChange={(event) =>
-                                                setForm((value) => ({
-                                                    ...value,
-                                                    customer_id: Number(event.target.value),
-                                                }))
-                                            }
-                                            required
-                                            value={form.customer_id}
-                                        >
-                                            {options.customers.map((customer) => (
-                                                <option key={customer.id} value={customer.id}>
-                                                    {customer.code} · {customer.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        {fields.customer_id?.[0] ? (
-                                            <small className="ui-field__error">{fields.customer_id[0]}</small>
-                                        ) : null}
-                                    </label>
-                                    <label className="ui-field">
-                                        <span>Payment</span>
-                                        <select
-                                            onChange={(event) =>
-                                                setForm((value) => ({
-                                                    ...value,
-                                                    payment_type: event.target.value as PaymentType,
-                                                }))
-                                            }
-                                            required
-                                            value={form.payment_type}
-                                        >
-                                            <option value="cash">Cash</option>
-                                            <option value="credit">Credit</option>
-                                        </select>
-                                        {fields.payment_type?.[0] ? (
-                                            <small className="ui-field__error">{fields.payment_type[0]}</small>
-                                        ) : null}
-                                    </label>
-                                    <label className="ui-field sale-notes">
-                                        <span>Notes</span>
-                                        <input
-                                            onChange={(event) =>
-                                                setForm((value) => ({
-                                                    ...value,
-                                                    notes: event.target.value,
-                                                }))
-                                            }
-                                            placeholder="Optional delivery or invoice note"
-                                            value={form.notes}
-                                        />
-                                    </label>
-                                </div>
-                                <div className="sale-lines">
-                                    <div className="sale-lines__heading">
-                                        <strong>Products</strong>
-                                        <Button
-                                            icon="plus"
-                                            onClick={() =>
-                                                setForm((value) => ({
-                                                    ...value,
-                                                    items: [
-                                                        ...value.items,
-                                                        {
-                                                            product_id:
-                                                                options.products.find(
-                                                                    (product) =>
-                                                                        !value.items.some(
-                                                                            (item) => item.product_id === product.id,
-                                                                        ),
-                                                                )?.id ?? 0,
-                                                            quantity: 1,
-                                                        },
-                                                    ],
-                                                }))
-                                            }
-                                        >
-                                            Add
-                                        </Button>
-                                    </div>
-                                    {form.items.map((line, index) => {
-                                        const product = options.products.find((item) => item.id === line.product_id);
-                                        return (
-                                            <div className="sale-line" key={index}>
-                                                <label className="ui-field">
-                                                    <span>Product {index + 1}</span>
-                                                    <select
-                                                        onChange={(event) =>
-                                                            setForm((value) => ({
-                                                                ...value,
-                                                                items: value.items.map((item, itemIndex) =>
-                                                                    itemIndex === index
-                                                                        ? {
-                                                                              ...item,
-                                                                              product_id: Number(event.target.value),
-                                                                          }
-                                                                        : item,
-                                                                ),
-                                                            }))
-                                                        }
-                                                        required
-                                                        value={line.product_id}
-                                                    >
-                                                        <option value={0}>Select product</option>
-                                                        {options.products.map((option) => (
-                                                            <option
-                                                                disabled={form.items.some(
-                                                                    (item, itemIndex) =>
-                                                                        itemIndex !== index &&
-                                                                        item.product_id === option.id,
-                                                                )}
-                                                                key={option.id}
-                                                                value={option.id}
-                                                            >
-                                                                {option.sku} · {option.name}
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                    <small>
-                                                        {fields[`items.${index}.product_id`]?.[0] ??
-                                                            (product
-                                                                ? `${product.quantity} available · ${money(product.selling_price)}`
-                                                                : 'Select stock')}
-                                                    </small>
-                                                </label>
-                                                <label className="ui-field sale-line__quantity">
-                                                    <span>Qty</span>
+                                <nav aria-label="Sale progress" className="sale-wizard-steps">
+                                    <ol>
+                                        {wizardSteps.map((step) => (
+                                            <li
+                                                className={
+                                                    step.number === wizardStep
+                                                        ? 'is-current'
+                                                        : step.number < wizardStep
+                                                          ? 'is-complete'
+                                                          : ''
+                                                }
+                                                key={step.number}
+                                            >
+                                                <button
+                                                    aria-current={step.number === wizardStep ? 'step' : undefined}
+                                                    disabled={step.number > wizardStep}
+                                                    onClick={() => {
+                                                        setError('');
+                                                        setFields({});
+                                                        setWizardStep(step.number);
+                                                    }}
+                                                    type="button"
+                                                >
+                                                    <span>{step.number}</span>
+                                                    <strong>{step.label}</strong>
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ol>
+                                </nav>
+                                <section
+                                    aria-labelledby={`sale-step-${wizardStep}-title`}
+                                    className="sale-wizard-panel"
+                                >
+                                    <header className="sale-wizard-panel__heading">
+                                        <div>
+                                            <p>Step {wizardStep} of 4</p>
+                                            <h3 id={`sale-step-${wizardStep}-title`}>
+                                                {wizardSteps[wizardStep - 1].label}
+                                            </h3>
+                                        </div>
+                                        <small>
+                                            {wizardStep === 1
+                                                ? 'Add the customer and payment details.'
+                                                : wizardStep === 2
+                                                  ? 'Choose one or more products for this sale.'
+                                                  : wizardStep === 3
+                                                    ? 'Set the required quantity for every selected product.'
+                                                    : 'Confirm the sale details before saving or posting.'}
+                                        </small>
+                                    </header>
+                                    {wizardStep === 1 ? (
+                                        <div className="sale-header-fields">
+                                            <div className="ui-field sale-customer-picker" ref={customerPickerRef}>
+                                                <label htmlFor="sale-customer-search">Customer</label>
+                                                <div className="sale-customer-picker__control">
+                                                    <Icon name="search" size={16} />
                                                     <input
-                                                        max={product?.quantity ?? 100}
-                                                        min={1}
-                                                        onChange={(event) =>
-                                                            setForm((value) => ({
-                                                                ...value,
-                                                                items: value.items.map((item, itemIndex) =>
-                                                                    itemIndex === index
-                                                                        ? {
-                                                                              ...item,
-                                                                              quantity: Number(event.target.value),
-                                                                          }
-                                                                        : item,
-                                                                ),
-                                                            }))
+                                                        aria-autocomplete="list"
+                                                        aria-controls="sale-customer-options"
+                                                        aria-expanded={customerPickerOpen}
+                                                        autoComplete="off"
+                                                        id="sale-customer-search"
+                                                        onChange={(event) => {
+                                                            setCustomerQuery(event.target.value);
+                                                            setCustomerPickerOpen(true);
+                                                        }}
+                                                        onFocus={() => {
+                                                            setCustomerQuery('');
+                                                            setCustomerPickerOpen(true);
+                                                        }}
+                                                        placeholder="Search by customer name or code"
+                                                        role="combobox"
+                                                        value={
+                                                            !customerPickerOpen && selectedCustomer
+                                                                ? `${selectedCustomer.code} · ${selectedCustomer.name}`
+                                                                : customerQuery
                                                         }
-                                                        required
-                                                        type="number"
-                                                        value={line.quantity}
                                                     />
-                                                    {fields[`items.${index}.quantity`]?.[0] ? (
-                                                        <small className="ui-field__error">
-                                                            {fields[`items.${index}.quantity`][0]}
-                                                        </small>
-                                                    ) : null}
-                                                </label>
-                                                <strong className="sale-line__total">
-                                                    {money((product?.selling_price ?? 0) * line.quantity)}
-                                                </strong>
-                                                <IconButton
-                                                    disabled={form.items.length === 1}
-                                                    icon="x"
-                                                    label={`Remove product ${index + 1}`}
-                                                    onClick={() =>
+                                                    <button
+                                                        aria-label="Toggle customer options"
+                                                        onClick={() => {
+                                                            setCustomerQuery('');
+                                                            setCustomerPickerOpen((value) => !value);
+                                                        }}
+                                                        type="button"
+                                                    >
+                                                        <Icon name="chevronDown" size={15} />
+                                                    </button>
+                                                </div>
+                                                {customerPickerOpen ? (
+                                                    <div
+                                                        aria-label="Customer options"
+                                                        className="sale-customer-picker__options"
+                                                        id="sale-customer-options"
+                                                        role="listbox"
+                                                    >
+                                                        {filteredCustomers.length > 0 ? (
+                                                            filteredCustomers.map((customer) => (
+                                                                <button
+                                                                    aria-selected={customer.id === form.customer_id}
+                                                                    key={customer.id}
+                                                                    onClick={() => chooseCustomer(customer.id)}
+                                                                    role="option"
+                                                                    type="button"
+                                                                >
+                                                                    <span>
+                                                                        <strong>{customer.name}</strong>
+                                                                        <small>{customer.code}</small>
+                                                                    </span>
+                                                                    <span>
+                                                                        <strong>
+                                                                            {customer.credit_allowed
+                                                                                ? money(customer.available_credit)
+                                                                                : 'Cash only'}
+                                                                        </strong>
+                                                                        <small>
+                                                                            {customer.credit_allowed
+                                                                                ? 'credit available'
+                                                                                : 'credit disabled'}
+                                                                        </small>
+                                                                    </span>
+                                                                </button>
+                                                            ))
+                                                        ) : (
+                                                            <p>No customers match “{customerQuery}”.</p>
+                                                        )}
+                                                    </div>
+                                                ) : null}
+                                                {fields.customer_id?.[0] ? (
+                                                    <small className="ui-field__error">{fields.customer_id[0]}</small>
+                                                ) : null}
+                                            </div>
+                                            <fieldset className="sale-payment-picker">
+                                                <legend>Payment type</legend>
+                                                <div>
+                                                    <label
+                                                        className={form.payment_type === 'cash' ? 'is-selected' : ''}
+                                                    >
+                                                        <input
+                                                            aria-label="Cash"
+                                                            checked={form.payment_type === 'cash'}
+                                                            name="payment_type"
+                                                            onChange={() =>
+                                                                setForm((value) => ({ ...value, payment_type: 'cash' }))
+                                                            }
+                                                            type="radio"
+                                                            value="cash"
+                                                        />
+                                                        <Icon name="cash" size={17} />
+                                                        <span>
+                                                            <strong>Cash</strong>
+                                                            <small>Collect immediately</small>
+                                                        </span>
+                                                    </label>
+                                                    <label
+                                                        className={form.payment_type === 'credit' ? 'is-selected' : ''}
+                                                    >
+                                                        <input
+                                                            aria-label="Credit"
+                                                            checked={form.payment_type === 'credit'}
+                                                            disabled={!selectedCustomer?.credit_allowed}
+                                                            name="payment_type"
+                                                            onChange={() =>
+                                                                setForm((value) => ({
+                                                                    ...value,
+                                                                    payment_type: 'credit',
+                                                                }))
+                                                            }
+                                                            type="radio"
+                                                            value="credit"
+                                                        />
+                                                        <Icon name="customers" size={17} />
+                                                        <span>
+                                                            <strong>Credit</strong>
+                                                            <small>Use available credit</small>
+                                                        </span>
+                                                    </label>
+                                                </div>
+                                                {fields.payment_type?.[0] ? (
+                                                    <small className="ui-field__error">{fields.payment_type[0]}</small>
+                                                ) : null}
+                                            </fieldset>
+                                            {selectedCustomer ? (
+                                                <section
+                                                    aria-label="Customer credit status"
+                                                    aria-live="polite"
+                                                    className={`sale-credit-status ${selectedCustomer.credit_allowed ? 'is-available' : 'is-disabled'}`}
+                                                >
+                                                    <div className="sale-credit-status__heading">
+                                                        <span>
+                                                            <Icon name="customers" size={17} />
+                                                        </span>
+                                                        <div>
+                                                            <small>{selectedCustomer.code}</small>
+                                                            <strong>{selectedCustomer.name}</strong>
+                                                        </div>
+                                                        <span
+                                                            aria-label={`Credit available: ${selectedCustomer.credit_allowed ? 'Yes' : 'No'}`}
+                                                            className={`sale-credit-status__indicator ${selectedCustomer.credit_allowed ? 'is-yes' : 'is-no'}`}
+                                                            role="img"
+                                                            title={`Credit available: ${selectedCustomer.credit_allowed ? 'Yes' : 'No'}`}
+                                                        />
+                                                    </div>
+                                                    <dl>
+                                                        <div>
+                                                            <dt>Available</dt>
+                                                            <dd>
+                                                                {selectedCustomer.credit_allowed
+                                                                    ? money(selectedCustomer.available_credit)
+                                                                    : '—'}
+                                                            </dd>
+                                                        </div>
+                                                        <div>
+                                                            <dt>Outstanding</dt>
+                                                            <dd>{money(selectedCustomer.outstanding_amount)}</dd>
+                                                        </div>
+                                                        <div>
+                                                            <dt>Credit limit</dt>
+                                                            <dd>{money(selectedCustomer.credit_limit)}</dd>
+                                                        </div>
+                                                    </dl>
+                                                </section>
+                                            ) : (
+                                                <div className="sale-credit-status sale-credit-status--empty">
+                                                    <Icon name="search" size={17} />
+                                                    <span>
+                                                        <strong>Select a customer</strong>
+                                                        <small>Credit availability will appear here.</small>
+                                                    </span>
+                                                </div>
+                                            )}
+                                            <label className="ui-field sale-notes">
+                                                <span>Notes</span>
+                                                <input
+                                                    onChange={(event) =>
                                                         setForm((value) => ({
                                                             ...value,
-                                                            items: value.items.filter(
-                                                                (_, itemIndex) => itemIndex !== index,
-                                                            ),
+                                                            notes: event.target.value,
                                                         }))
                                                     }
+                                                    placeholder="Optional delivery or invoice note"
+                                                    value={form.notes}
                                                 />
+                                            </label>
+                                        </div>
+                                    ) : null}
+                                    {wizardStep === 2 ? (
+                                        <div className="sale-product-selector" role="group" aria-label="Products">
+                                            {options.products.map((product) => {
+                                                const selected = form.items.some(
+                                                    (item) => item.product_id === product.id,
+                                                );
+                                                return (
+                                                    <label
+                                                        className={`sale-product-option ${selected ? 'is-selected' : ''}`}
+                                                        key={product.id}
+                                                    >
+                                                        <input
+                                                            aria-label={`Select ${product.name}`}
+                                                            checked={selected}
+                                                            onChange={() => toggleProduct(product.id)}
+                                                            type="checkbox"
+                                                        />
+                                                        <span className="sale-product-option__icon">
+                                                            <Icon name="box" size={17} />
+                                                        </span>
+                                                        <span className="sale-product-option__identity">
+                                                            <strong>{product.name}</strong>
+                                                            <small>
+                                                                {product.sku} · {product.unit}
+                                                            </small>
+                                                        </span>
+                                                        <span className="sale-product-option__stock">
+                                                            <strong>{product.quantity}</strong>
+                                                            <small>available</small>
+                                                        </span>
+                                                        <span className="sale-product-option__price">
+                                                            <strong>{money(product.selling_price)}</strong>
+                                                            <small>unit price</small>
+                                                        </span>
+                                                    </label>
+                                                );
+                                            })}
+                                            {fields.items?.[0] ? (
+                                                <small className="ui-field__error sale-wizard-error">
+                                                    {fields.items[0]}
+                                                </small>
+                                            ) : null}
+                                        </div>
+                                    ) : null}
+                                    {wizardStep === 3 ? (
+                                        <div className="sale-quantity-list">
+                                            {form.items.map((line, index) => {
+                                                const product = options.products.find(
+                                                    (item) => item.id === line.product_id,
+                                                );
+                                                if (!product) return null;
+                                                return (
+                                                    <article key={product.id}>
+                                                        <span className="sale-quantity-list__icon">
+                                                            <Icon name="box" size={17} />
+                                                        </span>
+                                                        <div className="sale-quantity-list__identity">
+                                                            <strong>{product.name}</strong>
+                                                            <small>
+                                                                {product.sku} · {product.quantity} available
+                                                            </small>
+                                                        </div>
+                                                        <label className="ui-field sale-quantity-list__field">
+                                                            <input
+                                                                aria-label={`Quantity for ${product.name}`}
+                                                                max={product.quantity}
+                                                                min={1}
+                                                                onChange={(event) =>
+                                                                    setForm((value) => ({
+                                                                        ...value,
+                                                                        items: value.items.map((item, itemIndex) =>
+                                                                            itemIndex === index
+                                                                                ? {
+                                                                                      ...item,
+                                                                                      quantity: Number(
+                                                                                          event.target.value,
+                                                                                      ),
+                                                                                  }
+                                                                                : item,
+                                                                        ),
+                                                                    }))
+                                                                }
+                                                                required
+                                                                type="number"
+                                                                value={line.quantity}
+                                                            />
+                                                            {fields[`items.${index}.quantity`]?.[0] ? (
+                                                                <small className="ui-field__error">
+                                                                    {fields[`items.${index}.quantity`][0]}
+                                                                </small>
+                                                            ) : null}
+                                                        </label>
+                                                        <div className="sale-quantity-list__total">
+                                                            <small>Line total</small>
+                                                            <strong>
+                                                                {money(product.selling_price * line.quantity)}
+                                                            </strong>
+                                                        </div>
+                                                    </article>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : null}
+                                    {wizardStep === 4 ? (
+                                        <div className="sale-review">
+                                            <div className="sale-review__information">
+                                                <dl>
+                                                    <div>
+                                                        <dt>Customer</dt>
+                                                        <dd>{selectedCustomer?.name ?? '—'}</dd>
+                                                    </div>
+                                                    <div>
+                                                        <dt>Payment</dt>
+                                                        <dd>{form.payment_type}</dd>
+                                                    </div>
+                                                    <div>
+                                                        <dt>Notes</dt>
+                                                        <dd>{form.notes || 'No notes'}</dd>
+                                                    </div>
+                                                </dl>
+                                                <Button onClick={() => setWizardStep(1)} tone="ghost">
+                                                    Edit information
+                                                </Button>
                                             </div>
-                                        );
-                                    })}
-                                </div>
+                                            <div className="sale-review__items">
+                                                {form.items.map((line) => {
+                                                    const product = options.products.find(
+                                                        (item) => item.id === line.product_id,
+                                                    );
+                                                    if (!product) return null;
+                                                    return (
+                                                        <article key={product.id}>
+                                                            <div>
+                                                                <strong>{product.name}</strong>
+                                                                <small>{product.sku}</small>
+                                                            </div>
+                                                            <span>
+                                                                {line.quantity} × {money(product.selling_price)}
+                                                            </span>
+                                                            <strong>
+                                                                {money(line.quantity * product.selling_price)}
+                                                            </strong>
+                                                        </article>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ) : null}
+                                </section>
                                 <footer className="sale-form-actions">
-                                    <Button disabled={saving} requiresOnline type="submit">
-                                        {saving ? 'Saving…' : 'Save draft'}
-                                    </Button>
-                                    <Button
-                                        disabled={saving}
-                                        onClick={() => void save(true)}
-                                        requiresOnline
-                                        tone="primary"
-                                    >
-                                        {saving ? 'Posting…' : 'Post sale'}
-                                    </Button>
+                                    {wizardStep > 1 ? <Button onClick={goBack}>Back</Button> : <span />}
+                                    <div>
+                                        {wizardStep < 4 ? (
+                                            <Button onClick={continueWizard} tone="primary">
+                                                {wizardStep === 1
+                                                    ? 'Continue to products'
+                                                    : wizardStep === 2
+                                                      ? 'Continue to quantity'
+                                                      : 'Review sale'}
+                                            </Button>
+                                        ) : (
+                                            <>
+                                                <Button disabled={saving} requiresOnline type="submit">
+                                                    {saving ? 'Saving…' : 'Save draft'}
+                                                </Button>
+                                                <Button
+                                                    disabled={saving}
+                                                    onClick={() => void save(true)}
+                                                    requiresOnline
+                                                    tone="primary"
+                                                >
+                                                    {saving ? 'Posting…' : 'Post sale'}
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
                                 </footer>
                             </>
                         )}
                     </form>
-                    <aside className="sales-section sale-summary">
-                        <header>
-                            <div>
-                                <p className="ui-eyebrow">Server preview</p>
-                                <h2>Sale summary</h2>
-                            </div>
-                        </header>
-                        <dl>
-                            <div>
-                                <dt>Customer</dt>
-                                <dd>{selectedCustomer?.name ?? '—'}</dd>
-                            </div>
-                            <div>
-                                <dt>Payment</dt>
-                                <dd>{form.payment_type}</dd>
-                            </div>
-                            <div>
-                                <dt>Products / units</dt>
-                                <dd>
-                                    {form.items.length} / {quantity}
-                                </dd>
-                            </div>
-                            <div className="sale-summary__total">
-                                <dt>Preview total</dt>
-                                <dd>{money(preview)}</dd>
-                            </div>
-                        </dl>
-                        {form.payment_type === 'credit' ? (
-                            <div
-                                className={`credit-check ${selectedCustomer?.credit_allowed && preview <= (selectedCustomer?.available_credit ?? 0) ? 'is-valid' : 'is-warning'}`}
-                            >
-                                <strong>
-                                    {selectedCustomer?.credit_allowed
-                                        ? `${money(selectedCustomer.available_credit)} available`
-                                        : 'Credit disabled'}
-                                </strong>
-                                <small>Backend rechecks the locked outstanding balance during posting.</small>
-                            </div>
-                        ) : (
-                            <div className="credit-check is-valid">
-                                <strong>Cash sale</strong>
-                                <small>Posted total increases your cash hold exactly once.</small>
-                            </div>
-                        )}
-                        <p className="sale-server-note">
-                            Prices and totals shown here are previews. Laravel stores and validates the authoritative
-                            values.
-                        </p>
-                    </aside>
                 </div>
             ) : (
                 <section className="sales-section sales-history">
@@ -542,14 +867,7 @@ export function SalesWorkspacePage({ initialView = 'entry' }: { initialView?: 'e
                             <p className="ui-eyebrow">Own transactions</p>
                             <h2>Recent sales</h2>
                         </div>
-                        <Button
-                            icon="plus"
-                            onClick={() => {
-                                reset();
-                                setView('entry');
-                            }}
-                            tone="primary"
-                        >
+                        <Button icon="plus" onClick={() => navigate('/sales/new-sale')} tone="primary">
                             New sale
                         </Button>
                     </header>
@@ -567,7 +885,7 @@ export function SalesWorkspacePage({ initialView = 'entry' }: { initialView?: 'e
                         <div className="sales-history-list">
                             {sales.map((sale) => (
                                 <article key={sale.id}>
-                                    <div className="sales-history__identity">
+                                    <Link className="sales-history__identity" to={`/sales/sales-history/${sale.id}`}>
                                         <span>
                                             <Icon
                                                 name={sale.payment_type === 'cash' ? 'cash' : 'customers'}
@@ -580,27 +898,80 @@ export function SalesWorkspacePage({ initialView = 'entry' }: { initialView?: 'e
                                                 {sale.customer.name} · {dateTime(sale.created_at)}
                                             </small>
                                         </div>
-                                    </div>
+                                    </Link>
                                     <div className="sales-history__amount">
                                         <strong>{money(sale.total_amount)}</strong>
                                         <small>
                                             {sale.total_quantity} units · {sale.payment_type}
                                         </small>
                                     </div>
-                                    <StatusBadge tone={tone(sale.status)}>{sale.status}</StatusBadge>
-                                    {sale.status === 'draft' ? (
-                                        <div className="sales-history__actions">
-                                            <Button onClick={() => edit(sale)}>Edit</Button>
-                                            <Button
-                                                disabled={saving}
-                                                onClick={() => void postDraft(sale)}
-                                                requiresOnline
-                                                tone="primary"
+                                    <div className="sales-history__end">
+                                        <StatusBadge tone={tone(sale.status)}>{sale.status}</StatusBadge>
+                                        {sale.status !== 'draft' ? (
+                                            <Link
+                                                aria-label={`View ${sale.reference}`}
+                                                className="ui-icon-button ui-icon-button--secondary sales-history__detail-link"
+                                                title={`View ${sale.reference}`}
+                                                to={`/sales/sales-history/${sale.id}`}
                                             >
-                                                Post
-                                            </Button>
-                                        </div>
-                                    ) : null}
+                                                <Icon name="chevronRight" size={17} />
+                                            </Link>
+                                        ) : null}
+                                        {sale.status === 'draft' ? (
+                                            <div className="sales-history__menu">
+                                                <IconButton
+                                                    aria-controls={`sale-actions-${sale.id}`}
+                                                    aria-expanded={actionMenuSaleId === sale.id}
+                                                    aria-haspopup="menu"
+                                                    className="sales-history__menu-trigger"
+                                                    icon="moreVertical"
+                                                    label={`Actions for ${sale.reference}`}
+                                                    onClick={() =>
+                                                        setActionMenuSaleId((current) =>
+                                                            current === sale.id ? null : sale.id,
+                                                        )
+                                                    }
+                                                />
+                                                {actionMenuSaleId === sale.id ? (
+                                                    <div
+                                                        aria-label={`Actions for ${sale.reference}`}
+                                                        className="sales-history__action-menu"
+                                                        id={`sale-actions-${sale.id}`}
+                                                        role="menu"
+                                                    >
+                                                        <Link
+                                                            className="ui-button ui-button--ghost sales-history__menu-item"
+                                                            role="menuitem"
+                                                            to={`/sales/sales-history/${sale.id}`}
+                                                        >
+                                                            <Icon name="sales" size={16} />
+                                                            <span>View</span>
+                                                        </Link>
+                                                        <Button
+                                                            className="sales-history__menu-item"
+                                                            icon="edit"
+                                                            onClick={() => edit(sale)}
+                                                            role="menuitem"
+                                                            tone="ghost"
+                                                        >
+                                                            Edit
+                                                        </Button>
+                                                        <Button
+                                                            className="sales-history__menu-item"
+                                                            disabled={saving}
+                                                            icon="check"
+                                                            onClick={() => void postDraft(sale)}
+                                                            requiresOnline
+                                                            role="menuitem"
+                                                            tone="ghost"
+                                                        >
+                                                            Post
+                                                        </Button>
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                        ) : null}
+                                    </div>
                                 </article>
                             ))}
                         </div>
@@ -609,4 +980,14 @@ export function SalesWorkspacePage({ initialView = 'entry' }: { initialView?: 'e
             )}
         </div>
     );
+}
+
+export function NewSalePage() {
+    const [searchParams] = useSearchParams();
+    const editId = Number(searchParams.get('edit')) || 0;
+    return <SalesWorkspacePage editId={editId} key={editId || 'new'} view="entry" />;
+}
+
+export function SalesHistoryPage() {
+    return <SalesWorkspacePage view="history" />;
 }

@@ -146,6 +146,11 @@ class Phase5SalesTest extends TestCase
         [$representative, $user, $customer, $product] = $this->fixture(20, 1000);
         $sale = $this->createSale($user, $customer, $product, 2, 'cash');
         [$other, $otherUser, $otherCustomer, $otherProduct] = $this->fixture(10, 500);
+        $this->actingAs($user)->getJson("/api/sales/sales/{$sale->id}")
+            ->assertOk()
+            ->assertJsonPath('data.reference', $sale->reference)
+            ->assertJsonPath('data.items.0.quantity', 2);
+        $this->actingAs($otherUser)->getJson("/api/sales/sales/{$sale->id}")->assertForbidden();
         $this->actingAs($otherUser)->getJson('/api/sales/sales')->assertOk()->assertJsonCount(0, 'data');
         $this->command("/api/sales/sales/{$sale->id}/post", 'foreign-sale')->assertForbidden();
         $this->withHeader('Idempotency-Key', 'foreign-customer')->postJson('/api/sales/sales', $this->payload($customer, $product, 1, 'cash'))->assertNotFound();

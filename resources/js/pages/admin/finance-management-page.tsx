@@ -11,7 +11,7 @@ import {
     type RepresentativeCashBalance,
 } from '../../services/finance';
 import { Icon } from '../../ui/icons';
-import { Button, Dialog, EmptyState, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
+import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
 
 type Tab = 'cash' | 'credit' | 'payments';
 const emptyOptions: PaymentOptions = {
@@ -265,20 +265,37 @@ export function FinanceManagementPage() {
                     <button onClick={() => void load()}>Retry</button>
                 </div>
             ) : null}
-            <div className="finance-tabs" role="tablist">
+            <div
+                className={`section-tabs section-tabs--${Number(canCash) + (canPayments ? 2 : 0)} finance-tabs`}
+                role="tablist"
+            >
                 {canCash ? (
-                    <button aria-selected={tab === 'cash'} onClick={() => setTab('cash')} role="tab">
-                        Representative cash <span>{submissions.filter((row) => row.status === 'pending').length}</span>
+                    <button aria-selected={tab === 'cash'} onClick={() => setTab('cash')} role="tab" type="button">
+                        <Icon name="cash" size={15} />
+                        <span>Representative cash</span>
+                        <span className="section-tab-count">
+                            {submissions.filter((row) => row.status === 'pending').length}
+                        </span>
                     </button>
                 ) : null}
                 {canPayments ? (
-                    <button aria-selected={tab === 'credit'} onClick={() => setTab('credit')} role="tab">
-                        Customer credit
+                    <button aria-selected={tab === 'credit'} onClick={() => setTab('credit')} role="tab" type="button">
+                        <Icon name="customers" size={15} />
+                        <span>Customer credit</span>
                     </button>
                 ) : null}
                 {canPayments ? (
-                    <button aria-selected={tab === 'payments'} onClick={() => setTab('payments')} role="tab">
-                        Payments <span>{payments.filter((row) => row.status === 'draft').length}</span>
+                    <button
+                        aria-selected={tab === 'payments'}
+                        onClick={() => setTab('payments')}
+                        role="tab"
+                        type="button"
+                    >
+                        <Icon name="reports" size={15} />
+                        <span>Payments</span>
+                        <span className="section-tab-count">
+                            {payments.filter((row) => row.status === 'draft').length}
+                        </span>
                     </button>
                 ) : null}
             </div>
@@ -366,24 +383,24 @@ export function FinanceManagementPage() {
                                                 </td>
                                                 <td className="ui-table__actions">
                                                     {row.status === 'pending' && canConfirm ? (
-                                                        <Button
+                                                        <IconButton
                                                             disabled={busy === row.id}
+                                                            icon="check"
+                                                            label={`Confirm ${row.reference}`}
                                                             onClick={() => confirm(row)}
                                                             requiresOnline
                                                             tone="primary"
-                                                        >
-                                                            Confirm
-                                                        </Button>
+                                                        />
                                                     ) : null}
                                                     {row.status === 'confirmed' && canReverse ? (
-                                                        <Button
+                                                        <IconButton
                                                             disabled={busy === row.id}
+                                                            icon="reverse"
+                                                            label={`Reverse ${row.reference}`}
                                                             onClick={() => reverseCash(row)}
                                                             requiresOnline
                                                             tone="danger"
-                                                        >
-                                                            Reverse
-                                                        </Button>
+                                                        />
                                                     ) : null}
                                                 </td>
                                             </tr>
@@ -510,24 +527,24 @@ export function FinanceManagementPage() {
                                             </td>
                                             <td className="ui-table__actions">
                                                 {row.status === 'draft' && canCreatePayment ? (
-                                                    <Button
+                                                    <IconButton
                                                         disabled={busy === row.id}
+                                                        icon="check"
+                                                        label={`Post ${row.reference}`}
                                                         onClick={() => postPayment(row)}
                                                         requiresOnline
                                                         tone="primary"
-                                                    >
-                                                        Post
-                                                    </Button>
+                                                    />
                                                 ) : null}
                                                 {row.status === 'posted' && canVoidPayment ? (
-                                                    <Button
+                                                    <IconButton
                                                         disabled={busy === row.id}
+                                                        icon="reverse"
+                                                        label={`Void ${row.reference}`}
                                                         onClick={() => voidPayment(row)}
                                                         requiresOnline
                                                         tone="danger"
-                                                    >
-                                                        Void
-                                                    </Button>
+                                                    />
                                                 ) : null}
                                             </td>
                                         </tr>

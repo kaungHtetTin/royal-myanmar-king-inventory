@@ -167,13 +167,13 @@ export function RepresentativeStockPage() {
                     ))
                 )}
             </section>
-            <section className="sales-section">
+            <section className="sales-section sales-available-stock-section">
                 <header>
                     <div>
                         <p className="ui-eyebrow">Available inventory</p>
-                        <h2>Current products</h2>
+                        <h2>Available products</h2>
                     </div>
-                    <small>Read only · maximum 100 each</small>
+                    <small>Read only · maximum 100 units per product</small>
                 </header>
                 {loading ? (
                     <div className="ui-loading">
@@ -183,26 +183,44 @@ export function RepresentativeStockPage() {
                 ) : stock.length === 0 ? (
                     <EmptyState description="Received products will be listed here." title="No stock on hand" />
                 ) : (
-                    <div className="sales-stock-list">
+                    <div className="sales-stock-list sales-available-stock-list">
                         {stock.map((row) => (
                             <article key={row.id}>
                                 <span className="sales-stock-list__icon">
                                     <Icon name="box" size={17} />
                                 </span>
-                                <div>
+                                <div className="sales-available-stock__identity">
                                     <strong>{row.product.name}</strong>
-                                    <small>
-                                        {row.product.sku} · {row.pending_quantity} incoming
-                                    </small>
+                                    <small>{row.product.sku}</small>
+                                    {row.pending_quantity > 0 ? (
+                                        <span className="sales-available-stock__incoming">
+                                            <Icon name="truck" size={12} />
+                                            {number(row.pending_quantity)} incoming
+                                        </span>
+                                    ) : null}
                                 </div>
-                                <span className="sales-stock-list__quantity">
-                                    <strong>{row.quantity}</strong>
-                                    <small>{row.product.unit}</small>
-                                </span>
-                                <span className="sales-capacity">
-                                    <strong>{row.capacity_remaining}</strong>
-                                    <small>capacity</small>
-                                </span>
+                                <div className="sales-available-stock__metrics">
+                                    <span className="sales-stock-list__quantity">
+                                        <small>On hand</small>
+                                        <strong>{number(row.quantity)}</strong>
+                                        <small>{row.product.unit}</small>
+                                    </span>
+                                    <span className="sales-capacity">
+                                        <small>Capacity left</small>
+                                        <strong>{number(row.capacity_remaining)}</strong>
+                                        <span
+                                            aria-label={`${number(row.capacity_remaining)} units of capacity remaining`}
+                                            className="sales-capacity__bar"
+                                            role="img"
+                                        >
+                                            <span
+                                                style={{
+                                                    width: `${Math.max(0, Math.min(100, row.capacity_remaining))}%`,
+                                                }}
+                                            />
+                                        </span>
+                                    </span>
+                                </div>
                             </article>
                         ))}
                     </div>

@@ -494,6 +494,15 @@ describe('application portals', () => {
                                 name: 'ABC Shop',
                                 outstanding_amount: 2500,
                             },
+                            {
+                                available_credit: 0,
+                                code: 'CUS-CASH',
+                                credit_allowed: false,
+                                credit_limit: 0,
+                                id: 2,
+                                name: 'Cash Corner',
+                                outstanding_amount: 0,
+                            },
                         ],
                         products: [
                             {
@@ -528,19 +537,211 @@ describe('application portals', () => {
             </MemoryRouter>,
         );
         expect(await screen.findByRole('heading', { name: 'New sale' })).toBeInTheDocument();
-        expect(await screen.findByText('ABC Shop')).toBeInTheDocument();
-        expect(screen.getByText(/20 available/)).toBeInTheDocument();
-        fireEvent.change(screen.getByLabelText('Payment'), {
-            target: { value: 'credit' },
-        });
-        expect(screen.getByText(/7,500 MMK available/)).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Post sale' })).toBeInTheDocument();
-        fireEvent.change(screen.getByLabelText('Qty'), {
+        expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: 'History' })).not.toBeInTheDocument();
+        const customerSearch = await screen.findByRole('combobox', { name: 'Customer' });
+        expect(customerSearch).toHaveValue('');
+        expect(screen.getByRole('heading', { name: 'Information' })).toBeInTheDocument();
+        expect(screen.getByText('Credit availability will appear here.')).toBeInTheDocument();
+
+        fireEvent.change(customerSearch, { target: { value: 'ABC' } });
+        fireEvent.click(screen.getByRole('option', { name: /ABC Shop/ }));
+        expect(customerSearch).toHaveValue('CUS-ABC · ABC Shop');
+        expect(screen.getByRole('region', { name: 'Customer credit status' })).toBeInTheDocument();
+        expect(screen.getByRole('img', { name: 'Credit available: Yes' })).toBeInTheDocument();
+        expect(screen.getByText('7,500 MMK')).toBeInTheDocument();
+
+        fireEvent.change(customerSearch, { target: { value: 'Cash Corner' } });
+        fireEvent.click(screen.getByRole('option', { name: /Cash Corner/ }));
+        expect(screen.getByRole('img', { name: 'Credit available: No' })).toBeInTheDocument();
+
+        fireEvent.change(customerSearch, { target: { value: 'ABC Shop' } });
+        fireEvent.click(screen.getByRole('option', { name: /ABC Shop/ }));
+        fireEvent.click(screen.getByRole('radio', { name: 'Credit' }));
+        expect(screen.getByRole('radio', { name: 'Credit' })).toBeChecked();
+        fireEvent.click(screen.getByRole('button', { name: 'Continue to products' }));
+
+        expect(screen.getByRole('heading', { name: 'Products' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Select Drinking Water 1 Litre' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Continue to quantity' }));
+
+        expect(screen.getByRole('heading', { name: 'Quantity' })).toBeInTheDocument();
+        const quantity = screen.getByLabelText('Quantity for Drinking Water 1 Litre');
+        expect(quantity.closest('label')).not.toHaveTextContent('Quantity');
+        fireEvent.change(quantity, {
             target: { value: '21' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Post sale' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review sale' }));
         expect(await screen.findByText('Only 20 units are currently available.')).toBeInTheDocument();
+
+        fireEvent.change(quantity, { target: { value: '2' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Review sale' }));
+        expect(screen.getByRole('heading', { name: 'Review & submit' })).toBeInTheDocument();
+        expect(screen.queryByText('Server preview')).not.toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Sale summary' })).not.toBeInTheDocument();
+        expect(screen.queryByText(/7,500 MMK available/)).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Edit information' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Save draft' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Post sale' })).toBeInTheDocument();
         expect(post).not.toHaveBeenCalled();
+    });
+
+    it('shows draft sale actions in a right-aligned history menu', async () => {
+        vi.spyOn(axios, 'get').mockImplementation((url) => {
+            if (url === 'api/sales/sale-options')
+                return Promise.resolve({
+                    data: {
+                        cash_hold: 1400,
+                        customers: [
+                            {
+                                available_credit: 10000,
+                                code: 'CUS-ABC',
+                                credit_allowed: true,
+                                credit_limit: 10000,
+                                id: 1,
+                                name: 'ABC Shop',
+                                outstanding_amount: 0,
+                            },
+                        ],
+                        products: [
+                            {
+                                id: 1,
+                                name: 'Drinking Water 1 Litre',
+                                quantity: 20,
+                                selling_price: 1000,
+                                sku: 'DW-1L',
+                                unit: 'bottle',
+                            },
+                        ],
+                        representative: { code: 'SR-001', id: 1, name: 'Ko Aung' },
+                    },
+                });
+            return Promise.resolve({
+                data: {
+                    data: [
+                        {
+                            created_at: '2026-08-17T07:45:00Z',
+                            customer: { code: 'CUS-ABC', id: 1, name: 'ABC Shop' },
+                            id: 3,
+                            items: [
+                                {
+                                    id: 1,
+                                    line_total: 1000,
+                                    product: {
+                                        id: 1,
+                                        name: 'Drinking Water 1 Litre',
+                                        sku: 'DW-1L',
+                                        unit: 'bottle',
+                                    },
+                                    quantity: 1,
+                                    unit_price: 1000,
+                                },
+                            ],
+                            notes: null,
+                            payment_type: 'cash',
+                            posted_at: null,
+                            reference: 'SAL-000003',
+                            representative: { code: 'SR-001', id: 1, name: 'Ko Aung' },
+                            status: 'draft',
+                            total_amount: 1000,
+                            total_quantity: 1,
+                            void_reason: null,
+                            voided_at: null,
+                            warehouse: { code: 'YGN-MAIN', id: 1, name: 'Yangon Main Warehouse' },
+                        },
+                    ],
+                    meta: {
+                        current_page: 1,
+                        from: 1,
+                        last_page: 1,
+                        per_page: 20,
+                        to: 1,
+                        total: 1,
+                    },
+                },
+            });
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/sales/sales-history']}>
+                <Root initialUser={representativeUser} />
+            </MemoryRouter>,
+        );
+
+        expect(await screen.findByRole('heading', { name: 'Sales history' })).toBeInTheDocument();
+        const trigger = await screen.findByRole('button', { name: 'Actions for SAL-000003' });
+        expect(trigger).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByRole('menu', { name: 'Actions for SAL-000003' })).not.toBeInTheDocument();
+
+        fireEvent.click(trigger);
+        expect(trigger).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByRole('menuitem', { name: 'View' })).toHaveAttribute('href', '/sales/sales-history/3');
+        expect(screen.getByRole('menuitem', { name: 'Edit' })).toBeInTheDocument();
+        expect(screen.getByRole('menuitem', { name: 'Post' })).toBeInTheDocument();
+
+        trigger.focus();
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(trigger).toHaveAttribute('aria-expanded', 'false');
+        expect(trigger).toHaveFocus();
+
+        fireEvent.click(trigger);
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
+        expect(await screen.findByRole('heading', { name: 'Edit SAL-000003' })).toBeInTheDocument();
+    });
+
+    it('opens a representative sale history record on its own detail page', async () => {
+        vi.spyOn(axios, 'get').mockImplementation((url) => {
+            if (url === 'api/sales/sales/3')
+                return Promise.resolve({
+                    data: {
+                        data: {
+                            created_at: '2026-08-17T07:45:00Z',
+                            customer: { code: 'CUS-ABC', id: 1, name: 'ABC Shop' },
+                            id: 3,
+                            items: [
+                                {
+                                    id: 1,
+                                    line_total: 2000,
+                                    product: {
+                                        id: 1,
+                                        name: 'Drinking Water 1 Litre',
+                                        sku: 'DW-1L',
+                                        unit: 'bottle',
+                                    },
+                                    quantity: 2,
+                                    unit_price: 1000,
+                                },
+                            ],
+                            notes: 'Deliver before noon',
+                            payment_type: 'cash',
+                            posted_at: null,
+                            reference: 'SAL-000003',
+                            representative: { code: 'SR-001', id: 1, name: 'Ko Aung' },
+                            status: 'draft',
+                            total_amount: 2000,
+                            total_quantity: 2,
+                            void_reason: null,
+                            voided_at: null,
+                            warehouse: { code: 'YGN-MAIN', id: 1, name: 'Yangon Main Warehouse' },
+                        },
+                    },
+                });
+            return Promise.reject(new Error(`Unexpected GET ${url}`));
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/sales/sales-history/3']}>
+                <Root initialUser={representativeUser} />
+            </MemoryRouter>,
+        );
+
+        expect(await screen.findByRole('heading', { name: 'SAL-000003' })).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Sales history' })).toHaveAttribute('href', '/sales/sales-history');
+        expect(screen.getByRole('heading', { name: 'Sale information' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Line items' })).toBeInTheDocument();
+        expect(screen.getByText('Drinking Water 1 Litre')).toBeInTheDocument();
+        expect(screen.getByText('Deliver before noon')).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Edit draft' })).toHaveAttribute('href', '/sales/new-sale?edit=3');
     });
 
     it('loads the warehouse-scoped admin sales register', async () => {
@@ -604,7 +805,7 @@ describe('application portals', () => {
         );
         expect(await screen.findByRole('heading', { name: 'Sales' })).toBeInTheDocument();
         expect(await screen.findByText('SAL-000001')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Void' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Void SAL-000001' })).toBeInTheDocument();
     });
 
     it('loads vehicle management and opens the creation dialog', async () => {
@@ -789,6 +990,30 @@ describe('application portals', () => {
                 name: 'Representative navigation',
             }),
         ).toHaveLength(2);
+        expect(screen.getByRole('link', { name: 'StockFlow home' })).toHaveAttribute('href', '/sales/dashboard');
+    });
+
+    it('opens and dismisses the representative profile menu', async () => {
+        render(
+            <MemoryRouter initialEntries={['/sales/dashboard']}>
+                <Root initialUser={representativeUser} />
+            </MemoryRouter>,
+        );
+
+        expect(await screen.findByRole('heading', { name: 'Route overview' })).toBeInTheDocument();
+        const profileButton = screen.getByRole('button', { name: 'Profile menu' });
+        expect(profileButton).toHaveAttribute('aria-expanded', 'false');
+
+        fireEvent.click(profileButton);
+        expect(profileButton).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByRole('menu', { name: 'Profile options' })).toBeInTheDocument();
+        expect(screen.getByRole('menuitem', { name: 'Use dark theme' })).toBeInTheDocument();
+        expect(screen.getByRole('menuitem', { name: 'Use comfortable density' })).toBeInTheDocument();
+        expect(screen.getByRole('menuitem', { name: 'Sign out' })).toBeInTheDocument();
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(profileButton).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByRole('menu', { name: 'Profile options' })).not.toBeInTheDocument();
     });
 
     it('keeps navigation inside a nested deployment directory', () => {
@@ -813,8 +1038,10 @@ describe('application portals', () => {
 
         const shell = container.querySelector('.admin-root');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Use dark theme' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Use comfortable density' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Profile menu' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Use dark theme' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Profile menu' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Use comfortable density' }));
 
         expect(shell).toHaveAttribute('data-theme', 'dark');
         expect(shell).toHaveAttribute('data-density', 'comfortable');
@@ -844,6 +1071,20 @@ describe('application portals', () => {
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(menuButton).toHaveAttribute('aria-expanded', 'false');
         expect(sidebar).not.toHaveClass('is-open');
+    });
+
+    it('keeps only the collapse state control in the sidebar footer', () => {
+        const { container } = render(
+            <MemoryRouter initialEntries={['/admin/dashboard']}>
+                <Root initialUser={baseUser} />
+            </MemoryRouter>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+
+        expect(container.querySelector('.admin-root')).toHaveAttribute('data-sidebar', 'collapsed');
+        expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
+        expect(container.querySelector('.admin-sidebar__footer a')).not.toBeInTheDocument();
     });
 
     it('renders separate login experiences for each portal', () => {
@@ -1082,6 +1323,10 @@ describe('application portals', () => {
         expect(await screen.findByText('8,100 MMK')).toBeInTheDocument();
         expect(await screen.findByText('IMP-000001')).toBeInTheDocument();
         expect(screen.getByRole('combobox', { name: 'Warehouse scope' })).toBeInTheDocument();
+        expect(await screen.findByRole('link', { name: 'Transfers, 2 actions need attention' })).toBeInTheDocument();
+        expect(
+            await screen.findByRole('link', { name: 'Cash & credit, 1 action needs attention' }),
+        ).toBeInTheDocument();
     });
 
     it('loads the multi-report workspace with posted-only sales totals', async () => {
@@ -1224,6 +1469,18 @@ describe('application portals', () => {
                         },
                     },
                 ],
+                recent_sales: [
+                    {
+                        created_at: '2026-08-17T07:30:00Z',
+                        customer: { code: 'CUS-ABC', id: 1, name: 'ABC Shop' },
+                        id: 2,
+                        payment_type: 'cash',
+                        reference: 'SAL-000002',
+                        status: 'posted',
+                        total_amount: 5400,
+                        total_quantity: 6,
+                    },
+                ],
                 representative: { code: 'SR-001', id: 1, name: 'Ko Aung' },
                 stock: [
                     {
@@ -1246,6 +1503,11 @@ describe('application portals', () => {
         );
         expect(await screen.findByRole('heading', { name: 'Route overview' })).toBeInTheDocument();
         expect(await screen.findByText('RTR-000001')).toBeInTheDocument();
+        expect(await screen.findByText('SAL-000002')).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'View sales history' })).toHaveAttribute(
+            'href',
+            '/sales/sales-history',
+        );
         expect(screen.getByText('8,100')).toBeInTheDocument();
     });
 

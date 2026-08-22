@@ -160,7 +160,7 @@ class SalesRepresentativeController extends Controller
             'phone' => ['nullable', 'string', 'max:50'],
             'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user)],
             'username' => ['required', 'string', 'max:100', 'regex:/^[a-zA-Z0-9._-]+$/', Rule::unique('users', 'username')->ignore($user)],
-            'password' => [$representative ? 'nullable' : 'required', 'string', 'min:12', 'confirmed'],
+            'password' => [$representative ? 'nullable' : 'required', 'string', 'size:8', 'confirmed'],
             'primary_warehouse_id' => ['required', 'integer', 'exists:warehouses,id'],
             'region' => ['nullable', 'string', 'max:100'],
             'vehicle_id' => ['nullable', 'integer', 'exists:vehicles,id'],
