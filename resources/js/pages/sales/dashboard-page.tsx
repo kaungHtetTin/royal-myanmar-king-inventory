@@ -225,7 +225,7 @@ export function RepresentativeDashboardPage() {
                         />
                     ) : (
                         data.pending_receivings.map((row) => (
-                            <Link className="representative-pending-row" key={row.id} to="/sales/my-stock">
+                            <article className="representative-pending-notification" key={row.id}>
                                 <span className="sales-stock-list__icon">
                                     <Icon name="truck" size={17} />
                                 </span>
@@ -235,8 +235,24 @@ export function RepresentativeDashboardPage() {
                                         {row.warehouse.name} · {row.products} products · {row.total_quantity} units
                                     </small>
                                 </div>
-                                <Icon name="chevronRight" />
-                            </Link>
+                                <div className="representative-pending-items">
+                                    {(row.items ?? []).map((item) => (
+                                        <div key={item.id}>
+                                            <span>
+                                                <strong>{item.product.name}</strong>
+                                                <small>
+                                                    {item.product.sku} · {item.product.unit}
+                                                </small>
+                                            </span>
+                                            <b>+{item.quantity}</b>
+                                        </div>
+                                    ))}
+                                </div>
+                                <Link className="representative-pending-action" to={`/sales/receivings/${row.id}`}>
+                                    <span>Open receiving</span>
+                                    <Icon name="chevronRight" size={15} />
+                                </Link>
+                            </article>
                         ))
                     )}
                 </section>

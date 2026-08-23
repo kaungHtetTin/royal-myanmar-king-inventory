@@ -48,8 +48,10 @@ class RepresentativeTransferController extends Controller
             $this->assertRepresentative($request, (int) $data['representative_id']);
         }
         $query = RepresentativeTransfer::query()->with($this->relations())->withSum('items as total_quantity', 'quantity')
+            ->where('direction', 'issue')
             ->whereIn('source_warehouse_id', $warehouseIds)
             ->whereHas('representative', fn ($representative) => $representative->whereIn('primary_warehouse_id', $warehouseIds))
+            ->where('status', '!=', TransferStatus::Cancelled)
             ->when($data['warehouse_id'] ?? null, fn ($query, $id) => $query->where('source_warehouse_id', $id))
             ->when($data['representative_id'] ?? null, fn ($query, $id) => $query->where('sales_representative_id', $id))
             ->when($data['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
@@ -70,6 +72,7 @@ class RepresentativeTransferController extends Controller
         $transfer = DB::transaction(function () use ($request, $data): RepresentativeTransfer {
             $transfer = RepresentativeTransfer::query()->create([
                 'reference' => $this->references->next('representative_transfer', 'RTR'),
+                'direction' => 'issue',
                 'source_warehouse_id' => $data['source_warehouse_id'],
                 'sales_representative_id' => $data['sales_representative_id'],
                 'status' => TransferStatus::Draft,
@@ -85,8 +88,17 @@ class RepresentativeTransferController extends Controller
         return (new RepresentativeTransferResource($this->load($transfer)))->response()->setStatusCode(201);
     }
 
+    public function show(Request $request, RepresentativeTransfer $representativeTransfer): RepresentativeTransferResource
+    {
+        $this->assertIssue($representativeTransfer);
+        $this->assertScope($request, $representativeTransfer);
+
+        return new RepresentativeTransferResource($this->load($representativeTransfer));
+    }
+
     public function update(Request $request, RepresentativeTransfer $representativeTransfer): RepresentativeTransferResource
     {
+        $this->assertIssue($representativeTransfer);
         $this->assertScope($request, $representativeTransfer);
         $data = $request->validate($this->rules());
         $this->assertWarehouse($request, (int) $data['source_warehouse_id']);
@@ -108,6 +120,7 @@ class RepresentativeTransferController extends Controller
 
     public function dispatch(Request $request, RepresentativeTransfer $representativeTransfer): RepresentativeTransferResource
     {
+        $this->assertIssue($representativeTransfer);
         $this->assertScope($request, $representativeTransfer);
         $this->posting->dispatch($representativeTransfer, $request->user(), $this->idempotencyKey($request), $request);
 
@@ -116,6 +129,7 @@ class RepresentativeTransferController extends Controller
 
     public function cancel(Request $request, RepresentativeTransfer $representativeTransfer): RepresentativeTransferResource
     {
+        $this->assertIssue($representativeTransfer);
         $this->assertScope($request, $representativeTransfer);
         $this->posting->cancel($representativeTransfer, $request->user(), $this->idempotencyKey($request), $this->commandReason($request), $request);
 
@@ -124,6 +138,7 @@ class RepresentativeTransferController extends Controller
 
     public function reverse(Request $request, RepresentativeTransfer $representativeTransfer): RepresentativeTransferResource
     {
+        $this->assertIssue($representativeTransfer);
         $this->assertScope($request, $representativeTransfer);
         $this->posting->reverse($representativeTransfer, $request->user(), $this->idempotencyKey($request), $this->commandReason($request), $request);
 
@@ -147,6 +162,11 @@ class RepresentativeTransferController extends Controller
     {
         $this->assertWarehouse($request, $transfer->source_warehouse_id);
         $this->assertRepresentative($request, $transfer->sales_representative_id);
+    }
+
+    private function assertIssue(RepresentativeTransfer $transfer): void
+    {
+        abort_unless($transfer->direction === 'issue', 404);
     }
 
     private function assertWarehouse(Request $request, int $warehouseId): void

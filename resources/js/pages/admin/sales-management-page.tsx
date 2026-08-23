@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useSession } from '../../auth/session-context';
 import { useBranding } from '../../branding/branding-context';
+import { Link } from 'react-router-dom';
 import type { PaginationMeta } from '../../services/administration';
 import { printInvoice } from '../../services/invoice-print';
 import { saleApi, type Sale, type SaleFilters, type SaleSummary } from '../../services/sales';
@@ -279,7 +280,14 @@ export function SalesManagementPage() {
                                 {rows.map((sale) => (
                                     <tr key={sale.id}>
                                         <td>
-                                            <strong>{sale.reference}</strong>
+                                            <strong>
+                                                <Link
+                                                    className="inventory-reference-link"
+                                                    to={`/admin/sales/${sale.id}`}
+                                                >
+                                                    {sale.reference}
+                                                </Link>
+                                            </strong>
                                             <small>{dateTime(sale.created_at)}</small>
                                         </td>
                                         <td>

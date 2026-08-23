@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\InventoryController;
 use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\ReportController as AdminReportController;
 use App\Http\Controllers\Admin\RepresentativeInventoryController;
+use App\Http\Controllers\Admin\RepresentativeReturnController;
 use App\Http\Controllers\Admin\RepresentativeTransferController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SaleController as AdminSaleController;
@@ -92,6 +93,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
 
         Route::get('/customers', [CustomerController::class, 'index'])
             ->middleware('permission:'.PermissionName::CustomerView->value);
+        Route::get('/customers/{customer}', [CustomerController::class, 'show'])
+            ->middleware('permission:'.PermissionName::CustomerView->value);
         Route::get('/customer-options', [CustomerController::class, 'options'])
             ->middleware('permission:'.PermissionName::CustomerView->value);
         Route::post('/customers', [CustomerController::class, 'store'])
@@ -125,6 +128,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
 
         Route::middleware('permission:'.PermissionName::WarehouseTransferView->value)->group(function (): void {
             Route::get('/warehouse-transfers', [WarehouseTransferController::class, 'index']);
+            Route::get('/warehouse-transfers/{warehouseTransfer}', [WarehouseTransferController::class, 'show']);
             Route::get('/warehouse-transfer-options', [TransferOptionController::class, 'warehouses']);
         });
         Route::middleware('permission:'.PermissionName::WarehouseTransferCreate->value)->group(function (): void {
@@ -142,7 +146,11 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
         Route::middleware('permission:'.PermissionName::RepresentativeStockView->value)->group(function (): void {
             Route::get('/representative-inventory', [RepresentativeInventoryController::class, 'index']);
             Route::get('/representative-transfers', [RepresentativeTransferController::class, 'index']);
+            Route::get('/representative-transfers/{representativeTransfer}', [RepresentativeTransferController::class, 'show']);
             Route::get('/representative-transfer-options', [TransferOptionController::class, 'representatives']);
+            Route::get('/representative-return-options', [TransferOptionController::class, 'representativeReturns']);
+            Route::get('/representative-returns', [RepresentativeReturnController::class, 'index']);
+            Route::get('/representative-returns/{representativeReturn}', [RepresentativeReturnController::class, 'show']);
         });
         Route::middleware('permission:'.PermissionName::RepresentativeStockIssue->value)->group(function (): void {
             Route::post('/representative-transfers', [RepresentativeTransferController::class, 'store']);
@@ -150,9 +158,15 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             Route::post('/representative-transfers/{representativeTransfer}/dispatch', [RepresentativeTransferController::class, 'dispatch']);
             Route::post('/representative-transfers/{representativeTransfer}/cancel', [RepresentativeTransferController::class, 'cancel']);
             Route::post('/representative-transfers/{representativeTransfer}/reverse', [RepresentativeTransferController::class, 'reverse']);
+            Route::post('/representative-returns', [RepresentativeReturnController::class, 'store']);
+            Route::put('/representative-returns/{representativeReturn}', [RepresentativeReturnController::class, 'update']);
+            Route::post('/representative-returns/{representativeReturn}/post', [RepresentativeReturnController::class, 'post']);
+            Route::post('/representative-returns/{representativeReturn}/cancel', [RepresentativeReturnController::class, 'cancel']);
+            Route::post('/representative-returns/{representativeReturn}/reverse', [RepresentativeReturnController::class, 'reverse']);
         });
 
         Route::get('/sales', [AdminSaleController::class, 'index'])->middleware('permission:'.PermissionName::SaleView->value);
+        Route::get('/sales/{sale}', [AdminSaleController::class, 'show'])->middleware('permission:'.PermissionName::SaleView->value);
         Route::post('/sales/{sale}/void', [AdminSaleController::class, 'void'])->middleware('permission:'.PermissionName::SaleVoid->value);
 
         Route::middleware('permission:'.PermissionName::CashView->value)->group(function (): void {
@@ -206,11 +220,17 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('role:'.RoleName::SalesRepresentative->value);
         Route::middleware('role:'.RoleName::SalesRepresentative->value)->group(function (): void {
             Route::get('/profile', [SalesRepresentativeController::class, 'current']);
+            Route::put('/profile', [SalesRepresentativeController::class, 'update']);
+            Route::put('/profile/password', [SalesRepresentativeController::class, 'updatePassword']);
             Route::get('/dashboard', SalesDashboardController::class)->middleware('permission:'.PermissionName::DashboardView->value.'|'.PermissionName::ReportView->value);
             Route::get('/representatives/{salesRepresentative}', [SalesRepresentativeController::class, 'show']);
             Route::get('/stock', [RepresentativeStockController::class, 'index'])
                 ->middleware('permission:'.PermissionName::RepresentativeStockView->value);
             Route::get('/receivings', [RepresentativeStockController::class, 'pending'])
+                ->middleware('permission:'.PermissionName::RepresentativeStockReceive->value);
+            Route::get('/receiving-history', [RepresentativeStockController::class, 'history'])
+                ->middleware('permission:'.PermissionName::RepresentativeStockReceive->value);
+            Route::get('/receivings/{representativeTransfer}', [RepresentativeStockController::class, 'show'])
                 ->middleware('permission:'.PermissionName::RepresentativeStockReceive->value);
             Route::post('/receivings/{representativeTransfer}/receive', [RepresentativeStockController::class, 'receive'])
                 ->middleware('permission:'.PermissionName::RepresentativeStockReceive->value);

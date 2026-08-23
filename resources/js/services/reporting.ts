@@ -67,6 +67,7 @@ export type SalesDashboard = {
         warehouse: Identity;
         total_quantity: number;
         products: number;
+        items: Array<{ id: number; quantity: number; product: ProductIdentity }>;
         dispatched_at: string | null;
     }>;
 };

@@ -93,6 +93,7 @@ export const customerApi = {
             }),
         ),
     options: () => request<CustomerOptions>(() => window.axios.get('api/admin/customer-options')),
+    get: (id: number) => request<{ data: Customer }>(() => window.axios.get(`api/admin/customers/${id}`)),
     create: (input: CustomerInput) =>
         request<{ data: Customer }>(() => window.axios.post('api/admin/customers', input)),
     update: (id: number, input: CustomerInput) =>

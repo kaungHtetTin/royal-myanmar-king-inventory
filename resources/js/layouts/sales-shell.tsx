@@ -128,6 +128,14 @@ export function SalesShell({ children }: { children: ReactNode }) {
                                         </span>
                                     </div>
                                     <div className="admin-profile-dropdown__section">
+                                        <Link
+                                            onClick={() => setProfileMenuOpen(false)}
+                                            role="menuitem"
+                                            to="/sales/profile"
+                                        >
+                                            <Icon name="users" size={16} />
+                                            <span>Profile &amp; security</span>
+                                        </Link>
                                         <button
                                             onClick={() => {
                                                 toggleTheme();

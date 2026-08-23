@@ -27,6 +27,11 @@ const CustomerManagementPage = lazy(() =>
         default: module.CustomerManagementPage,
     })),
 );
+const CustomerDetailPage = lazy(() =>
+    import('./pages/admin/customer-detail-page').then((module) => ({
+        default: module.CustomerDetailPage,
+    })),
+);
 const FinanceManagementPage = lazy(() =>
     import('./pages/admin/finance-management-page').then((module) => ({
         default: module.FinanceManagementPage,
@@ -40,6 +45,11 @@ const InventoryManagementPage = lazy(() =>
 const StockImportFormPage = lazy(() =>
     import('./pages/admin/inventory-management-page').then((module) => ({
         default: module.StockImportFormPage,
+    })),
+);
+const StockImportDetailPage = lazy(() =>
+    import('./pages/admin/stock-import-detail-page').then((module) => ({
+        default: module.StockImportDetailPage,
     })),
 );
 const ProductManagementPage = lazy(() =>
@@ -67,10 +77,31 @@ const SalesManagementPage = lazy(() =>
         default: module.SalesManagementPage,
     })),
 );
+const AdminSaleDetailPage = lazy(() =>
+    import('./pages/admin/sale-detail-page').then((module) => ({ default: module.AdminSaleDetailPage })),
+);
 const TransferManagementPage = lazy(() =>
     import('./pages/admin/transfer-management-page').then((module) => ({
         default: module.TransferManagementPage,
     })),
+);
+const WarehouseTransferFormPage = lazy(() =>
+    import('./pages/admin/transfer-management-page').then((module) => ({
+        default: module.WarehouseTransferFormPage,
+    })),
+);
+const RepresentativeTransferFormPage = lazy(() =>
+    import('./pages/admin/transfer-management-page').then((module) => ({
+        default: module.RepresentativeTransferFormPage,
+    })),
+);
+const RepresentativeReturnFormPage = lazy(() =>
+    import('./pages/admin/representative-return-form-page').then((module) => ({
+        default: module.RepresentativeReturnFormPage,
+    })),
+);
+const TransferDetailPage = lazy(() =>
+    import('./pages/admin/transfer-detail-page').then((module) => ({ default: module.TransferDetailPage })),
 );
 const VehicleManagementPage = lazy(() =>
     import('./pages/admin/vehicle-management-page').then((module) => ({
@@ -96,6 +127,15 @@ const RepresentativeStockPage = lazy(() =>
     import('./pages/sales/representative-stock-page').then((module) => ({
         default: module.RepresentativeStockPage,
     })),
+);
+const ReceivingDetailPage = lazy(() =>
+    import('./pages/sales/receiving-detail-page').then((module) => ({ default: module.ReceivingDetailPage })),
+);
+const StockIssueHistoryPage = lazy(() =>
+    import('./pages/sales/stock-issue-history-page').then((module) => ({ default: module.StockIssueHistoryPage })),
+);
+const ProfileSettingsPage = lazy(() =>
+    import('./pages/sales/profile-settings-page').then((module) => ({ default: module.ProfileSettingsPage })),
 );
 const SalesReportPage = lazy(() =>
     import('./pages/sales/sales-report-page').then((module) => ({
@@ -147,13 +187,47 @@ export default function Root({ initialUser }: { initialUser?: SessionUser | null
                                             <Route path="inventory" element={<InventoryManagementPage />} />
                                             <Route path="inventory/imports/new" element={<StockImportFormPage />} />
                                             <Route
+                                                path="inventory/imports/:importId"
+                                                element={<StockImportDetailPage />}
+                                            />
+                                            <Route
                                                 path="inventory/imports/:importId/edit"
                                                 element={<StockImportFormPage />}
                                             />
                                             <Route path="transfers" element={<TransferManagementPage />} />
+                                            <Route
+                                                path="transfers/:transferType/:transferId"
+                                                element={<TransferDetailPage />}
+                                            />
+                                            <Route
+                                                path="transfers/warehouse/new"
+                                                element={<WarehouseTransferFormPage />}
+                                            />
+                                            <Route
+                                                path="transfers/warehouse/:transferId/edit"
+                                                element={<WarehouseTransferFormPage />}
+                                            />
+                                            <Route
+                                                path="transfers/representative/new"
+                                                element={<RepresentativeTransferFormPage />}
+                                            />
+                                            <Route
+                                                path="transfers/representative/:transferId/edit"
+                                                element={<RepresentativeTransferFormPage />}
+                                            />
+                                            <Route
+                                                path="transfers/representative-return/new"
+                                                element={<RepresentativeReturnFormPage />}
+                                            />
+                                            <Route
+                                                path="transfers/representative-return/:returnId/edit"
+                                                element={<RepresentativeReturnFormPage />}
+                                            />
                                             <Route path="sales" element={<SalesManagementPage />} />
+                                            <Route path="sales/:saleId" element={<AdminSaleDetailPage />} />
                                             <Route path="cash" element={<FinanceManagementPage />} />
                                             <Route path="customers" element={<CustomerManagementPage />} />
+                                            <Route path="customers/:customerId" element={<CustomerDetailPage />} />
                                             <Route path="representatives" element={<RepresentativeManagementPage />} />
                                             <Route
                                                 path="representatives/:representativeId"
@@ -181,6 +255,9 @@ export default function Root({ initialUser }: { initialUser?: SessionUser | null
                                             <Route path="dashboard" element={<RepresentativeDashboardPage />} />
                                             <Route path="reports" element={<SalesReportPage />} />
                                             <Route path="my-stock" element={<RepresentativeStockPage />} />
+                                            <Route path="stock-issue-history" element={<StockIssueHistoryPage />} />
+                                            <Route path="profile" element={<ProfileSettingsPage />} />
+                                            <Route path="receivings/:transferId" element={<ReceivingDetailPage />} />
                                             <Route path="new-sale" element={<NewSalePage />} />
                                             <Route path="sales-history" element={<SalesHistoryPage />} />
                                             <Route path="sales-history/:saleId" element={<SaleHistoryDetailPage />} />

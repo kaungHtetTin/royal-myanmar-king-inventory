@@ -36,6 +36,10 @@ class Phase4TransferTest extends TestCase
         $created = $this->actingAs($admin)->postJson('/api/admin/warehouse-transfers', $this->warehousePayload($source, $destination, $product, 10))
             ->assertCreated()->assertJsonPath('data.reference', 'WTR-000001')->assertJsonPath('data.status', 'draft');
         $transferId = $created->json('data.id');
+        $this->getJson("/api/admin/warehouse-transfers/{$transferId}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $transferId)
+            ->assertJsonPath('data.items.0.product.id', $product->id);
         $this->assertSame(50, WarehouseInventory::query()->where('warehouse_id', $source->id)->value('quantity'));
         $this->assertDatabaseCount('in_transit_inventories', 0);
         $this->assertDatabaseCount('stock_movements', 0);
@@ -70,6 +74,7 @@ class Phase4TransferTest extends TestCase
         $this->assertDatabaseHas('stock_movements', ['movement_type' => 'WAREHOUSE_TRANSFER_RECEIVE', 'from_location_type' => 'in_transit', 'to_location_id' => $destination->id, 'quantity' => 20]);
         $this->command("/api/admin/warehouse-transfers/{$transfer->id}/receive", 'receive-wtr')->assertOk();
         $this->assertSame(2, StockMovement::query()->count());
+
         $this->command("/api/admin/warehouse-transfers/{$transfer->id}/receive", 'receive-wtr-again')->assertConflict()->assertJsonPath('code', 'INVALID_DOCUMENT_STATE');
     }
 
@@ -174,12 +179,21 @@ class Phase4TransferTest extends TestCase
         $this->actingAs($otherUser);
         $this->command("/api/sales/receivings/{$transfer->id}/receive", 'other-receive')->assertForbidden();
         $this->actingAs($user)->getJson('/api/sales/receivings')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.items.0.quantity', 25);
+        $this->postJson("/api/sales/receivings/{$transfer->id}/reject", ['reason' => 'Not allowed'])
+            ->assertNotFound();
         $this->command("/api/sales/receivings/{$transfer->id}/receive", 'own-receive')->assertOk()->assertJsonPath('data.status', 'received');
+        $this->getJson('/api/sales/receiving-history')->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.reference', $transfer->reference)
+            ->assertJsonPath('data.0.status', 'received');
+        $this->getJson("/api/sales/receivings/{$transfer->id}")->assertOk()
+            ->assertJsonPath('data.status', 'received');
         $this->assertSame(25, RepresentativeInventory::query()->where('sales_representative_id', $representative->id)->value('quantity'));
         $this->assertSame(0, InTransitInventory::query()->where('transfer_type', 'representative_transfer')->value('quantity'));
         $this->command("/api/sales/receivings/{$transfer->id}/receive", 'own-receive')->assertOk();
         $this->assertSame(25, RepresentativeInventory::query()->where('sales_representative_id', $representative->id)->value('quantity'));
         $this->assertSame(2, StockMovement::query()->count());
+
     }
 
     public function test_representative_stock_is_own_read_only_and_office_scoped(): void
@@ -194,7 +208,19 @@ class Phase4TransferTest extends TestCase
         $this->actingAs($user)->getJson('/api/sales/stock')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.quantity', 40);
         $viewer = $this->officeUser(PermissionName::RepresentativeStockView);
         $viewer->warehouses()->attach($warehouse, ['assigned_by' => $viewer->id]);
+        $transfer = RepresentativeTransfer::query()->create([
+            'reference' => 'RTR-DETAIL-001',
+            'source_warehouse_id' => $warehouse->id,
+            'sales_representative_id' => $representative->id,
+            'status' => 'draft',
+            'created_by' => $viewer->id,
+        ]);
+        $transfer->items()->create(['product_id' => $product->id, 'quantity' => 4]);
         $this->actingAs($viewer)->getJson('/api/admin/representative-inventory')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.representative.id', $representative->id);
+        $this->getJson("/api/admin/representative-transfers/{$transfer->id}")
+            ->assertOk()
+            ->assertJsonPath('data.reference', 'RTR-DETAIL-001')
+            ->assertJsonPath('data.items.0.quantity', 4);
         $this->getJson('/api/admin/representative-inventory?representative_id='.$foreign->id)->assertForbidden();
         $this->postJson('/api/admin/representative-transfers', $this->representativePayload($warehouse, $representative, $product, 1))->assertForbidden();
     }
@@ -245,6 +271,9 @@ class Phase4TransferTest extends TestCase
         $cancelled = $this->createRepresentativeTransfer($admin, $warehouse, $representative, $product, 10);
         $this->actingAs($admin);
         $this->command("/api/admin/representative-transfers/{$cancelled->id}/cancel", 'rep-cancel', ['reason' => 'Route allocation changed.'])->assertOk()->assertJsonPath('data.status', 'cancelled');
+        $this->getJson('/api/admin/representative-transfers')
+            ->assertOk()
+            ->assertJsonMissing(['reference' => $cancelled->reference]);
         $this->assertWarehouseQuantity($warehouse, $product, 100);
 
         $reversed = $this->createRepresentativeTransfer($admin, $warehouse, $representative, $product, 20);
@@ -265,6 +294,45 @@ class Phase4TransferTest extends TestCase
         $this->command("/api/admin/representative-transfers/{$received->id}/reverse", 'rep-received-reverse', ['reason' => 'Received batch was recalled.'])->assertOk()->assertJsonPath('data.status', 'reversed');
         $this->assertSame(0, RepresentativeInventory::query()->where('sales_representative_id', $receivedRepresentative->id)->where('product_id', $product->id)->value('quantity'));
         $this->assertWarehouseQuantity($warehouse, $product, 100);
+    }
+
+    public function test_representative_return_moves_stock_to_target_warehouse_and_can_reverse(): void
+    {
+        $admin = $this->superAdmin();
+        [$warehouse, , $product] = $this->warehouseFixture(100);
+        [$representative] = $this->representative($warehouse);
+        RepresentativeInventory::query()->create([
+            'sales_representative_id' => $representative->id,
+            'product_id' => $product->id,
+            'quantity' => 40,
+        ]);
+
+        $this->actingAs($admin)->getJson('/api/admin/representative-return-options')
+            ->assertOk()
+            ->assertJsonPath("products.0.representative_stock.{$representative->id}", 40);
+        $created = $this->postJson('/api/admin/representative-returns', [
+            'target_warehouse_id' => $warehouse->id,
+            'sales_representative_id' => $representative->id,
+            'notes' => 'Unsold stock return.',
+            'items' => [['product_id' => $product->id, 'quantity' => 15]],
+        ])->assertCreated()
+            ->assertJsonPath('data.reference', 'RRT-000001')
+            ->assertJsonPath('data.direction', 'return')
+            ->assertJsonPath('data.status', 'draft');
+        $id = $created->json('data.id');
+        $this->assertWarehouseQuantity($warehouse, $product, 100);
+        $this->assertSame(40, RepresentativeInventory::query()->where('sales_representative_id', $representative->id)->value('quantity'));
+
+        $this->command("/api/admin/representative-returns/{$id}/post", 'post-return')
+            ->assertOk()->assertJsonPath('data.status', 'received');
+        $this->assertWarehouseQuantity($warehouse, $product, 115);
+        $this->assertSame(25, RepresentativeInventory::query()->where('sales_representative_id', $representative->id)->value('quantity'));
+        $this->assertDatabaseHas('stock_movements', ['movement_type' => 'REPRESENTATIVE_RETURN', 'quantity' => 15]);
+
+        $this->command("/api/admin/representative-returns/{$id}/reverse", 'reverse-return', ['reason' => 'Return entered in error.'])
+            ->assertOk()->assertJsonPath('data.status', 'reversed');
+        $this->assertWarehouseQuantity($warehouse, $product, 100);
+        $this->assertSame(40, RepresentativeInventory::query()->where('sales_representative_id', $representative->id)->value('quantity'));
     }
 
     public function test_stock_total_reconciles_across_warehouse_representative_and_transit_locations(): void

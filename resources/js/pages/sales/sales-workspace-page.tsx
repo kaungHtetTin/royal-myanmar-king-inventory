@@ -620,24 +620,21 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                             title={`Credit available: ${selectedCustomer.credit_allowed ? 'Yes' : 'No'}`}
                                                         />
                                                     </div>
-                                                    <dl>
-                                                        <div>
-                                                            <dt>Available</dt>
-                                                            <dd>
-                                                                {selectedCustomer.credit_allowed
-                                                                    ? money(selectedCustomer.available_credit)
-                                                                    : '—'}
-                                                            </dd>
+                                                    {selectedCustomer.credit_allowed ? (
+                                                        <dl>
+                                                            <div><dt>Available</dt><dd>{money(selectedCustomer.available_credit)}</dd></div>
+                                                            <div><dt>Outstanding</dt><dd>{money(selectedCustomer.outstanding_amount)}</dd></div>
+                                                            <div><dt>Credit limit</dt><dd>{money(selectedCustomer.credit_limit)}</dd></div>
+                                                        </dl>
+                                                    ) : (
+                                                        <div className="sale-credit-status__notice" role="status">
+                                                            <Icon name="warning" size={16} />
+                                                            <span>
+                                                                <strong>Credit not allowed</strong>
+                                                                <small>This customer is configured for cash payments only.</small>
+                                                            </span>
                                                         </div>
-                                                        <div>
-                                                            <dt>Outstanding</dt>
-                                                            <dd>{money(selectedCustomer.outstanding_amount)}</dd>
-                                                        </div>
-                                                        <div>
-                                                            <dt>Credit limit</dt>
-                                                            <dd>{money(selectedCustomer.credit_limit)}</dd>
-                                                        </div>
-                                                    </dl>
+                                                    )}
                                                 </section>
                                             ) : (
                                                 <div className="sale-credit-status sale-credit-status--empty">
@@ -680,6 +677,9 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                             onChange={() => toggleProduct(product.id)}
                                                             type="checkbox"
                                                         />
+                                                        <span className="sale-product-option__check" aria-hidden="true">
+                                                            {selected ? <Icon name="check" size={13} /> : null}
+                                                        </span>
                                                         <span className="sale-product-option__icon">
                                                             <Icon name="box" size={17} />
                                                         </span>

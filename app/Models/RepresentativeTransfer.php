@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class RepresentativeTransfer extends Model
 {
-    protected $fillable = ['reference', 'source_warehouse_id', 'sales_representative_id', 'status', 'notes', 'created_by', 'dispatched_by', 'dispatched_at', 'received_by', 'received_at', 'cancelled_by', 'cancelled_at', 'cancel_reason', 'reversed_by', 'reversed_at', 'reversal_reason'];
+    protected $fillable = ['reference', 'direction', 'source_warehouse_id', 'sales_representative_id', 'status', 'notes', 'created_by', 'dispatched_by', 'dispatched_at', 'received_by', 'received_at', 'cancelled_by', 'cancelled_at', 'cancel_reason', 'reversed_by', 'reversed_at', 'reversal_reason'];
 
     protected function casts(): array
     {

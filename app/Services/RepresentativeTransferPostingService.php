@@ -28,6 +28,9 @@ class RepresentativeTransferPostingService
         return $this->idempotency->execute($actor, "representative-transfer:{$transfer->id}:dispatch", $key, function () use ($transfer, $actor, $request): array {
             $transfer = $this->locked($transfer);
             $this->requireStatus($transfer, TransferStatus::Draft);
+            if ($transfer->direction !== 'issue') {
+                throw new DomainConflictException('Representative returns must use the return posting command.', 'INVALID_DOCUMENT_DIRECTION');
+            }
             $this->assertPostable($transfer);
             $productIds = $transfer->items->pluck('product_id')->all();
             $representativeBalances = $this->representatives->lock($transfer->sales_representative_id, $productIds);
@@ -55,6 +58,9 @@ class RepresentativeTransferPostingService
         return $this->idempotency->execute($actor, "representative-transfer:{$transfer->id}:receive", $key, function () use ($transfer, $actor, $request): array {
             $transfer = $this->locked($transfer);
             $this->requireStatus($transfer, TransferStatus::Dispatched);
+            if ($transfer->direction !== 'issue') {
+                throw new DomainConflictException('Representative returns are received by the office posting command.', 'INVALID_DOCUMENT_DIRECTION');
+            }
             $productIds = $transfer->items->pluck('product_id')->all();
             $representativeBalances = $this->representatives->lock($transfer->sales_representative_id, $productIds);
             $transitBalances = $this->inTransit->lock(self::TRANSIT_TYPE, $transfer->id, $productIds);
@@ -66,6 +72,38 @@ class RepresentativeTransferPostingService
             }
             $transfer->update(['status' => TransferStatus::Received, 'received_by' => $actor->id, 'received_at' => $occurredAt]);
             $this->auditLogger->record($request, 'representative_transfer.received', $actor, $transfer, $this->metadata($transfer));
+
+            return $this->result($transfer, TransferStatus::Received);
+        });
+    }
+
+    /** @return array<string, mixed> */
+    public function postReturn(RepresentativeTransfer $transfer, User $actor, string $key, Request $request): array
+    {
+        return $this->idempotency->execute($actor, "representative-return:{$transfer->id}:post", $key, function () use ($transfer, $actor, $request): array {
+            $transfer = $this->locked($transfer);
+            $this->requireStatus($transfer, TransferStatus::Draft);
+            if ($transfer->direction !== 'return') {
+                throw new DomainConflictException('Only representative return documents support this command.', 'INVALID_DOCUMENT_DIRECTION');
+            }
+            $this->assertPostable($transfer);
+            $productIds = $transfer->items->pluck('product_id')->all();
+            $representativeBalances = $this->representatives->lock($transfer->sales_representative_id, $productIds);
+            $warehouseBalances = $this->warehouses->lock($transfer->source_warehouse_id, $productIds);
+            $occurredAt = now();
+            foreach ($transfer->items as $item) {
+                $this->representatives->decrease($representativeBalances->get($item->product_id), $item->quantity);
+                $this->warehouses->increase($warehouseBalances->get($item->product_id), $item->quantity);
+                $this->movement($transfer, $item->product_id, $item->quantity, StockMovementType::RepresentativeReturn, 'representative', $transfer->sales_representative_id, 'warehouse', $transfer->source_warehouse_id, $actor, $occurredAt);
+            }
+            $transfer->update([
+                'status' => TransferStatus::Received,
+                'dispatched_by' => $actor->id,
+                'dispatched_at' => $occurredAt,
+                'received_by' => $actor->id,
+                'received_at' => $occurredAt,
+            ]);
+            $this->auditLogger->record($request, 'representative_return.posted', $actor, $transfer, $this->metadata($transfer));
 
             return $this->result($transfer, TransferStatus::Received);
         });
@@ -96,7 +134,14 @@ class RepresentativeTransferPostingService
             $representativeBalances = $this->representatives->lock($transfer->sales_representative_id, $productIds);
             $warehouseBalances = $this->warehouses->lock($transfer->source_warehouse_id, $productIds);
             $occurredAt = now();
-            if ($transfer->status === TransferStatus::Dispatched) {
+            if ($transfer->direction === 'return') {
+                foreach ($transfer->items as $item) {
+                    $this->representatives->assertIncomingAllowed($transfer->sales_representative_id, $representativeBalances->get($item->product_id), $item->quantity);
+                    $this->warehouses->decrease($warehouseBalances->get($item->product_id), $item->quantity);
+                    $this->representatives->increase($representativeBalances->get($item->product_id), $item->quantity);
+                    $this->movement($transfer, $item->product_id, $item->quantity, StockMovementType::ReversalIn, 'warehouse', $transfer->source_warehouse_id, 'representative', $transfer->sales_representative_id, $actor, $occurredAt, $reason);
+                }
+            } elseif ($transfer->status === TransferStatus::Dispatched) {
                 $transitBalances = $this->inTransit->lock(self::TRANSIT_TYPE, $transfer->id, $productIds);
                 foreach ($transfer->items as $item) {
                     $this->inTransit->decrease($transitBalances->get($item->product_id), $item->quantity);
@@ -147,7 +192,7 @@ class RepresentativeTransferPostingService
     /** @return array<string, mixed> */
     private function metadata(RepresentativeTransfer $transfer): array
     {
-        return ['reference' => $transfer->reference, 'source_warehouse_id' => $transfer->source_warehouse_id, 'sales_representative_id' => $transfer->sales_representative_id, 'items' => $transfer->items->map->only(['product_id', 'quantity'])->all()];
+        return ['reference' => $transfer->reference, 'direction' => $transfer->direction, 'source_warehouse_id' => $transfer->source_warehouse_id, 'sales_representative_id' => $transfer->sales_representative_id, 'items' => $transfer->items->map->only(['product_id', 'quantity'])->all()];
     }
 
     /** @return array<string, mixed> */

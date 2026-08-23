@@ -7,6 +7,8 @@ export type ProductOption = {
     sku: string;
     name: string;
     unit: string;
+    warehouse_stock?: Record<string, number>;
+    representative_stock?: Record<string, number>;
 };
 export type RepresentativeOption = {
     id: number;
@@ -47,6 +49,7 @@ export type WarehouseTransfer = {
 export type RepresentativeTransfer = {
     id: number;
     reference: string;
+    direction: 'issue' | 'return';
     source_warehouse: WarehouseOption;
     representative: RepresentativeOption;
     status: TransferStatus;
@@ -93,6 +96,12 @@ export type WarehouseTransferInput = {
 };
 export type RepresentativeTransferInput = {
     source_warehouse_id: number;
+    sales_representative_id: number;
+    notes: string;
+    items: { product_id: number; quantity: number }[];
+};
+export type RepresentativeReturnInput = {
+    target_warehouse_id: number;
     sales_representative_id: number;
     notes: string;
     items: { product_id: number; quantity: number }[];
@@ -149,18 +158,30 @@ export const transferApi = {
         request<WarehouseTransferOptions>(() => window.axios.get('api/admin/warehouse-transfer-options')),
     representativeOptions: () =>
         request<RepresentativeTransferOptions>(() => window.axios.get('api/admin/representative-transfer-options')),
+    representativeReturnOptions: () =>
+        request<RepresentativeTransferOptions>(() => window.axios.get('api/admin/representative-return-options')),
     warehouseTransfers: (filters: TransferFilters) =>
         request<{ data: WarehouseTransfer[]; meta: PaginationMeta; summary: TransferSummary }>(() =>
             window.axios.get('api/admin/warehouse-transfers', {
                 params: pages(filters),
             }),
         ),
+    warehouseTransfer: (id: number) =>
+        request<{ data: WarehouseTransfer }>(() => window.axios.get(`api/admin/warehouse-transfers/${id}`)),
     representativeTransfers: (filters: TransferFilters) =>
         request<{ data: RepresentativeTransfer[]; meta: PaginationMeta; summary: TransferSummary }>(() =>
             window.axios.get('api/admin/representative-transfers', {
                 params: pages(filters),
             }),
         ),
+    representativeTransfer: (id: number) =>
+        request<{ data: RepresentativeTransfer }>(() => window.axios.get(`api/admin/representative-transfers/${id}`)),
+    representativeReturns: (filters: TransferFilters) =>
+        request<{ data: RepresentativeTransfer[]; meta: PaginationMeta; summary: TransferSummary }>(() =>
+            window.axios.get('api/admin/representative-returns', { params: pages(filters) }),
+        ),
+    representativeReturn: (id: number) =>
+        request<{ data: RepresentativeTransfer }>(() => window.axios.get(`api/admin/representative-returns/${id}`)),
     representativeInventory: (filters: TransferFilters) =>
         request<{ data: RepresentativeInventory[]; meta: PaginationMeta; summary: TransferSummary }>(() =>
             window.axios.get('api/admin/representative-inventory', {
@@ -197,6 +218,20 @@ export const transferApi = {
                 { headers: headers() },
             ),
         ),
+    createRepresentativeReturn: (input: RepresentativeReturnInput) =>
+        request<{ data: RepresentativeTransfer }>(() => window.axios.post('api/admin/representative-returns', input)),
+    updateRepresentativeReturn: (id: number, input: RepresentativeReturnInput) =>
+        request<{ data: RepresentativeTransfer }>(() =>
+            window.axios.put(`api/admin/representative-returns/${id}`, input),
+        ),
+    representativeReturnCommand: (id: number, command: 'post') =>
+        request<{ data: RepresentativeTransfer }>(() =>
+            window.axios.post(`api/admin/representative-returns/${id}/${command}`, {}, { headers: headers() }),
+        ),
+    representativeReturnReasonCommand: (id: number, command: 'cancel' | 'reverse', reason: string) =>
+        request<{ data: RepresentativeTransfer }>(() =>
+            window.axios.post(`api/admin/representative-returns/${id}/${command}`, { reason }, { headers: headers() }),
+        ),
     ownStock: (page = 1) =>
         request<{
             data: RepresentativeInventory[];
@@ -207,6 +242,12 @@ export const transferApi = {
         request<{ data: RepresentativeTransfer[]; meta: PaginationMeta }>(() =>
             window.axios.get('api/sales/receivings', { params: { page, per_page: 10 } }),
         ),
+    ownReceivingHistory: (page = 1) =>
+        request<{ data: RepresentativeTransfer[]; meta: PaginationMeta }>(() =>
+            window.axios.get('api/sales/receiving-history', { params: { page, per_page: 10 } }),
+        ),
+    ownReceiving: (id: number) =>
+        request<{ data: RepresentativeTransfer }>(() => window.axios.get(`api/sales/receivings/${id}`)),
     receiveOwn: (id: number) =>
         request<{ data: RepresentativeTransfer }>(() =>
             window.axios.post(`api/sales/receivings/${id}/receive`, {}, { headers: headers() }),

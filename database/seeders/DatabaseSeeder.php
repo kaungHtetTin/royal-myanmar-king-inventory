@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Enums\RoleName;
+use App\Models\ApplicationSetting;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -23,13 +24,15 @@ class DatabaseSeeder extends Seeder
             throw new LogicException('SUPER_ADMIN_PASSWORD must be configured before production seeding.');
         }
 
+        $this->call(AccessControlSeeder::class);
+
         $user = User::query()->firstOrNew([
-            'email' => env('SUPER_ADMIN_EMAIL', 'admin@stockflow.local'),
+            'username' => env('SUPER_ADMIN_USERNAME', 'superadmin'),
         ]);
 
         $user->fill([
             'name' => env('SUPER_ADMIN_NAME', 'Super Admin'),
-            'username' => env('SUPER_ADMIN_USERNAME', 'superadmin'),
+            'email' => env('SUPER_ADMIN_EMAIL', 'admin@stockflow.local'),
             'is_active' => true,
         ]);
 
@@ -39,18 +42,15 @@ class DatabaseSeeder extends Seeder
 
         $user->save();
 
-        $this->call(AccessControlSeeder::class);
         $user->syncRoles([RoleName::SuperAdmin->value]);
-        if (app()->isLocal()) {
-            $this->call(WarehouseSeeder::class);
-            $this->call(ProductSeeder::class);
-            $this->call(VehicleSeeder::class);
-            $this->call(CustomerSeeder::class);
-            $this->call(SalesRepresentativeSeeder::class);
-            $this->call(InventorySeeder::class);
-            $this->call(TransferSeeder::class);
-            $this->call(SaleSeeder::class);
-            $this->call(SettlementSeeder::class);
-        }
+
+        ApplicationSetting::query()->firstOrCreate([], [
+            'business_name' => 'StockFlow',
+            'primary_color' => '#087f74',
+            'currency_code' => 'MMK',
+            'timezone' => env('APP_TIMEZONE', 'Asia/Yangon'),
+            'low_stock_threshold' => 10,
+            'updated_by' => $user->id,
+        ]);
     }
 }

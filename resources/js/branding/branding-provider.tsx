@@ -57,6 +57,22 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    useEffect(() => {
+        const syncFromStorage = (event: StorageEvent) => {
+            if (event.key !== cacheKey || !event.newValue) return;
+            try {
+                const next = { ...fallbackBranding, ...(JSON.parse(event.newValue) as Branding) };
+                if (!next.business_name || !next.primary_color) return;
+                updateBranding(next);
+                applyBranding(next);
+            } catch {
+                // Ignore malformed external storage updates and retain the current brand.
+            }
+        };
+        window.addEventListener('storage', syncFromStorage);
+        return () => window.removeEventListener('storage', syncFromStorage);
+    }, []);
+
     const value = useMemo(() => ({ branding, setBranding }), [branding, setBranding]);
     return <BrandingContext.Provider value={value}>{children}</BrandingContext.Provider>;
 }

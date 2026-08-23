@@ -89,4 +89,11 @@ class SaleController extends Controller
 
         return new SaleResource($sale->fresh(['representative', 'warehouse', 'customer', 'items.product', 'creator', 'poster', 'voider']));
     }
+
+    public function show(Request $request, Sale $sale): SaleResource
+    {
+        abort_unless($this->warehouseAccess->allows($request->user(), $sale->warehouse_id), 403);
+
+        return new SaleResource($sale->load(['representative', 'warehouse', 'customer', 'items.product', 'creator', 'poster', 'voider']));
+    }
 }

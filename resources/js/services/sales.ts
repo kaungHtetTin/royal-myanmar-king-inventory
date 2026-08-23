@@ -32,6 +32,9 @@ export type Sale = {
     voided_at: string | null;
     void_reason: string | null;
     created_at: string | null;
+    created_by?: { id: number; name: string } | null;
+    posted_by?: { id: number; name: string } | null;
+    voided_by?: { id: number; name: string } | null;
 };
 export type SaleCustomerOption = {
     id: number;
@@ -126,6 +129,7 @@ export const saleApi = {
         request<{ data: Sale[]; meta: PaginationMeta; summary: SaleSummary }>(() =>
             window.axios.get('api/admin/sales', { params: pages(filters) }),
         ),
+    adminSale: (id: number) => request<{ data: Sale }>(() => window.axios.get(`api/admin/sales/${id}`)),
     void: (id: number, reason: string) =>
         request<{ data: Sale }>(() =>
             window.axios.post(`api/admin/sales/${id}/void`, { reason }, { headers: headers() }),

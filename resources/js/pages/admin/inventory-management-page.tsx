@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useSession } from '../../auth/session-context';
 import type { PaginationMeta } from '../../services/administration';
 import {
@@ -535,7 +535,14 @@ function InventoryTable({
                         {(rows as StockImport[]).map((row) => (
                             <tr key={row.id}>
                                 <td>
-                                    <strong>{row.reference}</strong>
+                                    <strong>
+                                        <Link
+                                            className="inventory-reference-link"
+                                            to={`/admin/inventory/imports/${row.id}`}
+                                        >
+                                            {row.reference}
+                                        </Link>
+                                    </strong>
                                     <small>{row.created_by.name}</small>
                                 </td>
                                 <td>

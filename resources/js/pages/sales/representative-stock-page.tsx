@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import type { PaginationMeta } from '../../services/administration';
 import { transferApi, type RepresentativeInventory, type RepresentativeTransfer } from '../../services/transfers';
 import { Icon } from '../../ui/icons';
-import { Button, EmptyState, Pagination, StatusBadge } from '../../ui/primitives';
+import { EmptyState, Pagination, StatusBadge } from '../../ui/primitives';
 
 const emptyMeta: PaginationMeta = {
     current_page: 1,
@@ -30,8 +31,6 @@ export function RepresentativeStockPage() {
     const [receivingPage, setReceivingPage] = useState(1);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [notice, setNotice] = useState('');
-    const [receiving, setReceiving] = useState<number | null>(null);
     const load = useCallback(async () => {
         setLoading(true);
         setError('');
@@ -72,26 +71,6 @@ export function RepresentativeStockPage() {
             active = false;
         };
     }, [receivingPage, stockPage]);
-    const receive = async (transfer: RepresentativeTransfer) => {
-        if (
-            !window.confirm(
-                `Confirm all ${transfer.total_quantity} units received for ${transfer.reference}? Quantities cannot be edited.`,
-            )
-        )
-            return;
-        setReceiving(transfer.id);
-        setError('');
-        try {
-            await transferApi.receiveOwn(transfer.id);
-            await load();
-            setNotice(`${transfer.reference} added to your stock.`);
-            window.setTimeout(() => setNotice(''), 4000);
-        } catch (requestError) {
-            setError(message(requestError));
-        } finally {
-            setReceiving(null);
-        }
-    };
     return (
         <div className="sales-stock-page">
             <header className="sales-page-heading">
@@ -121,12 +100,6 @@ export function RepresentativeStockPage() {
                     <p>Units awaiting confirmation</p>
                 </article>
             </section>
-            {notice ? (
-                <div className="ui-flash ui-flash--success">
-                    <Icon name="box" size={15} />
-                    {notice}
-                </div>
-            ) : null}
             {error ? (
                 <div className="ui-flash ui-flash--danger">
                     <Icon name="x" size={15} />
@@ -140,7 +113,10 @@ export function RepresentativeStockPage() {
                         <p className="ui-eyebrow">Receiving</p>
                         <h2>Pending stock</h2>
                     </div>
-                    <StatusBadge tone="warning">{pendingMeta.total} transfers</StatusBadge>
+                    <div className="sales-section-header-actions">
+                        <StatusBadge tone="warning">{pendingMeta.total} transfers</StatusBadge>
+                        <Link to="/sales/stock-issue-history">View history</Link>
+                    </div>
                 </header>
                 {loading ? (
                     <div className="ui-loading">
@@ -153,39 +129,31 @@ export function RepresentativeStockPage() {
                         title="No stock waiting"
                     />
                 ) : (
-                    pending.map((transfer) => (
-                        <article key={transfer.id}>
-                            <div className="sales-receiving__heading">
+                    <div className="sales-receiving-notifications">
+                        {pending.map((transfer) => (
+                            <Link
+                                aria-label={`View receiving details for ${transfer.reference}`}
+                                className="sales-receiving-notification"
+                                key={transfer.id}
+                                to={`/sales/receivings/${transfer.id}`}
+                            >
                                 <span className="sales-stock-list__icon">
                                     <Icon name="truck" size={17} />
                                 </span>
-                                <div>
+                                <div className="sales-receiving-notification__copy">
                                     <strong>{transfer.reference}</strong>
-                                    <small>
-                                        {transfer.source_warehouse.name} · {transfer.total_quantity} units
-                                    </small>
+                                    <small>{transfer.source_warehouse.name}</small>
+                                    <span>
+                                        {transfer.items.length} products · {number(transfer.total_quantity)} units
+                                    </span>
                                 </div>
                                 <StatusBadge tone="info">In transit</StatusBadge>
-                            </div>
-                            <div className="sales-receiving__items">
-                                {transfer.items.map((item) => (
-                                    <span key={item.product.id}>
-                                        <strong>{item.product.name}</strong>
-                                        <small>{item.product.sku}</small>
-                                        <b>{item.quantity}</b>
-                                    </span>
-                                ))}
-                            </div>
-                            <Button
-                                disabled={receiving === transfer.id}
-                                onClick={() => void receive(transfer)}
-                                requiresOnline
-                                tone="primary"
-                            >
-                                {receiving === transfer.id ? 'Receiving…' : 'Confirm all received'}
-                            </Button>
-                        </article>
-                    ))
+                                <span className="sales-receiving-notification__chevron" aria-hidden="true">
+                                    <Icon name="chevronRight" size={16} />
+                                </span>
+                            </Link>
+                        ))}
+                    </div>
                 )}
                 <Pagination
                     label="Pending stock"

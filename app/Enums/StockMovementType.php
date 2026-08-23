@@ -13,6 +13,7 @@ enum StockMovementType: string
     case WarehouseTransferReceive = 'WAREHOUSE_TRANSFER_RECEIVE';
     case RepresentativeTransferDispatch = 'REPRESENTATIVE_TRANSFER_DISPATCH';
     case RepresentativeTransferReceive = 'REPRESENTATIVE_TRANSFER_RECEIVE';
+    case RepresentativeReturn = 'REPRESENTATIVE_RETURN';
     case SaleOut = 'SALE_OUT';
     case SaleVoidIn = 'SALE_VOID_IN';
 }

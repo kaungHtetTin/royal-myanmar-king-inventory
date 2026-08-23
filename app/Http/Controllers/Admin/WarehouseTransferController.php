@@ -81,6 +81,13 @@ class WarehouseTransferController extends Controller
         return (new WarehouseTransferResource($this->load($transfer)))->response()->setStatusCode(201);
     }
 
+    public function show(Request $request, WarehouseTransfer $warehouseTransfer): WarehouseTransferResource
+    {
+        $this->assertWarehouse($request, $warehouseTransfer->source_warehouse_id);
+
+        return new WarehouseTransferResource($this->load($warehouseTransfer));
+    }
+
     public function update(Request $request, WarehouseTransfer $warehouseTransfer): WarehouseTransferResource
     {
         $this->assertWarehouse($request, $warehouseTransfer->source_warehouse_id);

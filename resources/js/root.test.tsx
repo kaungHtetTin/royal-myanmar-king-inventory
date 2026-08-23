@@ -351,6 +351,7 @@ describe('application portals', () => {
     });
 
     it('loads transfer management and opens a warehouse transfer draft', async () => {
+        const post = vi.spyOn(axios, 'post');
         vi.spyOn(axios, 'get').mockImplementation((url) => {
             if (url === 'api/admin/warehouse-transfer-options')
                 return Promise.resolve({
@@ -450,7 +451,17 @@ describe('application portals', () => {
         expect(await screen.findByRole('heading', { name: 'Transfers' })).toBeInTheDocument();
         expect(await screen.findByText('WTR-000001')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'New warehouse transfer' }));
-        expect(screen.getByRole('dialog', { name: 'Create warehouse transfer' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Create warehouse transfer' })).toBeInTheDocument();
+        const transferForm = within(screen.getByRole('main'));
+        expect(await screen.findByRole('list', { name: 'Warehouse transfer progress' })).toBeInTheDocument();
+        expect(transferForm.queryByRole('dialog')).not.toBeInTheDocument();
+        fireEvent.click(transferForm.getByRole('button', { name: 'Continue' }));
+        fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Drinking Water 1 Litre' }));
+        fireEvent.click(transferForm.getByRole('button', { name: 'Continue' }));
+        expect(transferForm.getByLabelText('Quantity')).toHaveValue(1);
+        fireEvent.click(transferForm.getByRole('button', { name: 'Continue' }));
+        expect(transferForm.getByRole('button', { name: 'Submit transfer' })).toBeInTheDocument();
+        expect(post).not.toHaveBeenCalled();
     });
 
     it('loads representative stock and pending receiving in the sales app', async () => {
@@ -554,7 +565,10 @@ describe('application portals', () => {
         );
         expect(await screen.findByRole('heading', { name: 'My stock' })).toBeInTheDocument();
         expect(await screen.findByText('RTR-000002')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Confirm all received' })).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'View receiving details for RTR-000002' })).toHaveAttribute(
+            'href',
+            '/sales/receivings/1',
+        );
         fireEvent.click(within(screen.getByRole('navigation', { name: 'Pending stock pagination' })).getByText('Next'));
         await waitFor(() =>
             expect(get).toHaveBeenCalledWith('api/sales/receivings', { params: { page: 2, per_page: 10 } }),
@@ -647,6 +661,9 @@ describe('application portals', () => {
         fireEvent.change(customerSearch, { target: { value: 'Cash Corner' } });
         fireEvent.click(screen.getByRole('option', { name: /Cash Corner/ }));
         expect(screen.getByRole('img', { name: 'Credit available: No' })).toBeInTheDocument();
+        expect(screen.getByText('Credit not allowed')).toBeInTheDocument();
+        expect(screen.getByText('This customer is configured for cash payments only.')).toBeInTheDocument();
+        expect(screen.queryByText('Credit limit')).not.toBeInTheDocument();
 
         fireEvent.change(customerSearch, { target: { value: 'ABC Shop' } });
         fireEvent.click(screen.getByRole('option', { name: /ABC Shop/ }));

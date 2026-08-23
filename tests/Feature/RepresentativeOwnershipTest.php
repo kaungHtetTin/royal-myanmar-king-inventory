@@ -10,6 +10,7 @@ use App\Models\Warehouse;
 use App\Services\RepresentativeAccess;
 use Database\Seeders\AccessControlSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class RepresentativeOwnershipTest extends TestCase
@@ -34,6 +35,44 @@ class RepresentativeOwnershipTest extends TestCase
 
         $this->getJson('/api/sales/representatives/'.$first->id)->assertOk();
         $this->getJson('/api/sales/representatives/'.$second->id)->assertForbidden();
+    }
+
+    public function test_representative_can_update_own_profile_and_password(): void
+    {
+        $warehouse = $this->warehouse('YGN', 'Yangon');
+        [$user, $representative] = $this->representative('SR-001', $warehouse);
+        $user->update(['password' => 'old-password']);
+
+        $this->actingAs($user)->putJson('/api/sales/profile', [
+            'name' => 'Updated Representative',
+            'username' => 'updated.rep',
+            'email' => 'updated@example.com',
+            'phone' => '0912345678',
+            'region' => 'Yangon East',
+        ])->assertOk()
+            ->assertJsonPath('user.username', 'updated.rep')
+            ->assertJsonPath('representative.phone', '0912345678');
+
+        $this->assertDatabaseHas('users', ['id' => $user->id, 'name' => 'Updated Representative']);
+        $this->assertDatabaseHas('sales_representatives', [
+            'id' => $representative->id,
+            'name' => 'Updated Representative',
+            'region' => 'Yangon East',
+        ]);
+        $this->putJson('/api/sales/profile/password', [
+            'current_password' => 'wrong-password',
+            'password' => 'new-password',
+            'password_confirmation' => 'new-password',
+        ])->assertUnprocessable()->assertJsonValidationErrors('current_password');
+        $this->putJson('/api/sales/profile/password', [
+            'current_password' => 'old-password',
+            'password' => 'new-password',
+            'password_confirmation' => 'new-password',
+        ])->assertOk();
+
+        $this->assertTrue(Hash::check('new-password', $user->fresh()->password));
+        $this->assertDatabaseHas('audit_logs', ['event' => 'sales.profile_updated', 'actor_id' => $user->id]);
+        $this->assertDatabaseHas('audit_logs', ['event' => 'sales.password_updated', 'actor_id' => $user->id]);
     }
 
     public function test_office_admin_can_only_read_representatives_in_assigned_warehouses(): void

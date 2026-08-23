@@ -59,6 +59,22 @@ class CustomerManagementTest extends TestCase
         $this->getJson('/api/admin/customers?warehouse_id='.$foreign->id)->assertForbidden();
     }
 
+    public function test_customer_detail_is_available_only_inside_the_viewers_warehouse_scope(): void
+    {
+        $viewer = $this->officeUser(PermissionName::CustomerView);
+        $assigned = Warehouse::factory()->create(['code' => 'YGN']);
+        $foreign = Warehouse::factory()->create(['code' => 'MDY']);
+        $viewer->warehouses()->attach($assigned, ['assigned_by' => $viewer->id]);
+        $matching = Customer::factory()->create(['warehouse_id' => $assigned->id, 'code' => 'CUS-YGN']);
+        $outsideScope = Customer::factory()->create(['warehouse_id' => $foreign->id, 'code' => 'CUS-MDY']);
+
+        $this->actingAs($viewer)->getJson('/api/admin/customers/'.$matching->id)
+            ->assertOk()
+            ->assertJsonPath('data.id', $matching->id)
+            ->assertJsonPath('data.warehouse.id', $assigned->id);
+        $this->getJson('/api/admin/customers/'.$outsideScope->id)->assertForbidden();
+    }
+
     public function test_creator_without_credit_permission_can_create_cash_only_customer_but_not_credit_customer(): void
     {
         $creator = $this->officeUser(PermissionName::CustomerCreate);

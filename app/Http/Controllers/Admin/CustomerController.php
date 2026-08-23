@@ -84,6 +84,13 @@ class CustomerController extends Controller
         ]);
     }
 
+    public function show(Customer $customer): CustomerResource
+    {
+        Gate::authorize('view', $customer);
+
+        return new CustomerResource($customer->load('warehouse:id,code,name'));
+    }
+
     public function store(Request $request): JsonResponse
     {
         Gate::authorize('create', Customer::class);

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { useSession } from '../../auth/session-context';
 import type { PaginationMeta } from '../../services/administration';
 import {
@@ -304,7 +305,9 @@ export function CustomerManagementPage() {
                                 {customers.map((customer) => (
                                     <tr key={customer.id}>
                                         <td>
-                                            <strong>{customer.name}</strong>
+                                            <Link className="table-identity-link" to={`/admin/customers/${customer.id}`}>
+                                                {customer.name}
+                                            </Link>
                                             <small>{customer.code}</small>
                                         </td>
                                         <td>
