@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\Warehouse;
 use App\Services\AuditLogger;
+use App\Services\DocumentReferenceGenerator;
 use App\Services\RepresentativeAccess;
 use App\Services\WarehouseAccess;
 use Carbon\CarbonImmutable;
@@ -31,6 +32,7 @@ class SalesRepresentativeController extends Controller
 {
     public function __construct(
         private readonly AuditLogger $auditLogger,
+        private readonly DocumentReferenceGenerator $references,
         private readonly RepresentativeAccess $representativeAccess,
         private readonly WarehouseAccess $warehouseAccess,
     ) {}
@@ -152,6 +154,7 @@ class SalesRepresentativeController extends Controller
         $this->validateScopeAndVehicle($request, $data);
 
         $representative = DB::transaction(function () use ($request, $data): SalesRepresentative {
+            $data['code'] = $this->references->next('sales_representative', 'SR');
             $user = User::query()->create([
                 'name' => $data['name'],
                 'username' => $data['username'],
@@ -224,7 +227,9 @@ class SalesRepresentativeController extends Controller
         $user = $representative?->user;
 
         return [
-            'code' => ['required', 'string', 'max:30', 'regex:/^[a-zA-Z0-9_-]+$/', Rule::unique('sales_representatives', 'code')->ignore($representative)],
+            'code' => $representative
+                ? ['required', 'string', 'max:30', 'regex:/^[a-zA-Z0-9_-]+$/', Rule::unique('sales_representatives', 'code')->ignore($representative)]
+                : ['nullable'],
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50'],
             'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user)],

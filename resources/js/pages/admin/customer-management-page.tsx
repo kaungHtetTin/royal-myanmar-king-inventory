@@ -549,22 +549,16 @@ function CustomerDialog({
                     </div>
                 ) : null}
                 <div className="form-grid">
-                    <label className="ui-field">
-                        <span>Customer code</span>
-                        <input
-                            autoFocus
-                            disabled={profileDisabled}
-                            maxLength={50}
-                            onChange={(event) => change('code', event.target.value.toUpperCase())}
-                            placeholder="CUS-ABC"
-                            required
-                            value={form.code}
-                        />
-                        <FieldError errors={errors} name="code" />
-                    </label>
+                    {customer ? (
+                        <label className="ui-field">
+                            <span>Customer code</span>
+                            <input disabled value={form.code} />
+                        </label>
+                    ) : null}
                     <label className="ui-field">
                         <span>Customer name</span>
                         <input
+                            autoFocus
                             disabled={profileDisabled}
                             maxLength={255}
                             onChange={(event) => change('name', event.target.value)}

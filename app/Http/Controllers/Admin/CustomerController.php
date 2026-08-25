@@ -9,6 +9,7 @@ use App\Models\Customer;
 use App\Models\Warehouse;
 use App\Services\AuditLogger;
 use App\Services\CustomerAccess;
+use App\Services\DocumentReferenceGenerator;
 use App\Services\WarehouseAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,6 +24,7 @@ class CustomerController extends Controller
     public function __construct(
         private readonly AuditLogger $auditLogger,
         private readonly CustomerAccess $customerAccess,
+        private readonly DocumentReferenceGenerator $references,
         private readonly WarehouseAccess $warehouseAccess,
     ) {}
 
@@ -103,11 +105,16 @@ class CustomerController extends Controller
             abort(403);
         }
 
-        $customer = Customer::query()->create($data);
-        $this->auditLogger->record($request, 'customer.created', $request->user(), $customer, ['new' => $customer->toArray()]);
-        if ($customer->credit_allowed || $customer->credit_limit > 0) {
-            $this->auditCredit($request, $customer, ['credit_allowed' => false, 'credit_limit' => 0]);
-        }
+        $customer = DB::transaction(function () use ($request, $data): Customer {
+            $data['code'] = $this->references->next('customer', 'CUS');
+            $customer = Customer::query()->create($data);
+            $this->auditLogger->record($request, 'customer.created', $request->user(), $customer, ['new' => $customer->toArray()]);
+            if ($customer->credit_allowed || $customer->credit_limit > 0) {
+                $this->auditCredit($request, $customer, ['credit_allowed' => false, 'credit_limit' => 0]);
+            }
+
+            return $customer;
+        });
 
         return (new CustomerResource($customer->load('warehouse:id,code,name')))->response()->setStatusCode(201);
     }
@@ -162,7 +169,9 @@ class CustomerController extends Controller
     {
         return [
             'warehouse_id' => ['required', 'integer', 'exists:warehouses,id'],
-            'code' => ['required', 'string', 'max:50', 'regex:/^[a-zA-Z0-9_-]+$/', Rule::unique('customers', 'code')->ignore($customer)],
+            'code' => $customer
+                ? ['required', 'string', 'max:50', 'regex:/^[a-zA-Z0-9_-]+$/', Rule::unique('customers', 'code')->ignore($customer)]
+                : ['nullable'],
             'name' => ['required', 'string', 'max:255'],
             'customer_type' => ['nullable', 'string', 'max:100'],
             'phone' => ['nullable', 'string', 'max:50'],

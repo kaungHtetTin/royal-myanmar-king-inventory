@@ -35,12 +35,26 @@ class CustomerManagementTest extends TestCase
         ]));
 
         $response->assertCreated()
-            ->assertJsonPath('data.code', 'CUS-ABC')
+            ->assertJsonPath('data.code', 'CUS-000001')
             ->assertJsonPath('data.warehouse.id', $warehouse->id)
             ->assertJsonPath('data.credit_limit', 2000000);
-        $this->assertDatabaseHas('customers', ['code' => 'CUS-ABC', 'credit_allowed' => true, 'credit_limit' => 2000000]);
+        $this->assertDatabaseHas('customers', ['code' => 'CUS-000001', 'credit_allowed' => true, 'credit_limit' => 2000000]);
         $this->assertDatabaseHas('audit_logs', ['actor_id' => $admin->id, 'event' => 'customer.created', 'subject_id' => $response->json('data.id')]);
         $this->assertDatabaseHas('audit_logs', ['actor_id' => $admin->id, 'event' => 'customer.credit_updated', 'subject_id' => $response->json('data.id')]);
+    }
+
+    public function test_customer_code_is_generated_automatically(): void
+    {
+        $admin = $this->superAdmin();
+        $warehouse = Warehouse::factory()->create();
+
+        $first = $this->actingAs($admin)->postJson('/api/admin/customers',
+            collect($this->payload($warehouse))->except('code')->all());
+        $second = $this->postJson('/api/admin/customers',
+            $this->payload($warehouse, ['code' => 'MANUAL-CODE', 'name' => 'Second Shop']));
+
+        $first->assertCreated()->assertJsonPath('data.code', 'CUS-000001');
+        $second->assertCreated()->assertJsonPath('data.code', 'CUS-000002');
     }
 
     public function test_office_viewer_only_lists_assigned_warehouse_customers_and_options(): void
@@ -131,15 +145,11 @@ class CustomerManagementTest extends TestCase
         $this->assertSame(750000, $audit->metadata['new']['credit_limit']);
     }
 
-    public function test_code_is_unique_and_credit_limit_is_whole_non_negative_mmk(): void
+    public function test_credit_limit_is_whole_non_negative_mmk(): void
     {
         $admin = $this->superAdmin();
         $warehouse = Warehouse::factory()->create();
-        Customer::factory()->create(['warehouse_id' => $warehouse->id, 'code' => 'CUS-ABC']);
-
-        $this->actingAs($admin)->postJson('/api/admin/customers', $this->payload($warehouse, ['code' => 'cus-abc']))
-            ->assertUnprocessable()->assertJsonValidationErrors('code');
-        $this->postJson('/api/admin/customers', $this->payload($warehouse, ['credit_limit' => -1]))
+        $this->actingAs($admin)->postJson('/api/admin/customers', $this->payload($warehouse, ['credit_limit' => -1]))
             ->assertUnprocessable()->assertJsonValidationErrors('credit_limit');
         $this->postJson('/api/admin/customers', $this->payload($warehouse, ['credit_limit' => 10.5]))
             ->assertUnprocessable()->assertJsonValidationErrors('credit_limit');

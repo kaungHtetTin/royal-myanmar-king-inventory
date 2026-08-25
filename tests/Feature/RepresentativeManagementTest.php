@@ -37,7 +37,7 @@ class RepresentativeManagementTest extends TestCase
         ]));
 
         $response->assertCreated()
-            ->assertJsonPath('data.code', 'SR-001')
+            ->assertJsonPath('data.code', 'SR-000001')
             ->assertJsonPath('data.account.username', 'koaung')
             ->assertJsonPath('data.account.email', null)
             ->assertJsonPath('data.primary_warehouse.id', $warehouse->id)
@@ -53,6 +53,21 @@ class RepresentativeManagementTest extends TestCase
         $this->withHeader('Origin', 'http://localhost')->postJson('/api/auth/login', [
             'login' => 'koaung', 'password' => 'password', 'portal' => 'sales', 'remember' => false,
         ])->assertOk()->assertJsonPath('user.representative_id', $representative->id);
+    }
+
+    public function test_representative_code_is_generated_automatically(): void
+    {
+        $admin = $this->superAdmin();
+        $warehouse = Warehouse::factory()->create();
+        $payload = collect($this->payload($warehouse, ['email' => null]))->except('code')->all();
+
+        $first = $this->actingAs($admin)->postJson('/api/admin/representatives', $payload);
+        $second = $this->postJson('/api/admin/representatives', array_merge($payload, [
+            'code' => 'MANUAL-CODE', 'name' => 'Second Representative', 'username' => 'second.rep',
+        ]));
+
+        $first->assertCreated()->assertJsonPath('data.code', 'SR-000001');
+        $second->assertCreated()->assertJsonPath('data.code', 'SR-000002');
     }
 
     public function test_office_viewer_lists_only_assigned_representatives_with_filters_and_scoped_options(): void
@@ -111,7 +126,7 @@ class RepresentativeManagementTest extends TestCase
         ]))->assertForbidden();
     }
 
-    public function test_code_username_email_and_vehicle_assignment_are_validated(): void
+    public function test_username_email_and_vehicle_assignment_are_validated(): void
     {
         $admin = $this->superAdmin();
         $warehouse = Warehouse::factory()->create();
@@ -119,9 +134,7 @@ class RepresentativeManagementTest extends TestCase
         $vehicle = Vehicle::factory()->create(['sales_representative_id' => $existing->id]);
         $inactiveVehicle = Vehicle::factory()->inactive()->create();
 
-        $this->actingAs($admin)->postJson('/api/admin/representatives', $this->payload($warehouse, ['code' => 'sr-001']))
-            ->assertUnprocessable()->assertJsonValidationErrors('code');
-        $this->postJson('/api/admin/representatives', $this->payload($warehouse, ['username' => 'KOAUNG']))
+        $this->actingAs($admin)->postJson('/api/admin/representatives', $this->payload($warehouse, ['username' => 'KOAUNG']))
             ->assertUnprocessable()->assertJsonValidationErrors('username');
         $this->postJson('/api/admin/representatives', $this->payload($warehouse, ['email' => 'AUNG@example.com']))
             ->assertUnprocessable()->assertJsonValidationErrors('email');

@@ -477,7 +477,7 @@ function RepresentativeDialog({
 
     return (
         <Dialog
-            description="The profile and sales login are saved together. Username and representative code must be unique."
+            description="The profile and sales login are saved together. The representative code is generated automatically."
             footer={
                 <>
                     <Button disabled={saving} onClick={onClose}>
@@ -505,21 +505,16 @@ function RepresentativeDialog({
                     </div>
                 ) : null}
                 <div className="form-grid">
-                    <label className="ui-field">
-                        <span>Representative code</span>
-                        <input
-                            autoFocus
-                            maxLength={30}
-                            onChange={(event) => change('code', event.target.value.toUpperCase())}
-                            placeholder="SR-001"
-                            required
-                            value={form.code}
-                        />
-                        <FieldError errors={errors} name="code" />
-                    </label>
+                    {representative ? (
+                        <label className="ui-field">
+                            <span>Representative code</span>
+                            <input disabled value={form.code} />
+                        </label>
+                    ) : null}
                     <label className="ui-field">
                         <span>Full name</span>
                         <input
+                            autoFocus
                             maxLength={255}
                             onChange={(event) => change('name', event.target.value)}
                             required
