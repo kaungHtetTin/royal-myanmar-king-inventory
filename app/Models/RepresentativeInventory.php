@@ -7,11 +7,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class RepresentativeInventory extends Model
 {
-    protected $fillable = ['sales_representative_id', 'product_id', 'quantity'];
+    protected $fillable = ['sales_representative_id', 'product_id', 'quantity', 'foc_quantity'];
 
     protected function casts(): array
     {
-        return ['quantity' => 'integer'];
+        return ['quantity' => 'integer', 'foc_quantity' => 'integer'];
     }
 
     public function representative(): BelongsTo

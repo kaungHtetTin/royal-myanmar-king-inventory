@@ -9,6 +9,14 @@ export type ProductOption = {
     unit: string;
     warehouse_stock?: Record<string, number>;
     representative_stock?: Record<string, number>;
+    representative_foc_stock?: Record<string, number>;
+    units?: Array<{
+        id: number;
+        name: string;
+        conversion_factor: number;
+        is_base: boolean;
+        is_default_selling: boolean;
+    }>;
 };
 export type RepresentativeOption = {
     id: number;
@@ -21,6 +29,11 @@ export type TransferItem = {
     product: ProductOption;
     quantity: number;
     in_transit_quantity: number;
+    unit?: { id: number; name: string; conversion_factor: number } | null;
+    base_quantity?: number;
+    foc_unit?: { id: number; name: string; conversion_factor: number } | null;
+    foc_quantity?: number;
+    foc_base_quantity?: number;
 };
 export type TransferActor = { id: number; name: string } | null;
 export type TransferStatus = 'draft' | 'dispatched' | 'received' | 'cancelled' | 'reversed';
@@ -75,7 +88,7 @@ export type RepresentativeInventory = {
     product: ProductOption;
     quantity: number;
     pending_quantity: number;
-    capacity_remaining: number;
+    foc_quantity: number;
     updated_at: string | null;
 };
 export type WarehouseTransferOptions = {
@@ -92,19 +105,37 @@ export type WarehouseTransferInput = {
     source_warehouse_id: number;
     destination_warehouse_id: number;
     notes: string;
-    items: { product_id: number; quantity: number }[];
+    items: {
+        product_id: number;
+        product_unit_id?: number;
+        quantity: number;
+        foc_product_unit_id?: number;
+        foc_quantity?: number;
+    }[];
 };
 export type RepresentativeTransferInput = {
     source_warehouse_id: number;
     sales_representative_id: number;
     notes: string;
-    items: { product_id: number; quantity: number }[];
+    items: {
+        product_id: number;
+        product_unit_id?: number;
+        quantity: number;
+        foc_product_unit_id?: number;
+        foc_quantity?: number;
+    }[];
 };
 export type RepresentativeReturnInput = {
     target_warehouse_id: number;
     sales_representative_id: number;
     notes: string;
-    items: { product_id: number; quantity: number }[];
+    items: {
+        product_id: number;
+        product_unit_id?: number;
+        quantity: number;
+        foc_product_unit_id?: number;
+        foc_quantity?: number;
+    }[];
 };
 export type TransferFilters = {
     page?: number;

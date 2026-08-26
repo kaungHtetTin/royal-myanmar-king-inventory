@@ -66,10 +66,13 @@ class CustomerManagementTest extends TestCase
         $matching = Customer::factory()->withCredit()->create(['warehouse_id' => $assigned->id, 'code' => 'CUS-YGN', 'name' => 'Yangon Shop', 'customer_type' => 'Shop']);
         Customer::factory()->create(['warehouse_id' => $foreign->id, 'code' => 'CUS-MDY', 'name' => 'Mandalay Shop']);
 
-        $this->actingAs($viewer)->getJson('/api/admin/customers?search=Yangon&status=active&type=Shop&credit=allowed&warehouse_id='.$assigned->id.'&sort=code&direction=desc')
+        $matching->refresh();
+        $this->actingAs($viewer)->getJson('/api/admin/customers?warehouse_id='.$assigned->id.'&region_id='.$matching->way->region_id.'&way_id='.$matching->way_id)
             ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $matching->id)->assertJsonPath('meta.total', 1);
         $this->getJson('/api/admin/customer-options')->assertOk()
-            ->assertJsonCount(1, 'warehouses')->assertJsonPath('warehouses.0.id', $assigned->id)->assertJsonPath('types.0', 'Shop');
+            ->assertJsonCount(1, 'warehouses')->assertJsonPath('warehouses.0.id', $assigned->id)
+            ->assertJsonPath('regions.0.id', $matching->way->region_id)
+            ->assertJsonPath('ways.0.id', $matching->way_id);
         $this->getJson('/api/admin/customers?warehouse_id='.$foreign->id)->assertForbidden();
     }
 

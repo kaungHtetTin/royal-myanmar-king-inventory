@@ -131,25 +131,24 @@ class Phase4TransferTest extends TestCase
         $this->command("/api/admin/warehouse-transfers/{$transfer->id}/receive", 'scoped-receive')->assertOk();
     }
 
-    public function test_representative_limit_accepts_80_plus_20_and_rejects_80_plus_30(): void
+    public function test_representative_inventory_has_no_artificial_per_product_capacity_limit(): void
     {
         $admin = $this->superAdmin();
         [$warehouse, , $product] = $this->warehouseFixture(250);
         [$representative] = $this->representative($warehouse);
         RepresentativeInventory::query()->create(['sales_representative_id' => $representative->id, 'product_id' => $product->id, 'quantity' => 80]);
 
-        $rejected = $this->createRepresentativeTransfer($admin, $warehouse, $representative, $product, 30);
+        $first = $this->createRepresentativeTransfer($admin, $warehouse, $representative, $product, 30);
         $this->actingAs($admin);
-        $this->command("/api/admin/representative-transfers/{$rejected->id}/dispatch", 'limit-110')
-            ->assertConflict()->assertJsonPath('code', 'REPRESENTATIVE_STOCK_LIMIT_EXCEEDED')->assertJsonPath('details.projected', 110);
-        $accepted = $this->createRepresentativeTransfer($admin, $warehouse, $representative, $product, 20);
-        $this->command("/api/admin/representative-transfers/{$accepted->id}/dispatch", 'limit-100')->assertOk()->assertJsonPath('data.status', 'dispatched');
-        $this->assertWarehouseQuantity($warehouse, $product, 230);
+        $this->command("/api/admin/representative-transfers/{$first->id}/dispatch", 'unlimited-110')->assertOk();
+        $second = $this->createRepresentativeTransfer($admin, $warehouse, $representative, $product, 20);
+        $this->command("/api/admin/representative-transfers/{$second->id}/dispatch", 'unlimited-130')->assertOk()->assertJsonPath('data.status', 'dispatched');
+        $this->assertWarehouseQuantity($warehouse, $product, 200);
         $this->assertSame(80, RepresentativeInventory::query()->sole()->quantity);
-        $this->assertSame(20, InTransitInventory::query()->where('transfer_type', 'representative_transfer')->sum('quantity'));
+        $this->assertSame(50, InTransitInventory::query()->where('transfer_type', 'representative_transfer')->sum('quantity'));
     }
 
-    public function test_pending_transit_counts_toward_representative_limit(): void
+    public function test_multiple_pending_transfers_are_allowed_when_warehouse_stock_is_available(): void
     {
         $admin = $this->superAdmin();
         [$warehouse, , $product] = $this->warehouseFixture(250);
@@ -160,8 +159,8 @@ class Phase4TransferTest extends TestCase
         $this->command("/api/admin/representative-transfers/{$pending->id}/dispatch", 'pending-30')->assertOk();
         $new = $this->createRepresentativeTransfer($admin, $warehouse, $representative, $product, 20);
         $this->command("/api/admin/representative-transfers/{$new->id}/dispatch", 'pending-over-limit')
-            ->assertConflict()->assertJsonPath('details.current', 60)->assertJsonPath('details.pending', 30)->assertJsonPath('details.projected', 110);
-        $this->assertDatabaseHas('representative_transfers', ['id' => $new->id, 'status' => 'draft']);
+            ->assertOk();
+        $this->assertDatabaseHas('representative_transfers', ['id' => $new->id, 'status' => 'dispatched']);
     }
 
     public function test_only_linked_representative_can_receive_immutable_transfer_once(): void

@@ -6,6 +6,7 @@ use Database\Factories\SalesRepresentativeFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
@@ -29,6 +30,18 @@ class SalesRepresentative extends Model
     protected function casts(): array
     {
         return ['is_active' => 'boolean'];
+    }
+
+    protected static function booted(): void
+    {
+        static::created(function (SalesRepresentative $representative): void {
+            $region = Region::query()->where('warehouse_id', $representative->primary_warehouse_id)
+                ->when($representative->region, fn ($query, $name) => $query->where('name', $name))->first()
+                ?? Region::query()->where('warehouse_id', $representative->primary_warehouse_id)->first();
+            if ($region) {
+                $representative->regions()->syncWithoutDetaching([$region->id]);
+            }
+        });
     }
 
     public function user(): BelongsTo
@@ -69,5 +82,10 @@ class SalesRepresentative extends Model
     public function cashSubmissions(): HasMany
     {
         return $this->hasMany(CashSubmission::class);
+    }
+
+    public function regions(): BelongsToMany
+    {
+        return $this->belongsToMany(Region::class)->withTimestamps();
     }
 }

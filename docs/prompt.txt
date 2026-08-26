@@ -1,0 +1,24 @@
+I want to change the system architecture of the system.
+In regional scope,
+I want  Warehouse => Region => Way ,
+
+So in Warehouse CRUD system, I want to make CRUD on new Region under warehouse and new Way under region. 
+A sale representative can be assigned upto REgion scope.
+A sale representative can sell the product under any way under a Region.
+
+Product and Price Model, 
+currently the price of a product is one fixed price. 
+in new system, The price can be different according to region scope.
+Update product CRUD system to compact with Different price Model
+Also add unit conversion feature to decompose the product to make FOC.
+In representative issue, I want to issue FOC in the same unit or decomposed unit. 
+No predefined FOC rule is required. make the system flexible.
+
+In customer CRUD,
+define the customer upto way scope from Warehouse => Region => Way
+
+Sale processing
+In sale process, we need to consider the represenative assigned region 
+to decide the product price and to filter the customer. 
+also we need a report for sale power for a Way for a representative or sale power of a way for all represenative. 
+In sale form, I also want to give FOC to customer, no prefixed rule is require, make the system flexible. 

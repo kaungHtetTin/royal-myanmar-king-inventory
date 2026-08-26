@@ -45,6 +45,40 @@ class Phase3InventoryTest extends TestCase
             ->assertJsonPath('data.0.product.id', $water->id)->assertJsonPath('data.0.quantity', 10);
     }
 
+    public function test_on_hand_csv_exports_every_matching_filtered_item(): void
+    {
+        $admin = $this->superAdmin();
+        $warehouse = Warehouse::factory()->create(['code' => 'YGN-EXPORT']);
+        foreach (range(1, 25) as $number) {
+            $product = Product::factory()->create([
+                'sku' => sprintf('EXP-%03d', $number),
+                'name' => sprintf('Export Product %03d', $number),
+                'unit' => 'piece',
+            ]);
+            WarehouseInventory::query()->create([
+                'warehouse_id' => $warehouse->id,
+                'product_id' => $product->id,
+                'quantity' => $number,
+            ]);
+        }
+        $excluded = Product::factory()->create(['sku' => 'OTHER-001', 'name' => 'Excluded Product']);
+        WarehouseInventory::query()->create([
+            'warehouse_id' => $warehouse->id,
+            'product_id' => $excluded->id,
+            'quantity' => 0,
+        ]);
+
+        $response = $this->actingAs($admin)->get('/api/admin/inventory/export?warehouse_id='.$warehouse->id.'&search=Export&stock=positive');
+
+        $response->assertOk()->assertDownload();
+        $content = $response->streamedContent();
+        $this->assertStringContainsString('SKU,Product,"Base unit","On hand","Last changed"', $content);
+        $this->assertStringContainsString('EXP-001,"Export Product 001",piece,1,', $content);
+        $this->assertStringContainsString('EXP-025,"Export Product 025",piece,25,', $content);
+        $this->assertSame(26, substr_count(trim($content), "\n") + 1);
+        $this->assertStringNotContainsString('OTHER-001', $content);
+    }
+
     public function test_draft_import_is_editable_stock_neutral_and_uses_unique_references(): void
     {
         $admin = $this->superAdmin();

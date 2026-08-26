@@ -22,7 +22,7 @@ const emptyMeta: PaginationMeta = {
     to: null,
     total: 0,
 };
-const emptyOptions: RepresentativeOptions = { vehicles: [], warehouses: [] };
+const emptyOptions: RepresentativeOptions = { vehicles: [], warehouses: [], regions: [] };
 const emptySummary: RepresentativeSummary = { active: 0, signed_in: 0, total: 0, with_vehicle: 0 };
 function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : 'Unable to complete the request.';
@@ -424,6 +424,7 @@ function RepresentativeDialog({
         phone: '',
         primary_warehouse_id: 0,
         region: '',
+        region_ids: [],
         username: '',
         vehicle_id: null,
     });
@@ -443,6 +444,7 @@ function RepresentativeDialog({
             phone: representative?.phone ?? '',
             primary_warehouse_id: representative?.primary_warehouse_id ?? options.warehouses[0]?.id ?? 0,
             region: representative?.region ?? '',
+            region_ids: representative?.region_ids ?? [],
             username: representative?.account.username ?? '',
             vehicle_id: representative?.vehicle?.id ?? null,
         });
@@ -461,8 +463,12 @@ function RepresentativeDialog({
         setSaving(true);
         setErrors({});
         try {
-            if (representative) await representativeApi.update(representative.id, form);
-            else await representativeApi.create(form);
+            const payload = {
+                ...form,
+                region: (options.regions ?? []).find((region) => form.region_ids.includes(region.id))?.name ?? '',
+            };
+            if (representative) await representativeApi.update(representative.id, payload);
+            else await representativeApi.create(payload);
             await onSaved(representative ? 'Representative updated.' : 'Representative created.');
         } catch (requestError) {
             if (requestError instanceof RepresentativeApiError) setErrors(requestError.fields);
@@ -545,12 +551,13 @@ function RepresentativeDialog({
                     </label>
                     <label className="ui-field">
                         <span>
-                            {representative ? 'New password (optional, 8 characters)' : 'Password (8 characters)'}
+                            {representative
+                                ? 'New password (optional, minimum 6 characters)'
+                                : 'Password (minimum 6 characters)'}
                         </span>
                         <input
                             autoComplete="new-password"
-                            maxLength={8}
-                            minLength={8}
+                            minLength={6}
                             onChange={(event) => change('password', event.target.value)}
                             required={!representative}
                             type="password"
@@ -562,8 +569,7 @@ function RepresentativeDialog({
                         <span>Confirm password</span>
                         <input
                             autoComplete="new-password"
-                            maxLength={8}
-                            minLength={8}
+                            minLength={6}
                             onChange={(event) => change('password_confirmation', event.target.value)}
                             required={!representative || Boolean(form.password)}
                             type="password"
@@ -573,7 +579,13 @@ function RepresentativeDialog({
                     <label className="ui-field">
                         <span>Primary warehouse</span>
                         <select
-                            onChange={(event) => change('primary_warehouse_id', Number(event.target.value))}
+                            onChange={(event) =>
+                                setForm((value) => ({
+                                    ...value,
+                                    primary_warehouse_id: Number(event.target.value),
+                                    region_ids: [],
+                                }))
+                            }
                             required
                             value={form.primary_warehouse_id}
                         >
@@ -588,15 +600,35 @@ function RepresentativeDialog({
                         </select>
                         <FieldError errors={errors} name="primary_warehouse_id" />
                     </label>
-                    <label className="ui-field">
-                        <span>Operating region</span>
-                        <input
-                            maxLength={100}
-                            onChange={(event) => change('region', event.target.value)}
-                            value={form.region}
-                        />
-                        <FieldError errors={errors} name="region" />
-                    </label>
+                    <fieldset className="region-assignment form-grid__wide">
+                        <legend>Assigned regions</legend>
+                        <small>The representative may sell to every Way within the selected regions.</small>
+                        <div className="region-assignment__grid">
+                            {(options.regions ?? [])
+                                .filter((region) => region.warehouse_id === form.primary_warehouse_id)
+                                .map((region) => (
+                                    <label className="ui-check" key={region.id}>
+                                        <input
+                                            checked={form.region_ids.includes(region.id)}
+                                            onChange={(event) =>
+                                                setForm((value) => ({
+                                                    ...value,
+                                                    region_ids: event.target.checked
+                                                        ? [...value.region_ids, region.id]
+                                                        : value.region_ids.filter((id) => id !== region.id),
+                                                }))
+                                            }
+                                            type="checkbox"
+                                        />
+                                        <span>
+                                            <strong>{region.name}</strong>
+                                            <small>{region.warehouse.code}</small>
+                                        </span>
+                                    </label>
+                                ))}
+                        </div>
+                        <FieldError errors={errors} name="region_ids" />
+                    </fieldset>
                     <label className="ui-field">
                         <span>Phone</span>
                         <input

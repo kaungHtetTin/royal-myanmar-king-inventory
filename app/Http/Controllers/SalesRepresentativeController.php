@@ -18,7 +18,7 @@ class SalesRepresentativeController extends Controller
 
     public function current(Request $request): JsonResponse
     {
-        $representative = $request->user()->salesRepresentative()->with('primaryWarehouse:id,code,name')->firstOrFail();
+        $representative = $request->user()->salesRepresentative()->with(['primaryWarehouse:id,code,name', 'regions.ways'])->firstOrFail();
         Gate::authorize('view', $representative);
 
         return response()->json(['representative' => $this->payload($representative)]);
@@ -34,7 +34,6 @@ class SalesRepresentativeController extends Controller
             'username' => ['required', 'string', 'max:100', 'regex:/^[a-zA-Z0-9._-]+$/', Rule::unique('users')->ignore($user)],
             'email' => ['nullable', 'email', 'max:255', Rule::unique('users')->ignore($user)],
             'phone' => ['nullable', 'string', 'max:50'],
-            'region' => ['nullable', 'string', 'max:100'],
         ]);
         $old = [
             'user' => $user->only(['name', 'username', 'email']),
@@ -51,19 +50,18 @@ class SalesRepresentativeController extends Controller
                 'name' => $data['name'],
                 'email' => $data['email'] ?? null,
                 'phone' => $data['phone'] ?? null,
-                'region' => $data['region'] ?? null,
             ]);
         });
         $this->auditLogger->record($request, 'sales.profile_updated', $user, $representative, [
             'old' => $old,
             'new' => [
                 'user' => $user->only(['name', 'username', 'email']),
-                'representative' => $representative->only(['name', 'email', 'phone', 'region']),
+                'representative' => $representative->only(['name', 'email', 'phone']),
             ],
         ]);
 
         return response()->json([
-            'representative' => $this->payload($representative->fresh('primaryWarehouse:id,code,name')),
+            'representative' => $this->payload($representative->fresh(['primaryWarehouse:id,code,name', 'regions.ways'])),
             'user' => $user->only(['id', 'name', 'username', 'email']),
         ]);
     }
@@ -74,8 +72,8 @@ class SalesRepresentativeController extends Controller
         $representative = $user->salesRepresentative()->firstOrFail();
         Gate::authorize('view', $representative);
         $data = $request->validate([
-            'current_password' => ['required', 'string'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'current_password' => ['required', 'string', 'min:6'],
+            'password' => ['required', 'string', 'min:6', 'confirmed'],
         ]);
         if (! Hash::check($data['current_password'], $user->password)) {
             throw ValidationException::withMessages(['current_password' => ['The current password is incorrect.']]);
@@ -89,7 +87,7 @@ class SalesRepresentativeController extends Controller
     public function show(SalesRepresentative $salesRepresentative): JsonResponse
     {
         Gate::authorize('view', $salesRepresentative);
-        $salesRepresentative->loadMissing('primaryWarehouse:id,code,name');
+        $salesRepresentative->loadMissing(['primaryWarehouse:id,code,name', 'regions.ways']);
 
         return response()->json(['representative' => $this->payload($salesRepresentative)]);
     }
@@ -106,6 +104,10 @@ class SalesRepresentativeController extends Controller
             'phone' => $representative->phone,
             'email' => $representative->email,
             'region' => $representative->region,
+            'regions' => $representative->regions->map(fn ($region) => [
+                'id' => $region->id, 'name' => $region->name,
+                'ways' => $region->ways->map->only(['id', 'code', 'name'])->values(),
+            ])->values(),
             'is_active' => $representative->is_active,
             'primary_warehouse' => $representative->primaryWarehouse,
             'account' => [

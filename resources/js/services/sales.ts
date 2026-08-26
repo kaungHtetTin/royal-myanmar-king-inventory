@@ -15,12 +15,27 @@ export type SaleItem = {
     quantity: number;
     unit_price: number;
     line_total: number;
+    base_quantity?: number;
+    unit?: SaleUnit | null;
+    foc_quantity?: number;
+    foc_base_quantity?: number;
+    foc_unit?: SaleUnit | null;
+};
+export type SaleUnit = {
+    id: number;
+    name: string;
+    conversion_factor: number;
+    is_base?: boolean;
+    is_default_selling?: boolean;
+    prices?: Array<{ region_id: number; price: number }>;
 };
 export type Sale = {
     id: number;
     reference: string;
     representative: { id: number; code: string; name: string; phone?: string | null };
     warehouse: { id: number; code: string; name: string; address?: string | null; phone?: string | null };
+    region?: { id: number; name: string } | null;
+    way?: { id: number; code: string; name: string } | null;
     customer: { id: number; code: string; name: string; address?: string | null; phone?: string | null };
     payment_type: PaymentType;
     total_amount: number;
@@ -28,6 +43,7 @@ export type Sale = {
     notes: string | null;
     items: SaleItem[];
     total_quantity: number;
+    total_foc_quantity?: number;
     posted_at: string | null;
     voided_at: string | null;
     void_reason: string | null;
@@ -44,13 +60,39 @@ export type SaleCustomerOption = {
     credit_limit: number;
     outstanding_amount: number;
     available_credit: number;
+    way: { id: number; code: string; name: string; region: { id: number; name: string; warehouse_id: number } };
+};
+export type SalesCustomerInput = {
+    address: string;
+    customer_type: string;
+    name: string;
+    notes: string;
+    phone: string;
+    region: string;
+    township: string;
+    way_id: number;
+};
+export type SalesCustomer = SalesCustomerInput & {
+    code: string;
+    created_at: string | null;
+    credit_allowed: boolean;
+    credit_limit: number;
+    id: number;
+    is_active: boolean;
 };
 export type SaleProductOption = SaleProduct & {
     selling_price: number;
     quantity: number;
+    foc_quantity: number;
+    units: SaleUnit[];
 };
 export type SaleOptions = {
-    representative: { id: number; code: string; name: string };
+    representative: {
+        id: number;
+        code: string;
+        name: string;
+        regions?: Array<{ id: number; name: string; ways: Array<{ id: number; code: string; name: string }> }>;
+    };
     customers: SaleCustomerOption[];
     products: SaleProductOption[];
     cash_hold: number;
@@ -59,7 +101,13 @@ export type SaleInput = {
     customer_id: number;
     payment_type: PaymentType;
     notes: string;
-    items: { product_id: number; quantity: number }[];
+    items: {
+        product_id: number;
+        product_unit_id?: number;
+        quantity: number;
+        foc_product_unit_id?: number;
+        foc_quantity?: number;
+    }[];
 };
 export type SaleFilters = {
     date_from?: string;
@@ -114,6 +162,12 @@ const pages = (filters: SaleFilters) => ({ ...filters, per_page: 20 });
 
 export const saleApi = {
     options: () => request<SaleOptions>(() => window.axios.get('api/sales/sale-options')),
+    createCustomer: (input: SalesCustomerInput) =>
+        request<{ customer: SaleCustomerOption }>(() => window.axios.post('api/sales/customers', input)),
+    customers: (filters: { page?: number; search?: string } = {}) =>
+        request<{ data: SalesCustomer[]; meta: PaginationMeta }>(() =>
+            window.axios.get('api/sales/customers', { params: filters }),
+        ),
     ownSales: (filters: SaleFilters = {}) =>
         request<{ data: Sale[]; meta: PaginationMeta }>(() =>
             window.axios.get('api/sales/sales', { params: { ...filters, per_page: 10 } }),

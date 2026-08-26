@@ -22,7 +22,7 @@ class TransferSeeder extends Seeder
     public function run(): void
     {
         $actor = User::query()->where('username', env('SUPER_ADMIN_USERNAME', 'superadmin'))->firstOrFail();
-        $products = Product::query()->whereIn('sku', ['DW-1L', 'MW-500ML', 'DW-12PK'])->orderBy('id')->get();
+        $products = Product::query()->whereIn('sku', ['DW-1L', 'MW-500ML', 'JW-20L'])->orderBy('id')->get();
         $yangon = Warehouse::query()->where('code', 'YGN-MAIN')->firstOrFail();
         $mandalay = Warehouse::query()->where('code', 'MDY-MAIN')->firstOrFail();
         $request = $this->request($actor);
@@ -41,7 +41,12 @@ class TransferSeeder extends Seeder
                 'created_by' => $actor->id,
             ]);
             foreach ($products as $index => $product) {
-                $transfer->items()->create(['product_id' => $product->id, 'quantity' => [24, 18, 6][$index]]);
+                $unit = $product->defaultSellingUnit()->firstOrFail();
+                $quantity = [5, 3, 6][$index];
+                $transfer->items()->create([
+                    'product_id' => $product->id,
+                    'quantity' => $quantity * $unit->conversion_factor,
+                ]);
             }
 
             return $transfer;
@@ -55,7 +60,7 @@ class TransferSeeder extends Seeder
         }
 
         $koAung = SalesRepresentative::query()->where('code', 'SR-001')->firstOrFail();
-        $received = $this->representativeTransfer($actor, $products, $yangon, $koAung, 'Local demo received representative transfer.', [30, 20, 10]);
+        $received = $this->representativeTransfer($actor, $products, $yangon, $koAung, 'Local demo received representative transfer.', [10, 4, 10]);
         if ($received->status === TransferStatus::Draft) {
             app(RepresentativeTransferPostingService::class)->dispatch($received, $actor, 'local-demo-rtr-received-dispatch', $request);
             $received->refresh();
@@ -65,7 +70,7 @@ class TransferSeeder extends Seeder
         }
 
         $maSu = SalesRepresentative::query()->where('code', 'SR-002')->firstOrFail();
-        $pending = $this->representativeTransfer($actor, $products, $mandalay, $maSu, 'Local demo pending representative transfer.', [10, 8, 4]);
+        $pending = $this->representativeTransfer($actor, $products, $mandalay, $maSu, 'Local demo pending representative transfer.', [2, 1, 2]);
         if ($pending->status === TransferStatus::Draft) {
             app(RepresentativeTransferPostingService::class)->dispatch($pending, $actor, 'local-demo-rtr-pending-dispatch', $request);
         }
@@ -90,7 +95,8 @@ class TransferSeeder extends Seeder
                 'created_by' => $actor->id,
             ]);
             foreach ($products as $index => $product) {
-                $transfer->items()->create(['product_id' => $product->id, 'quantity' => $quantities[$index]]);
+                $unit = $product->defaultSellingUnit()->firstOrFail();
+                $transfer->items()->create(['product_id' => $product->id, 'product_unit_id' => $unit->id, 'quantity' => $quantities[$index], 'base_quantity' => $quantities[$index] * $unit->conversion_factor]);
             }
 
             return $transfer;

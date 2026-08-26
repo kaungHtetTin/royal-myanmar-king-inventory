@@ -17,6 +17,10 @@ class SalesRepresentativeResource extends JsonResource
             'phone' => $this->phone,
             'email' => $this->email,
             'region' => $this->region,
+            'regions' => $this->whenLoaded('regions', fn () => $this->regions->map(fn ($region) => [
+                'id' => $region->id, 'warehouse_id' => $region->warehouse_id, 'name' => $region->name,
+            ])->values()),
+            'region_ids' => $this->whenLoaded('regions', fn () => $this->regions->pluck('id')->values()),
             'notes' => $this->notes,
             'is_active' => $this->is_active,
             'primary_warehouse_id' => $this->primary_warehouse_id,

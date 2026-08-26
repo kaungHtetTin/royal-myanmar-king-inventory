@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useSession } from '../../auth/session-context';
 import type { PaginationMeta } from '../../services/administration';
 import {
@@ -11,7 +12,8 @@ import {
     type ProductSummary,
 } from '../../services/products';
 import { Icon } from '../../ui/icons';
-import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
+import { editableNumber } from '../../ui/form-values';
+import { Button, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
 
 const emptyMeta: PaginationMeta = {
     current_page: 1,
@@ -21,7 +23,7 @@ const emptyMeta: PaginationMeta = {
     to: null,
     total: 0,
 };
-const emptyOptions: ProductOptions = { categories: [], units: [] };
+const emptyOptions: ProductOptions = { categories: [], units: [], regions: [] };
 const emptySummary: ProductSummary = { active: 0, categories: 0, inactive: 0, total: 0 };
 
 function errorMessage(error: unknown) {
@@ -41,6 +43,8 @@ function money(value: number) {
 }
 
 export function ProductManagementPage() {
+    const navigate = useNavigate();
+    const location = useLocation();
     const { user } = useSession();
     const isSuperAdmin = user?.roles.includes('super-admin');
     const canCreate = Boolean(isSuperAdmin || user?.permissions.includes('product.create'));
@@ -51,9 +55,6 @@ export function ProductManagementPage() {
     const [summary, setSummary] = useState(emptySummary);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [notice, setNotice] = useState('');
-    const [dialogOpen, setDialogOpen] = useState(false);
-    const [selected, setSelected] = useState<Product | null>(null);
     const [draftFilters, setDraftFilters] = useState({
         category: '',
         search: '',
@@ -101,11 +102,6 @@ export function ProductManagementPage() {
         };
     }, [filters]);
 
-    const showNotice = (message: string) => {
-        setNotice(message);
-        window.setTimeout(() => setNotice(''), 4000);
-    };
-
     return (
         <div className="admin-page product-management">
             <header className="page-heading">
@@ -115,18 +111,18 @@ export function ProductManagementPage() {
                     <p>Maintain the sellable catalogue, units, barcodes, and default MMK prices.</p>
                 </div>
                 {canCreate ? (
-                    <Button
-                        icon="plus"
-                        onClick={() => {
-                            setSelected(null);
-                            setDialogOpen(true);
-                        }}
-                        tone="primary"
-                    >
+                    <Button icon="plus" onClick={() => navigate('/admin/products/new')} tone="primary">
                         New product
                     </Button>
                 ) : null}
             </header>
+
+            {(location.state as { notice?: string } | null)?.notice ? (
+                <div className="ui-flash ui-flash--success" role="status">
+                    <Icon name="check" size={15} />
+                    {(location.state as { notice: string }).notice}
+                </div>
+            ) : null}
 
             <div className="metric-grid access-metrics">
                 <MetricCard hint="Current filtered result" icon="box" label="Products" value={String(summary.total)} />
@@ -150,12 +146,6 @@ export function ProductManagementPage() {
                 />
             </div>
 
-            {notice ? (
-                <div className="ui-flash ui-flash--success" role="status">
-                    <Icon name="box" size={15} />
-                    {notice}
-                </div>
-            ) : null}
             {error ? (
                 <div className="ui-flash ui-flash--danger" role="alert">
                     <Icon name="x" size={15} />
@@ -307,10 +297,7 @@ export function ProductManagementPage() {
                                                 <IconButton
                                                     icon="settings"
                                                     label={`Edit ${product.name}`}
-                                                    onClick={() => {
-                                                        setSelected(product);
-                                                        setDialogOpen(true);
-                                                    }}
+                                                    onClick={() => navigate(`/admin/products/${product.id}/edit`)}
                                                 />
                                             </td>
                                         ) : null}
@@ -355,17 +342,86 @@ export function ProductManagementPage() {
                     </button>
                 </footer>
             </Panel>
+        </div>
+    );
+}
 
-            <ProductDialog
-                onClose={() => setDialogOpen(false)}
-                onSaved={async (message) => {
-                    setDialogOpen(false);
-                    await loadProducts();
-                    showNotice(message);
-                }}
-                open={dialogOpen}
-                product={selected}
-            />
+export function ProductFormPage() {
+    const { user } = useSession();
+    const navigate = useNavigate();
+    const { productId } = useParams();
+    const id = productId ? Number(productId) : null;
+    const invalidLink = id !== null && (!Number.isInteger(id) || id < 1);
+    const [options, setOptions] = useState<ProductOptions>(emptyOptions);
+    const [product, setProduct] = useState<Product | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const isSuperAdmin = Boolean(user?.roles.includes('super-admin'));
+    const canManage = Boolean(
+        isSuperAdmin || user?.permissions.includes(id === null ? 'product.create' : 'product.edit'),
+    );
+
+    useEffect(() => {
+        let active = true;
+        if (invalidLink) {
+            return () => {
+                active = false;
+            };
+        }
+        void Promise.all([productApi.options(), id === null ? Promise.resolve(null) : productApi.get(id)])
+            .then(([availableOptions, response]) => {
+                if (!active) return;
+                setOptions(availableOptions);
+                setProduct(response?.data ?? null);
+            })
+            .catch((requestError) => {
+                if (active) setError(errorMessage(requestError));
+            })
+            .finally(() => {
+                if (active) setLoading(false);
+            });
+        return () => {
+            active = false;
+        };
+    }, [id, invalidLink]);
+
+    const pageError = invalidLink
+        ? 'This product link is invalid.'
+        : !canManage
+          ? `You do not have permission to ${id === null ? 'create' : 'edit'} products.`
+          : error;
+
+    return (
+        <div className="admin-page product-form-page">
+            <header className="page-heading">
+                <div>
+                    <p className="ui-eyebrow">Product catalogue</p>
+                    <h1>{product ? `Edit ${product.sku}` : 'Create product'}</h1>
+                    <p>Define product details, selling units, conversions, and prices for every active Region.</p>
+                </div>
+                <Button icon="chevronLeft" onClick={() => navigate('/admin/products')}>
+                    Back to products
+                </Button>
+            </header>
+            {pageError ? (
+                <div className="ui-flash ui-flash--danger" role="alert">
+                    <Icon name="x" size={15} />
+                    {pageError}
+                    <Link to="/admin/products">Return to products</Link>
+                </div>
+            ) : loading ? (
+                <div className="ui-loading" role="status">
+                    <span />
+                    Loading product form…
+                </div>
+            ) : (
+                <ProductForm
+                    onCancel={() => navigate('/admin/products')}
+                    onSaved={(message) => navigate('/admin/products', { state: { notice: message } })}
+                    options={options}
+                    product={product}
+                />
+            )}
         </div>
     );
 }
@@ -374,16 +430,16 @@ function FieldError({ errors, name }: { errors: Record<string, string[]>; name: 
     return errors[name]?.[0] ? <span className="ui-field__error">{errors[name][0]}</span> : null;
 }
 
-function ProductDialog({
-    onClose,
+function ProductForm({
+    onCancel,
     onSaved,
-    open,
     product,
+    options,
 }: {
-    onClose: () => void;
-    onSaved: (message: string) => Promise<void>;
-    open: boolean;
+    onCancel: () => void;
+    onSaved: (message: string) => void;
     product: Product | null;
+    options: ProductOptions;
 }) {
     const [form, setForm] = useState<ProductInput>({
         barcode: '',
@@ -394,12 +450,36 @@ function ProductDialog({
         selling_price: 0,
         sku: '',
         unit: 'piece',
+        units: [],
     });
     const [errors, setErrors] = useState<Record<string, string[]>>({});
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         setErrors({});
+        const units = product?.units?.length
+            ? product.units.map((unit) => ({
+                  ...unit,
+                  barcode: unit.barcode ?? '',
+                  prices: (options.regions ?? []).map(
+                      (region) =>
+                          unit.prices.find((price) => price.region_id === region.id) ?? {
+                              region_id: region.id,
+                              price: 0,
+                          },
+                  ),
+              }))
+            : [
+                  {
+                      name: 'piece',
+                      conversion_factor: 1,
+                      barcode: '',
+                      is_base: true,
+                      is_default_selling: true,
+                      is_active: true,
+                      prices: (options.regions ?? []).map((region) => ({ region_id: region.id, price: 0 })),
+                  },
+              ];
         setForm({
             barcode: product?.barcode ?? '',
             category: product?.category ?? '',
@@ -409,8 +489,9 @@ function ProductDialog({
             selling_price: product?.selling_price ?? 0,
             sku: product?.sku ?? '',
             unit: product?.unit ?? 'piece',
+            units,
         });
-    }, [open, product]);
+    }, [product, options.regions]);
 
     const change = (field: keyof ProductInput, value: boolean | number | string) =>
         setForm((current) => ({ ...current, [field]: value }));
@@ -427,9 +508,16 @@ function ProductDialog({
         setSaving(true);
         setErrors({});
         try {
-            if (product) await productApi.update(product.id, form);
-            else await productApi.create(form);
-            await onSaved(product ? 'Product updated.' : 'Product created.');
+            const defaultUnit = form.units.find((unit) => unit.is_default_selling) ?? form.units[0];
+            const payload = {
+                ...form,
+                unit: defaultUnit?.name ?? 'piece',
+                barcode: defaultUnit?.barcode ?? '',
+                selling_price: defaultUnit?.prices[0]?.price ?? 0,
+            };
+            if (product) await productApi.update(product.id, payload);
+            else await productApi.create(payload);
+            onSaved(product ? 'Product updated.' : 'Product created.');
         } catch (requestError) {
             if (requestError instanceof ProductApiError) setErrors(requestError.fields);
             setErrors((current) => ({
@@ -442,29 +530,18 @@ function ProductDialog({
     };
 
     return (
-        <Dialog
-            description="SKU identifies this product across stock, sales, and reports. Prices use whole Myanmar kyat."
-            footer={
-                <>
-                    <Button disabled={saving} onClick={onClose}>
-                        Cancel
-                    </Button>
-                    <Button
-                        disabled={saving}
-                        form="product-management-form"
-                        requiresOnline
-                        tone="primary"
-                        type="submit"
-                    >
-                        {saving ? 'Saving…' : 'Save product'}
-                    </Button>
-                </>
-            }
-            onClose={onClose}
-            open={open}
-            title={product ? `Edit product · ${product.sku}` : 'Create product'}
-        >
-            <form className="management-form" id="product-management-form" onSubmit={submit}>
+        <form className="management-form product-form" id="product-management-form" onSubmit={submit}>
+            <section className="product-form__intro">
+                <div>
+                    <p className="ui-eyebrow">Product definition</p>
+                    <h2>Catalogue and pricing setup</h2>
+                    <p>
+                        Define the smallest stock unit, default selling unit, conversion factors, and prices for every
+                        active Region.
+                    </p>
+                </div>
+            </section>
+            <div className="product-form__body">
                 {errors.form?.[0] ? (
                     <div className="ui-form-error" role="alert">
                         {errors.form[0]}
@@ -504,37 +581,209 @@ function ProductDialog({
                         <FieldError errors={errors} name="category" />
                     </label>
                     <label className="ui-field">
-                        <span>Unit</span>
+                        <span>Legacy display unit</span>
                         <input
-                            maxLength={50}
-                            onChange={(event) => change('unit', event.target.value)}
-                            placeholder="bottle"
-                            required
-                            value={form.unit}
+                            disabled
+                            value={form.units.find((unit) => unit.is_default_selling)?.name ?? 'Not selected'}
                         />
-                        <FieldError errors={errors} name="unit" />
                     </label>
-                    <label className="ui-field">
-                        <span>Default selling price (MMK)</span>
-                        <input
-                            min={0}
-                            onChange={(event) => change('selling_price', Number(event.target.value))}
-                            required
-                            step={1}
-                            type="number"
-                            value={form.selling_price}
-                        />
-                        <FieldError errors={errors} name="selling_price" />
-                    </label>
-                    <label className="ui-field">
-                        <span>Barcode</span>
-                        <input
-                            maxLength={100}
-                            onChange={(event) => change('barcode', event.target.value)}
-                            value={form.barcode}
-                        />
-                        <FieldError errors={errors} name="barcode" />
-                    </label>
+                    <section className="product-unit-editor form-grid__wide">
+                        <header>
+                            <div>
+                                <strong>Units and regional prices</strong>
+                                <small>
+                                    Stock is stored in the base unit. Conversion factors express how many base units are
+                                    in one selected unit.
+                                </small>
+                            </div>
+                            <Button
+                                icon="plus"
+                                onClick={() =>
+                                    setForm((value) => ({
+                                        ...value,
+                                        units: [
+                                            ...value.units,
+                                            {
+                                                name: '',
+                                                conversion_factor: 1,
+                                                barcode: '',
+                                                is_base: false,
+                                                is_default_selling: false,
+                                                is_active: true,
+                                                prices: (options.regions ?? []).map((region) => ({
+                                                    region_id: region.id,
+                                                    price: 0,
+                                                })),
+                                            },
+                                        ],
+                                    }))
+                                }
+                                tone="secondary"
+                                type="button"
+                            >
+                                Add unit
+                            </Button>
+                        </header>
+                        {form.units.map((unit, unitIndex) => (
+                            <div className="product-unit-row" key={unit.id ?? `new-${unitIndex}`}>
+                                <div className="product-unit-row__fields">
+                                    <label className="ui-field">
+                                        <span>Unit name</span>
+                                        <input
+                                            onChange={(event) =>
+                                                setForm((value) => ({
+                                                    ...value,
+                                                    units: value.units.map((item, index) =>
+                                                        index === unitIndex
+                                                            ? { ...item, name: event.target.value }
+                                                            : item,
+                                                    ),
+                                                }))
+                                            }
+                                            placeholder="bottle / box"
+                                            required
+                                            value={unit.name}
+                                        />
+                                    </label>
+                                    <label className="ui-field">
+                                        <span>Base units per unit</span>
+                                        <input
+                                            disabled={unit.is_base}
+                                            min={1}
+                                            onChange={(event) =>
+                                                setForm((value) => ({
+                                                    ...value,
+                                                    units: value.units.map((item, index) =>
+                                                        index === unitIndex
+                                                            ? {
+                                                                  ...item,
+                                                                  conversion_factor: editableNumber(event.target.value),
+                                                              }
+                                                            : item,
+                                                    ),
+                                                }))
+                                            }
+                                            required
+                                            type="number"
+                                            value={unit.conversion_factor}
+                                        />
+                                    </label>
+                                    <label className="ui-field">
+                                        <span>Unit barcode</span>
+                                        <input
+                                            onChange={(event) =>
+                                                setForm((value) => ({
+                                                    ...value,
+                                                    units: value.units.map((item, index) =>
+                                                        index === unitIndex
+                                                            ? { ...item, barcode: event.target.value }
+                                                            : item,
+                                                    ),
+                                                }))
+                                            }
+                                            value={unit.barcode ?? ''}
+                                        />
+                                    </label>
+                                    <label className="ui-check">
+                                        <input
+                                            checked={unit.is_base}
+                                            onChange={() =>
+                                                setForm((value) => ({
+                                                    ...value,
+                                                    units: value.units.map((item, index) => ({
+                                                        ...item,
+                                                        is_base: index === unitIndex,
+                                                        conversion_factor:
+                                                            index === unitIndex ? 1 : item.conversion_factor,
+                                                    })),
+                                                }))
+                                            }
+                                            type="radio"
+                                        />
+                                        <span>
+                                            <strong>Base unit</strong>
+                                            <small>Smallest physical unit</small>
+                                        </span>
+                                    </label>
+                                    <label className="ui-check">
+                                        <input
+                                            checked={unit.is_default_selling}
+                                            onChange={() =>
+                                                setForm((value) => ({
+                                                    ...value,
+                                                    units: value.units.map((item, index) => ({
+                                                        ...item,
+                                                        is_default_selling: index === unitIndex,
+                                                    })),
+                                                }))
+                                            }
+                                            type="radio"
+                                        />
+                                        <span>
+                                            <strong>Default selling</strong>
+                                            <small>Preselected in sales</small>
+                                        </span>
+                                    </label>
+                                </div>
+                                <div className="regional-price-grid">
+                                    {(options.regions ?? []).map((region) => {
+                                        const price =
+                                            unit.prices.find((item) => item.region_id === region.id)?.price ?? 0;
+                                        return (
+                                            <label className="ui-field" key={region.id}>
+                                                <span>
+                                                    {region.warehouse.code} · {region.name}
+                                                </span>
+                                                <input
+                                                    min={0}
+                                                    onChange={(event) =>
+                                                        setForm((value) => ({
+                                                            ...value,
+                                                            units: value.units.map((item, index) =>
+                                                                index === unitIndex
+                                                                    ? {
+                                                                          ...item,
+                                                                          prices: item.prices.map((entry) =>
+                                                                              entry.region_id === region.id
+                                                                                  ? {
+                                                                                        ...entry,
+                                                                                        price: editableNumber(
+                                                                                            event.target.value,
+                                                                                        ),
+                                                                                    }
+                                                                                  : entry,
+                                                                          ),
+                                                                      }
+                                                                    : item,
+                                                            ),
+                                                        }))
+                                                    }
+                                                    required
+                                                    type="number"
+                                                    value={price}
+                                                />
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                                {form.units.length > 1 && !unit.is_base && !unit.is_default_selling ? (
+                                    <Button
+                                        onClick={() =>
+                                            setForm((value) => ({
+                                                ...value,
+                                                units: value.units.filter((_, index) => index !== unitIndex),
+                                            }))
+                                        }
+                                        tone="secondary"
+                                        type="button"
+                                    >
+                                        Remove unit
+                                    </Button>
+                                ) : null}
+                            </div>
+                        ))}
+                        <FieldError errors={errors} name="units" />
+                    </section>
                     <label className="ui-field form-grid__wide">
                         <span>Description</span>
                         <textarea
@@ -559,7 +808,15 @@ function ProductDialog({
                         </span>
                     </label>
                 </div>
-            </form>
-        </Dialog>
+            </div>
+            <footer className="product-form__actions">
+                <Button disabled={saving} onClick={onCancel} type="button">
+                    Cancel
+                </Button>
+                <Button disabled={saving} requiresOnline tone="primary" type="submit">
+                    {saving ? 'Saving…' : 'Save product'}
+                </Button>
+            </footer>
+        </form>
     );
 }

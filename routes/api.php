@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\CustomerPaymentController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\InventoryController;
 use App\Http\Controllers\Admin\ProductController;
+use App\Http\Controllers\Admin\RegionController;
 use App\Http\Controllers\Admin\ReportController as AdminReportController;
 use App\Http\Controllers\Admin\RepresentativeInventoryController;
 use App\Http\Controllers\Admin\RepresentativeReturnController;
@@ -25,10 +26,12 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\VehicleController;
 use App\Http\Controllers\Admin\WarehouseController;
 use App\Http\Controllers\Admin\WarehouseTransferController;
+use App\Http\Controllers\Admin\WayController;
 use App\Http\Controllers\Auth\SessionController;
 use App\Http\Controllers\BrandingController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\Sales\CashController as SalesCashController;
+use App\Http\Controllers\Sales\CustomerController as SalesCustomerController;
 use App\Http\Controllers\Sales\DashboardController as SalesDashboardController;
 use App\Http\Controllers\Sales\ReportController as SalesReportController;
 use App\Http\Controllers\Sales\RepresentativeStockController;
@@ -68,12 +71,24 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
 
         Route::get('/warehouses', [WarehouseController::class, 'index'])
             ->middleware('permission:'.PermissionName::WarehouseView->value);
+        Route::get('/warehouses/{warehouse}', [WarehouseController::class, 'show'])
+            ->middleware('permission:'.PermissionName::WarehouseView->value);
         Route::post('/warehouses', [WarehouseController::class, 'store'])
             ->middleware('permission:'.PermissionName::WarehouseCreate->value);
         Route::put('/warehouses/{warehouse}', [WarehouseController::class, 'update'])
             ->middleware('permission:'.PermissionName::WarehouseEdit->value);
+        Route::post('/warehouses/{warehouse}/regions', [RegionController::class, 'store'])
+            ->middleware('permission:'.PermissionName::WarehouseEdit->value);
+        Route::put('/regions/{region}', [RegionController::class, 'update'])
+            ->middleware('permission:'.PermissionName::WarehouseEdit->value);
+        Route::post('/regions/{region}/ways', [WayController::class, 'store'])
+            ->middleware('permission:'.PermissionName::WarehouseEdit->value);
+        Route::put('/ways/{way}', [WayController::class, 'update'])
+            ->middleware('permission:'.PermissionName::WarehouseEdit->value);
 
         Route::get('/products', [ProductController::class, 'index'])
+            ->middleware('permission:'.PermissionName::ProductView->value);
+        Route::get('/products/{product}', [ProductController::class, 'show'])
             ->middleware('permission:'.PermissionName::ProductView->value);
         Route::get('/product-options', [ProductController::class, 'options'])
             ->middleware('permission:'.PermissionName::ProductView->value);
@@ -106,6 +121,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
 
         Route::middleware('permission:'.PermissionName::InventoryView->value)->group(function (): void {
             Route::get('/inventory', [InventoryController::class, 'index']);
+            Route::get('/inventory/export', [InventoryController::class, 'export']);
             Route::get('/inventory/options', [InventoryController::class, 'options']);
             Route::get('/inventory/movements', [InventoryController::class, 'movements']);
             Route::get('/stock-imports', [StockImportController::class, 'index']);
@@ -190,6 +206,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
 
         Route::middleware('permission:'.PermissionName::ReportView->value)->group(function (): void {
             Route::get('/report-options', [AdminReportController::class, 'options']);
+            Route::get('/reports/way-sales-power/export', [AdminReportController::class, 'exportWaySalesPower']);
+            Route::get('/reports/stock-issues/export', [AdminReportController::class, 'exportStockIssues']);
             Route::get('/reports/{report}', [AdminReportController::class, 'show']);
         });
         Route::get('/audit-logs', AuditLogController::class)->middleware('permission:'.PermissionName::AuditView->value);
@@ -238,6 +256,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             Route::get('/sales/{sale}', [SalesSaleController::class, 'show'])->middleware('permission:'.PermissionName::SaleView->value);
             Route::get('/sale-options', [SalesSaleController::class, 'options'])->middleware('permission:'.PermissionName::SaleCreate->value);
             Route::middleware('permission:'.PermissionName::SaleCreate->value)->group(function (): void {
+                Route::get('/customers', [SalesCustomerController::class, 'index']);
+                Route::post('/customers', [SalesCustomerController::class, 'store']);
                 Route::post('/sales', [SalesSaleController::class, 'store']);
                 Route::put('/sales/{sale}', [SalesSaleController::class, 'update']);
                 Route::post('/sales/{sale}/post', [SalesSaleController::class, 'post']);

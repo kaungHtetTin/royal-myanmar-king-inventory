@@ -12,6 +12,7 @@ import {
     type CustomerSummary,
 } from '../../services/customers';
 import { Icon } from '../../ui/icons';
+import { editableNumber } from '../../ui/form-values';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
 
 const emptyMeta: PaginationMeta = {
@@ -22,7 +23,7 @@ const emptyMeta: PaginationMeta = {
     to: null,
     total: 0,
 };
-const emptyOptions: CustomerOptions = { types: [], warehouses: [] };
+const emptyOptions: CustomerOptions = { types: [], warehouses: [], regions: [], ways: [] };
 const emptySummary: CustomerSummary = { active: 0, credit_enabled: 0, credit_limit: 0, total: 0 };
 
 function errorMessage(error: unknown) {
@@ -55,11 +56,10 @@ export function CustomerManagementPage() {
     const [dialogOpen, setDialogOpen] = useState(false);
     const [selected, setSelected] = useState<Customer | null>(null);
     const [draftFilters, setDraftFilters] = useState({
-        credit: '',
+        region_id: '',
         search: '',
-        status: '',
-        type: '',
         warehouse_id: '',
+        way_id: '',
     });
     const [filters, setFilters] = useState<CustomerFilters>({
         page: 1,
@@ -179,12 +179,11 @@ export function CustomerManagementPage() {
                         event.preventDefault();
                         setLoading(true);
                         setFilters({
-                            credit: draftFilters.credit,
                             page: 1,
-                            search: draftFilters.search,
-                            status: draftFilters.status,
-                            type: draftFilters.type,
+                            region_id: draftFilters.region_id,
+                            search: draftFilters.search || undefined,
                             warehouse_id: draftFilters.warehouse_id,
+                            way_id: draftFilters.way_id,
                         });
                     }}
                 >
@@ -192,65 +191,11 @@ export function CustomerManagementPage() {
                         <span className="sr-only">Search customers</span>
                         <Icon name="search" size={15} />
                         <input
-                            onChange={(event) =>
-                                setDraftFilters((value) => ({
-                                    ...value,
-                                    search: event.target.value,
-                                }))
-                            }
+                            onChange={(event) => setDraftFilters((value) => ({ ...value, search: event.target.value }))}
                             placeholder="Search code, name, phone, or location"
                             type="search"
                             value={draftFilters.search}
                         />
-                    </label>
-                    <label>
-                        <span className="sr-only">Filter by status</span>
-                        <select
-                            onChange={(event) =>
-                                setDraftFilters((value) => ({
-                                    ...value,
-                                    status: event.target.value,
-                                }))
-                            }
-                            value={draftFilters.status}
-                        >
-                            <option value="">All statuses</option>
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
-                        </select>
-                    </label>
-                    <label>
-                        <span className="sr-only">Filter by type</span>
-                        <select
-                            onChange={(event) =>
-                                setDraftFilters((value) => ({
-                                    ...value,
-                                    type: event.target.value,
-                                }))
-                            }
-                            value={draftFilters.type}
-                        >
-                            <option value="">All types</option>
-                            {options.types.map((type) => (
-                                <option key={type}>{type}</option>
-                            ))}
-                        </select>
-                    </label>
-                    <label>
-                        <span className="sr-only">Filter by credit</span>
-                        <select
-                            onChange={(event) =>
-                                setDraftFilters((value) => ({
-                                    ...value,
-                                    credit: event.target.value,
-                                }))
-                            }
-                            value={draftFilters.credit}
-                        >
-                            <option value="">All credit</option>
-                            <option value="allowed">Credit enabled</option>
-                            <option value="cash_only">Cash only</option>
-                        </select>
                     </label>
                     <label>
                         <span className="sr-only">Filter by warehouse</span>
@@ -258,7 +203,9 @@ export function CustomerManagementPage() {
                             onChange={(event) =>
                                 setDraftFilters((value) => ({
                                     ...value,
+                                    region_id: '',
                                     warehouse_id: event.target.value,
+                                    way_id: '',
                                 }))
                             }
                             value={draftFilters.warehouse_id}
@@ -266,9 +213,54 @@ export function CustomerManagementPage() {
                             <option value="">All warehouses</option>
                             {options.warehouses.map((warehouse) => (
                                 <option key={warehouse.id} value={warehouse.id}>
-                                    {warehouse.code}
+                                    {warehouse.name} · {warehouse.code}
                                 </option>
                             ))}
+                        </select>
+                    </label>
+                    <label>
+                        <span className="sr-only">Filter by region</span>
+                        <select
+                            disabled={!draftFilters.warehouse_id}
+                            onChange={(event) =>
+                                setDraftFilters((value) => ({
+                                    ...value,
+                                    region_id: event.target.value,
+                                    way_id: '',
+                                }))
+                            }
+                            value={draftFilters.region_id}
+                        >
+                            <option value="">All regions</option>
+                            {(options.regions ?? [])
+                                .filter((region) => String(region.warehouse_id) === draftFilters.warehouse_id)
+                                .map((region) => (
+                                    <option key={region.id} value={region.id}>
+                                        {region.name}
+                                    </option>
+                                ))}
+                        </select>
+                    </label>
+                    <label>
+                        <span className="sr-only">Filter by way</span>
+                        <select
+                            disabled={!draftFilters.region_id}
+                            onChange={(event) =>
+                                setDraftFilters((value) => ({
+                                    ...value,
+                                    way_id: event.target.value,
+                                }))
+                            }
+                            value={draftFilters.way_id}
+                        >
+                            <option value="">All ways</option>
+                            {(options.ways ?? [])
+                                .filter((way) => String(way.region_id) === draftFilters.region_id)
+                                .map((way) => (
+                                    <option key={way.id} value={way.id}>
+                                        {way.name} · {way.code}
+                                    </option>
+                                ))}
                         </select>
                     </label>
                     <Button icon="search" type="submit">
@@ -305,7 +297,10 @@ export function CustomerManagementPage() {
                                 {customers.map((customer) => (
                                     <tr key={customer.id}>
                                         <td>
-                                            <Link className="table-identity-link" to={`/admin/customers/${customer.id}`}>
+                                            <Link
+                                                className="table-identity-link"
+                                                to={`/admin/customers/${customer.id}`}
+                                            >
                                                 {customer.name}
                                             </Link>
                                             <small>{customer.code}</small>
@@ -451,13 +446,21 @@ function CustomerDialog({
         region: '',
         township: '',
         warehouse_id: 0,
+        way_id: 0,
     });
+    const [regionId, setRegionId] = useState(0);
     const [errors, setErrors] = useState<Record<string, string[]>>({});
     const [saving, setSaving] = useState(false);
     const profileDisabled = Boolean(customer && !canEdit);
 
     useEffect(() => {
         setErrors({});
+        const warehouseId = customer?.warehouse_id ?? options.warehouses[0]?.id ?? 0;
+        const selectedRegionId =
+            customer?.way?.region.id ??
+            (options.regions ?? []).find((region) => region.warehouse_id === warehouseId)?.id ??
+            0;
+        setRegionId(selectedRegionId);
         setForm({
             address: customer?.address ?? '',
             code: customer?.code ?? '',
@@ -470,9 +473,10 @@ function CustomerDialog({
             phone: customer?.phone ?? '',
             region: customer?.region ?? '',
             township: customer?.township ?? '',
-            warehouse_id: customer?.warehouse_id ?? options.warehouses[0]?.id ?? 0,
+            warehouse_id: warehouseId,
+            way_id: customer?.way_id ?? (options.ways ?? []).find((way) => way.region_id === selectedRegionId)?.id ?? 0,
         });
-    }, [customer, open, options.warehouses]);
+    }, [customer, open, options.warehouses, options.regions, options.ways]);
 
     const change = (field: keyof CustomerInput, value: boolean | number | string) =>
         setForm((current) => ({ ...current, [field]: value }));
@@ -587,7 +591,18 @@ function CustomerDialog({
                         <span>Operating warehouse</span>
                         <select
                             disabled={profileDisabled}
-                            onChange={(event) => change('warehouse_id', Number(event.target.value))}
+                            onChange={(event) => {
+                                const warehouseId = Number(event.target.value);
+                                const nextRegion =
+                                    (options.regions ?? []).find((region) => region.warehouse_id === warehouseId)?.id ??
+                                    0;
+                                setRegionId(nextRegion);
+                                setForm((value) => ({
+                                    ...value,
+                                    warehouse_id: warehouseId,
+                                    way_id: (options.ways ?? []).find((way) => way.region_id === nextRegion)?.id ?? 0,
+                                }));
+                            }}
                             required
                             value={form.warehouse_id}
                         >
@@ -615,23 +630,52 @@ function CustomerDialog({
                     </label>
                     <label className="ui-field">
                         <span>Region</span>
-                        <input
+                        <select
                             disabled={profileDisabled}
-                            maxLength={100}
-                            onChange={(event) => change('region', event.target.value)}
-                            value={form.region}
-                        />
-                        <FieldError errors={errors} name="region" />
+                            onChange={(event) => {
+                                const id = Number(event.target.value);
+                                setRegionId(id);
+                                setForm((value) => ({
+                                    ...value,
+                                    region: (options.regions ?? []).find((region) => region.id === id)?.name ?? '',
+                                    way_id: (options.ways ?? []).find((way) => way.region_id === id)?.id ?? 0,
+                                }));
+                            }}
+                            required
+                            value={regionId}
+                        >
+                            <option value={0}>Select region</option>
+                            {(options.regions ?? [])
+                                .filter((region) => region.warehouse_id === form.warehouse_id)
+                                .map((region) => (
+                                    <option key={region.id} value={region.id}>
+                                        {region.name}
+                                    </option>
+                                ))}
+                        </select>
                     </label>
                     <label className="ui-field">
-                        <span>Township</span>
-                        <input
+                        <span>Way</span>
+                        <select
                             disabled={profileDisabled}
-                            maxLength={100}
-                            onChange={(event) => change('township', event.target.value)}
-                            value={form.township}
-                        />
-                        <FieldError errors={errors} name="township" />
+                            onChange={(event) => {
+                                const id = Number(event.target.value);
+                                const way = (options.ways ?? []).find((item) => item.id === id);
+                                setForm((value) => ({ ...value, way_id: id, township: way?.name ?? '' }));
+                            }}
+                            required
+                            value={form.way_id}
+                        >
+                            <option value={0}>Select Way</option>
+                            {(options.ways ?? [])
+                                .filter((way) => way.region_id === regionId)
+                                .map((way) => (
+                                    <option key={way.id} value={way.id}>
+                                        {way.name} · {way.code}
+                                    </option>
+                                ))}
+                        </select>
+                        <FieldError errors={errors} name="way_id" />
                     </label>
                     <label className="ui-field">
                         <span>Address</span>
@@ -668,7 +712,7 @@ function CustomerDialog({
                                 <input
                                     disabled={!canCredit}
                                     min={0}
-                                    onChange={(event) => change('credit_limit', Number(event.target.value))}
+                                    onChange={(event) => change('credit_limit', editableNumber(event.target.value))}
                                     required
                                     step={1}
                                     type="number"

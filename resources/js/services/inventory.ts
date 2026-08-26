@@ -142,6 +142,21 @@ export const inventoryApi = {
                 params: pageParams(filters),
             }),
         ),
+    exportBalances: async (filters: ListFilters) => {
+        try {
+            const { page: _page, ...params } = filters;
+            const response = await window.axios.get<Blob>('api/admin/inventory/export', {
+                params,
+                responseType: 'blob',
+            });
+            const disposition = String(response.headers['content-disposition'] ?? '');
+            const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] ?? 'on-hand-stock.csv';
+
+            return { blob: response.data, filename };
+        } catch (error) {
+            throw apiError(error);
+        }
+    },
     movements: (filters: ListFilters) =>
         request<{ data: StockMovement[]; meta: PaginationMeta; summary: InventorySummary }>(() =>
             window.axios.get('api/admin/inventory/movements', {

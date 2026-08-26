@@ -104,6 +104,74 @@ describe('application portals', () => {
         expect(screen.getByRole('heading', { name: 'Cash submission history' })).toBeInTheDocument();
     });
 
+    it('filters customer detail sales and summary by an applied date range', async () => {
+        const meta = { current_page: 1, from: 1, last_page: 1, per_page: 20, to: 1, total: 1 };
+        const get = vi.spyOn(axios, 'get').mockImplementation((url) => {
+            if (url === 'api/admin/customers/9') {
+                return Promise.resolve({
+                    data: {
+                        data: {
+                            address: 'Hlaing',
+                            code: 'CUS-009',
+                            created_at: '2026-08-01T00:00:00Z',
+                            credit_allowed: false,
+                            credit_limit: 0,
+                            customer_type: 'Shop',
+                            id: 9,
+                            is_active: true,
+                            name: 'ABC Shop',
+                            notes: null,
+                            phone: '091234567',
+                            region: 'Yangon West',
+                            township: 'Hlaing',
+                            updated_at: '2026-08-01T00:00:00Z',
+                            warehouse: { code: 'YGN-MAIN', id: 1, name: 'Yangon Main Warehouse' },
+                            warehouse_id: 1,
+                            way: {
+                                code: 'WAY-000001',
+                                id: 1,
+                                name: 'Hlaing',
+                                region: { id: 1, name: 'Yangon West', warehouse_id: 1 },
+                            },
+                            way_id: 1,
+                        },
+                    },
+                });
+            }
+            if (url === 'api/admin/sales') {
+                return Promise.resolve({
+                    data: { data: [], meta, summary: { cash_total: 0, credit_total: 0, posted_total: 0, total: 0 } },
+                });
+            }
+            return Promise.resolve({ data: {} });
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/admin/customers/9']}>
+                <Root initialUser={baseUser} />
+            </MemoryRouter>,
+        );
+
+        expect(await screen.findByRole('heading', { name: 'ABC Shop' })).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText('Customer sales from date'), { target: { value: '2026-08-01' } });
+        fireEvent.change(screen.getByLabelText('Customer sales to date'), { target: { value: '2026-08-20' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+        await waitFor(() =>
+            expect(get).toHaveBeenCalledWith('api/admin/sales', {
+                params: {
+                    customer_id: 9,
+                    date_from: '2026-08-01',
+                    date_to: '2026-08-20',
+                    page: 1,
+                    per_page: 20,
+                },
+            }),
+        );
+        expect(screen.getByText('Within selected date range')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument();
+    });
+
     it('loads user administration without the role workspace', async () => {
         vi.spyOn(axios, 'get').mockImplementation((url) => {
             if (url === 'api/admin/access-options')
@@ -205,11 +273,104 @@ describe('application portals', () => {
 
         expect(await screen.findByRole('heading', { name: 'Warehouses' })).toBeInTheDocument();
         expect(await screen.findByText('Yangon Main Warehouse')).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Open settings for Yangon Main Warehouse' })).toHaveAttribute(
+            'href',
+            '/admin/warehouses/1/settings',
+        );
         fireEvent.click(screen.getByRole('button', { name: 'New warehouse' }));
         expect(screen.getByRole('dialog', { name: 'Create warehouse' })).toBeInTheDocument();
     });
 
-    it('loads product management and opens the creation dialog', async () => {
+    it('loads Region and Way management on a separate warehouse settings page', async () => {
+        vi.spyOn(axios, 'get').mockResolvedValue({
+            data: {
+                data: {
+                    address: 'No. 12, Main Road',
+                    code: 'YGN-MAIN',
+                    created_at: '2026-08-17T00:00:00Z',
+                    id: 1,
+                    is_active: true,
+                    name: 'Yangon Main Warehouse',
+                    notes: null,
+                    phone: '09-123456789',
+                    region: 'Yangon',
+                    township: 'Hlaing',
+                    updated_at: '2026-08-17T00:00:00Z',
+                    users_count: 2,
+                    regions: [
+                        {
+                            id: 10,
+                            warehouse_id: 1,
+                            name: 'Yangon East',
+                            notes: null,
+                            is_active: true,
+                            ways: [
+                                {
+                                    id: 20,
+                                    region_id: 10,
+                                    code: 'WAY-000020',
+                                    name: 'Tamwe Route',
+                                    notes: null,
+                                    is_active: true,
+                                },
+                            ],
+                        },
+                        {
+                            id: 11,
+                            warehouse_id: 1,
+                            name: 'Yangon North',
+                            notes: null,
+                            is_active: true,
+                            ways: [
+                                {
+                                    id: 21,
+                                    region_id: 11,
+                                    code: 'WAY-000021',
+                                    name: 'North Route',
+                                    notes: null,
+                                    is_active: true,
+                                },
+                            ],
+                        },
+                    ],
+                },
+            },
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/admin/warehouses/1/settings']}>
+                <Root initialUser={baseUser} />
+            </MemoryRouter>,
+        );
+
+        expect(await screen.findByRole('heading', { name: 'Yangon Main Warehouse' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Region and Way management' })).toBeInTheDocument();
+        expect(screen.getByDisplayValue('Yangon East')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('Tamwe Route')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Deactivate Region Yangon East' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Deactivate Way Tamwe Route' })).toBeInTheDocument();
+        fireEvent.change(screen.getByDisplayValue('Yangon East'), { target: { value: 'Yangon East Updated' } });
+        expect(screen.getByRole('button', { name: 'Save Region name' })).toBeInTheDocument();
+        fireEvent.change(screen.getByDisplayValue('Yangon East Updated'), { target: { value: 'Yangon East' } });
+        fireEvent.change(screen.getByDisplayValue('Tamwe Route'), { target: { value: 'Tamwe Route Updated' } });
+        expect(screen.getByRole('button', { name: 'Save WAY-000020 name' })).toBeInTheDocument();
+        fireEvent.change(screen.getByDisplayValue('Tamwe Route Updated'), { target: { value: 'Tamwe Route' } });
+        expect(screen.queryByLabelText('New Region')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('New Way name')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Add Region' }));
+        expect(screen.getByRole('dialog', { name: 'Create Region' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Way' }));
+        expect(screen.getByRole('dialog', { name: 'Create Way' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        fireEvent.click(screen.getByRole('button', { name: /Yangon North/ }));
+        expect(screen.getByDisplayValue('Yangon North')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('North Route')).toBeInTheDocument();
+        expect(screen.queryByDisplayValue('Tamwe Route')).not.toBeInTheDocument();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('loads product management and opens the dedicated creation page', async () => {
         vi.spyOn(axios, 'get').mockImplementation((url) => {
             if (url === 'api/admin/product-options')
                 return Promise.resolve({
@@ -253,7 +414,9 @@ describe('application portals', () => {
         expect(await screen.findByRole('heading', { name: 'Products' })).toBeInTheDocument();
         expect(await screen.findByText('Drinking Water 1 Litre')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'New product' }));
-        expect(screen.getByRole('dialog', { name: 'Create product' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Create product' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Catalogue and pricing setup' })).toBeInTheDocument();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
     it('loads warehouse inventory and opens transaction draft dialogs', async () => {
@@ -322,6 +485,7 @@ describe('application portals', () => {
         expect(await screen.findByText('Drinking Water 1 Litre')).toBeInTheDocument();
         expect(screen.queryByRole('combobox', { name: 'Product' })).not.toBeInTheDocument();
         expect(screen.queryByRole('columnheader', { name: 'Warehouse' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Export CSV' })).toBeEnabled();
         fireEvent.click(screen.getByRole('button', { name: 'New import' }));
         expect(await screen.findByRole('heading', { name: 'Create stock import' })).toBeInTheDocument();
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -381,6 +545,11 @@ describe('application portals', () => {
                                 code: 'YGN-MAIN',
                                 id: 1,
                                 name: 'Yangon Main Warehouse',
+                            },
+                            {
+                                code: 'MDY-MAIN',
+                                id: 2,
+                                name: 'Mandalay Main Warehouse',
                             },
                         ],
                     },
@@ -455,6 +624,16 @@ describe('application portals', () => {
         const transferForm = within(screen.getByRole('main'));
         expect(await screen.findByRole('list', { name: 'Warehouse transfer progress' })).toBeInTheDocument();
         expect(transferForm.queryByRole('dialog')).not.toBeInTheDocument();
+        const sourceWarehouse = transferForm.getByRole('combobox', { name: 'Source warehouse' });
+        const destinationWarehouse = transferForm.getByRole('combobox', { name: 'Destination warehouse' });
+        await waitFor(() => {
+            expect(sourceWarehouse).toHaveValue('1');
+            expect(destinationWarehouse).toHaveValue('2');
+        });
+        fireEvent.change(sourceWarehouse, { target: { value: '2' } });
+        expect(sourceWarehouse).toHaveValue('2');
+        expect(destinationWarehouse).toHaveValue('1');
+        expect(within(destinationWarehouse).queryByRole('option', { name: /Mandalay/ })).not.toBeInTheDocument();
         fireEvent.click(transferForm.getByRole('button', { name: 'Continue' }));
         fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Drinking Water 1 Litre' }));
         fireEvent.click(transferForm.getByRole('button', { name: 'Continue' }));
@@ -581,6 +760,23 @@ describe('application portals', () => {
 
     it('loads the representative sale-entry workflow with stock and credit previews', async () => {
         const post = vi.spyOn(axios, 'post');
+        post.mockImplementation((url) => {
+            if (url === 'api/sales/customers')
+                return Promise.resolve({
+                    data: {
+                        customer: {
+                            available_credit: 0,
+                            code: 'CUS-000001',
+                            credit_allowed: false,
+                            credit_limit: 0,
+                            id: 3,
+                            name: 'New Route Shop',
+                            outstanding_amount: 0,
+                        },
+                    },
+                });
+            return Promise.resolve({ data: {} });
+        });
         vi.spyOn(axios, 'get').mockImplementation((url) => {
             if (url === 'api/sales/sale-options')
                 return Promise.resolve({
@@ -651,6 +847,17 @@ describe('application portals', () => {
         expect(screen.getByRole('heading', { name: 'Information' })).toBeInTheDocument();
         expect(screen.getByText('Credit availability will appear here.')).toBeInTheDocument();
 
+        fireEvent.click(screen.getByRole('button', { name: 'New customer' }));
+        const customerDialog = within(screen.getByRole('dialog', { name: 'New customer' }));
+        expect(customerDialog.getByText(/Credit is disabled and the credit limit starts at 0/)).toBeInTheDocument();
+        fireEvent.change(customerDialog.getByLabelText('Customer name'), { target: { value: 'New Route Shop' } });
+        fireEvent.click(customerDialog.getByRole('button', { name: 'Create customer' }));
+        await waitFor(() => expect(post).toHaveBeenCalledWith('api/sales/customers', expect.any(Object)));
+        expect(await screen.findByText('New Route Shop created as a cash-only customer.')).toBeInTheDocument();
+        expect(customerSearch).toHaveValue('CUS-000001 · New Route Shop');
+        expect(screen.getByRole('radio', { name: 'Cash' })).toBeChecked();
+        expect(screen.getByRole('radio', { name: 'Credit' })).toBeDisabled();
+
         fireEvent.change(customerSearch, { target: { value: 'ABC' } });
         fireEvent.click(screen.getByRole('option', { name: /ABC Shop/ }));
         expect(customerSearch).toHaveValue('CUS-ABC · ABC Shop');
@@ -693,7 +900,57 @@ describe('application portals', () => {
         expect(screen.getByRole('button', { name: 'Edit information' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Save draft' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Post sale' })).toBeInTheDocument();
-        expect(post).not.toHaveBeenCalled();
+        expect(post).toHaveBeenCalledTimes(1);
+        expect(post).not.toHaveBeenCalledWith('api/sales/sales', expect.anything(), expect.anything());
+    });
+
+    it('links the profile menu to the sales customer list and new customer page', async () => {
+        vi.spyOn(axios, 'get').mockImplementation((url) => {
+            if (url === 'api/sales/customers')
+                return Promise.resolve({
+                    data: {
+                        data: [
+                            {
+                                address: null,
+                                code: 'CUS-000001',
+                                created_at: '2026-08-26T00:00:00Z',
+                                credit_allowed: false,
+                                credit_limit: 0,
+                                customer_type: 'Shop',
+                                id: 1,
+                                is_active: true,
+                                name: 'Route Shop',
+                                notes: null,
+                                phone: '09-111222333',
+                                region: 'Yangon',
+                                township: 'Hlaing',
+                            },
+                        ],
+                        meta: {
+                            current_page: 1,
+                            from: 1,
+                            last_page: 1,
+                            per_page: 20,
+                            to: 1,
+                            total: 1,
+                        },
+                    },
+                });
+            return Promise.resolve({ data: {} });
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/sales/customers']}>
+                <Root initialUser={representativeUser} />
+            </MemoryRouter>,
+        );
+        expect(await screen.findByRole('heading', { name: 'Customers' })).toBeInTheDocument();
+        expect(await screen.findByText('Route Shop')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Profile menu' }));
+        expect(screen.getByRole('menuitem', { name: 'Customers' })).toHaveAttribute('href', '/sales/customers');
+        fireEvent.click(screen.getByRole('link', { name: 'New customer' }));
+        expect(await screen.findByRole('heading', { name: 'New customer' })).toBeInTheDocument();
+        expect(screen.getByText(/Credit is disabled and the credit limit starts at 0/)).toBeInTheDocument();
     });
 
     it('shows draft sale actions in a right-aligned history menu', async () => {
@@ -822,7 +1079,10 @@ describe('application portals', () => {
                                         sku: 'DW-1L',
                                         unit: 'bottle',
                                     },
+                                    foc_quantity: 1,
+                                    foc_unit: { conversion_factor: 1, id: 1, name: 'bottle' },
                                     quantity: 2,
+                                    unit: { conversion_factor: 1, id: 1, name: 'bottle' },
                                     unit_price: 1000,
                                 },
                             ],
@@ -856,6 +1116,13 @@ describe('application portals', () => {
         );
         expect(screen.getByRole('heading', { name: 'Sale information' })).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: 'Line items' })).toBeInTheDocument();
+        const lineItems = screen.getByRole('table', { name: 'Sale line items' });
+        expect(
+            within(lineItems)
+                .getAllByRole('columnheader')
+                .map((header) => header.textContent),
+        ).toEqual(['Product', 'Unit', 'Paid qty', 'FOC', 'Unit price', 'Line total']);
+        expect(within(lineItems).getAllByRole('row')).toHaveLength(2);
         expect(screen.getByText('Drinking Water 1 Litre')).toBeInTheDocument();
         expect(screen.getByText('Deliver before noon')).toBeInTheDocument();
         expect(screen.getByRole('link', { name: 'Edit draft' })).toHaveAttribute('href', '/sales/new-sale?edit=3');
@@ -973,12 +1240,14 @@ describe('application portals', () => {
     });
 
     it('loads customer management and opens the creation dialog', async () => {
-        vi.spyOn(axios, 'get').mockImplementation((url) => {
+        const get = vi.spyOn(axios, 'get').mockImplementation((url) => {
             if (url === 'api/admin/customer-options')
                 return Promise.resolve({
                     data: {
+                        regions: [{ id: 11, name: 'Yangon West', warehouse_id: 1 }],
                         types: ['Shop'],
                         warehouses: [{ code: 'YGN', id: 1, name: 'Yangon Warehouse' }],
+                        ways: [{ code: 'WAY-000001', id: 21, name: 'Hlaing', region_id: 11 }],
                     },
                 });
             return Promise.resolve({
@@ -1027,6 +1296,23 @@ describe('application portals', () => {
 
         expect(await screen.findByRole('heading', { name: 'Customers' })).toBeInTheDocument();
         expect(await screen.findByText('ABC Shop')).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText('Search customers'), { target: { value: 'ABC' } });
+        fireEvent.change(screen.getByLabelText('Filter by warehouse'), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Filter by region'), { target: { value: '11' } });
+        fireEvent.change(screen.getByLabelText('Filter by way'), { target: { value: '21' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+        await waitFor(() =>
+            expect(get).toHaveBeenCalledWith('api/admin/customers', {
+                params: {
+                    page: 1,
+                    per_page: 20,
+                    region_id: '11',
+                    search: 'ABC',
+                    warehouse_id: '1',
+                    way_id: '21',
+                },
+            }),
+        );
         fireEvent.click(screen.getByRole('button', { name: 'New customer' }));
         expect(screen.getByRole('dialog', { name: 'Create customer' })).toBeInTheDocument();
     });
@@ -1530,8 +1816,12 @@ describe('application portals', () => {
             if (url === 'api/admin/report-options')
                 return Promise.resolve({
                     data: {
-                        reports: ['sales'],
+                        products: [{ id: 9, name: 'Water 1L', sku: 'DW-1L', unit: 'bottle' }],
+                        regions: [{ id: 3, name: 'North', warehouse_id: 1 }],
+                        reports: ['sales', 'way-sales-power', 'stock-issues'],
+                        representatives: [{ code: 'REP-01', id: 5, name: 'Ko Aung' }],
                         warehouses: [{ code: 'YGN-MAIN', id: 1, name: 'Yangon Main' }],
+                        ways: [{ code: 'WAY-01', id: 4, name: 'North Route', region_id: 3 }],
                     },
                 });
             if (url === 'api/admin/reports/sales')
@@ -1562,6 +1852,61 @@ describe('application portals', () => {
                         },
                     },
                 });
+            if (url === 'api/admin/reports/way-sales-power')
+                return Promise.resolve({
+                    data: {
+                        data: [
+                            {
+                                customers: 3,
+                                foc_base_units: 2,
+                                invoices: 4,
+                                paid_base_units: 12,
+                                region: { name: 'North' },
+                                representative: { code: 'REP-01', name: 'Ko Aung' },
+                                sales_amount: 1200,
+                                way: { code: 'WAY-01', name: 'North Route' },
+                            },
+                        ],
+                        meta: { current_page: 1, from: 1, last_page: 1, per_page: 25, to: 1, total: 1 },
+                        report: 'way-sales-power',
+                        rules: { financial_totals: 'posted_only' },
+                        summary: {
+                            customers: 3,
+                            foc_base_units: 2,
+                            gross_sales: 1200,
+                            invoices: 4,
+                            paid_base_units: 12,
+                        },
+                    },
+                });
+            if (url === 'api/admin/reports/stock-issues')
+                return Promise.resolve({
+                    data: {
+                        data: [
+                            {
+                                foc_base_units: 6,
+                                issues: 2,
+                                paid_base_units: 132,
+                                product: { id: 9, name: 'Water 1L', sku: 'DW-1L', unit: 'bottle' },
+                                representatives: 1,
+                                total_issued_units: 138,
+                            },
+                        ],
+                        meta: { current_page: 1, from: 1, last_page: 1, per_page: 25, to: 1, total: 1 },
+                        report: 'stock-issues',
+                        rules: {
+                            coverage_filters: 'representative_region_assignment',
+                            date: 'dispatched_at',
+                        },
+                        summary: {
+                            foc_base_units: 6,
+                            issues: 2,
+                            products: 1,
+                            representatives: 1,
+                            total_issued_units: 138,
+                        },
+                    },
+                });
             return Promise.reject(new Error(`Unexpected URL: ${url}`));
         });
         render(
@@ -1582,6 +1927,43 @@ describe('application portals', () => {
         expect(screen.queryByText('SHOULD-NOT-RENDER')).not.toBeInTheDocument();
         expect(screen.queryByRole('table')).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Warehouse stock' })).not.toBeInTheDocument();
+        expect(screen.getByRole('tablist', { name: 'Report sections' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'Sales analysis' })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByRole('tab', { name: 'Way sales power' })).toHaveAttribute('aria-selected', 'false');
+        expect(screen.getByRole('tab', { name: 'Stock issues' })).toHaveAttribute('aria-selected', 'false');
+        expect(screen.queryByRole('combobox', { name: 'Report' })).not.toBeInTheDocument();
+        const applyButton = screen.getByRole('button', { name: 'Apply' });
+        expect(applyButton.closest('.report-filter-action')).not.toBeNull();
+        expect(applyButton.closest('.report-filter-scroll')).toBeNull();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Way sales power' }));
+        expect(await screen.findByText('North Route')).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'Way sales power' })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByRole('combobox', { name: 'Warehouse' })).toBeInTheDocument();
+        expect(screen.getByRole('combobox', { name: 'Region' })).toBeInTheDocument();
+        expect(screen.getByRole('combobox', { name: 'Way' })).toBeInTheDocument();
+        expect(screen.queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument();
+        expect(screen.getByLabelText('Date from')).toBeInTheDocument();
+        expect(screen.getByLabelText('Date to')).toBeInTheDocument();
+        expect(screen.queryByRole('combobox', { name: 'Representative' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('combobox', { name: 'Product' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('searchbox', { name: 'Search report' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Export CSV' })).toBeEnabled();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Stock issues' }));
+        expect(await screen.findByText('DW-1L')).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'Stock issues' })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByRole('combobox', { name: 'Warehouse' })).toBeInTheDocument();
+        expect(screen.getByRole('combobox', { name: 'Region' })).toBeInTheDocument();
+        expect(screen.getByRole('combobox', { name: 'Way' })).toBeInTheDocument();
+        expect(screen.getByLabelText('Date from')).toBeInTheDocument();
+        expect(screen.getByLabelText('Date to')).toBeInTheDocument();
+        expect(screen.queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('searchbox', { name: 'Search report' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Export CSV' })).toBeEnabled();
+        expect(screen.getByRole('columnheader', { name: 'Total issued' })).toBeInTheDocument();
+        expect(screen.getByRole('columnheader', { name: 'Issue count' })).toBeInTheDocument();
+        expect(screen.getByText('138', { selector: '.metric-card strong' })).toBeInTheDocument();
     });
 
     it('filters the main admin sale register by duration', async () => {

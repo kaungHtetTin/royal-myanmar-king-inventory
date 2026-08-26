@@ -38,12 +38,15 @@ class SalePostingService
             $this->lockProducts($productIds);
             $balances = $this->inventory->lock($sale->sales_representative_id, $productIds);
             foreach ($sale->items as $item) {
-                if ($balances->get($item->product_id)->quantity < $item->quantity) {
+                if ($balances->get($item->product_id)->quantity < $item->base_quantity) {
                     throw new DomainConflictException('Insufficient representative stock.', 'INSUFFICIENT_REPRESENTATIVE_STOCK', [
                         'product_id' => $item->product_id,
                         'available' => $balances->get($item->product_id)->quantity,
-                        'requested' => $item->quantity,
+                        'requested' => $item->base_quantity,
                     ]);
+                }
+                if ($balances->get($item->product_id)->foc_quantity < $item->foc_base_quantity) {
+                    throw new DomainConflictException('Insufficient representative FOC stock.', 'INSUFFICIENT_REPRESENTATIVE_FOC_STOCK', ['product_id' => $item->product_id, 'available' => $balances->get($item->product_id)->foc_quantity, 'requested' => $item->foc_base_quantity]);
                 }
             }
 
@@ -58,8 +61,12 @@ class SalePostingService
 
             $occurredAt = now();
             foreach ($sale->items as $item) {
-                $this->inventory->decrease($balances->get($item->product_id), $item->quantity);
-                $this->stockMovement($sale, $item->product_id, $item->quantity, StockMovementType::SaleOut, $actor, $occurredAt);
+                $this->inventory->decrease($balances->get($item->product_id), $item->base_quantity);
+                $this->stockMovement($sale, $item->product_id, $item->base_quantity, StockMovementType::SaleOut, $actor, $occurredAt);
+                if ($item->foc_base_quantity > 0) {
+                    $this->inventory->decreaseFoc($balances->get($item->product_id), $item->foc_base_quantity);
+                    $this->stockMovement($sale, $item->product_id, $item->foc_base_quantity, StockMovementType::SaleFocOut, $actor, $occurredAt);
+                }
             }
             if ($creditBalance) {
                 $this->credit->increase($creditBalance, $sale->total_amount);
@@ -85,7 +92,7 @@ class SalePostingService
             $productIds = $sale->items->pluck('product_id')->all();
             $balances = $this->inventory->lock($sale->sales_representative_id, $productIds);
             foreach ($sale->items as $item) {
-                $this->inventory->assertIncomingAllowed($sale->sales_representative_id, $balances->get($item->product_id), $item->quantity);
+                $this->inventory->assertIncomingAllowed($sale->sales_representative_id, $balances->get($item->product_id), $item->base_quantity + $item->foc_base_quantity);
             }
 
             $creditBalance = null;
@@ -104,8 +111,12 @@ class SalePostingService
 
             $occurredAt = now();
             foreach ($sale->items as $item) {
-                $this->inventory->increase($balances->get($item->product_id), $item->quantity);
-                $this->stockMovement($sale, $item->product_id, $item->quantity, StockMovementType::SaleVoidIn, $actor, $occurredAt, $reason);
+                $this->inventory->increase($balances->get($item->product_id), $item->base_quantity);
+                $this->stockMovement($sale, $item->product_id, $item->base_quantity, StockMovementType::SaleVoidIn, $actor, $occurredAt, $reason);
+                if ($item->foc_base_quantity > 0) {
+                    $this->inventory->increaseFoc($balances->get($item->product_id), $item->foc_base_quantity);
+                    $this->stockMovement($sale, $item->product_id, $item->foc_base_quantity, StockMovementType::SaleFocVoidIn, $actor, $occurredAt, $reason);
+                }
             }
             if ($creditBalance) {
                 $this->credit->decrease($creditBalance, $sale->total_amount);
@@ -125,7 +136,7 @@ class SalePostingService
 
     private function locked(Sale $sale): Sale
     {
-        return Sale::query()->with(['representative', 'warehouse', 'customer', 'items.product'])->lockForUpdate()->findOrFail($sale->id);
+        return Sale::query()->with(['representative.regions', 'warehouse', 'region', 'way.region', 'customer.way.region', 'items.product', 'items.unit', 'items.focUnit'])->lockForUpdate()->findOrFail($sale->id);
     }
 
     private function requireStatus(Sale $sale, SaleStatus $status): void
@@ -140,7 +151,7 @@ class SalePostingService
         if ($sale->items->isEmpty()) {
             throw new DomainConflictException('A sale must contain at least one item.', 'EMPTY_SALE');
         }
-        if (! $sale->representative->is_active || ! $sale->warehouse->is_active || ! $customer->is_active || $customer->warehouse_id !== $sale->warehouse_id || $sale->items->contains(fn ($item) => ! $item->product->is_active)) {
+        if (! $sale->representative->is_active || ! $sale->warehouse->is_active || ! $sale->region?->is_active || ! $sale->way?->is_active || ! $customer->is_active || $customer->way_id !== $sale->way_id || $sale->way->region_id !== $sale->region_id || ! $sale->representative->regions->contains('id', $sale->region_id) || $sale->items->contains(fn ($item) => ! $item->product->is_active || ! $item->unit?->is_active || ($item->foc_quantity > 0 && ! $item->focUnit?->is_active))) {
             throw new DomainConflictException('Inactive or out-of-scope master data cannot be used for sale posting.', 'INACTIVE_MASTER_DATA');
         }
         $calculated = $sale->items->sum(fn ($item) => $item->quantity * $item->unit_price);
@@ -160,7 +171,8 @@ class SalePostingService
 
     private function stockMovement(Sale $sale, int $productId, int $quantity, StockMovementType $type, User $actor, $occurredAt, ?string $notes = null): void
     {
-        StockMovement::query()->create(['product_id' => $productId, 'movement_type' => $type, 'source_type' => 'sale', 'source_id' => $sale->id, 'reference' => $sale->reference, 'from_location_type' => $type === StockMovementType::SaleOut ? 'representative' : 'customer', 'from_location_id' => $type === StockMovementType::SaleOut ? $sale->sales_representative_id : $sale->customer_id, 'to_location_type' => $type === StockMovementType::SaleOut ? 'customer' : 'representative', 'to_location_id' => $type === StockMovementType::SaleOut ? $sale->customer_id : $sale->sales_representative_id, 'quantity' => $quantity, 'created_by' => $actor->id, 'notes' => $notes ?? $sale->notes, 'occurred_at' => $occurredAt]);
+        $out = in_array($type, [StockMovementType::SaleOut, StockMovementType::SaleFocOut], true);
+        StockMovement::query()->create(['product_id' => $productId, 'movement_type' => $type, 'source_type' => 'sale', 'source_id' => $sale->id, 'reference' => $sale->reference, 'from_location_type' => $out ? 'representative' : 'customer', 'from_location_id' => $out ? $sale->sales_representative_id : $sale->customer_id, 'to_location_type' => $out ? 'customer' : 'representative', 'to_location_id' => $out ? $sale->customer_id : $sale->sales_representative_id, 'quantity' => $quantity, 'created_by' => $actor->id, 'notes' => $notes ?? $sale->notes, 'occurred_at' => $occurredAt]);
     }
 
     /** @return array<string, mixed> */
@@ -172,7 +184,7 @@ class SalePostingService
     /** @return array<string, mixed> */
     private function metadata(Sale $sale): array
     {
-        return ['reference' => $sale->reference, 'sales_representative_id' => $sale->sales_representative_id, 'customer_id' => $sale->customer_id, 'payment_type' => $sale->payment_type->value, 'total_amount' => $sale->total_amount, 'items' => $sale->items->map->only(['product_id', 'quantity', 'unit_price', 'line_total'])->all()];
+        return ['reference' => $sale->reference, 'sales_representative_id' => $sale->sales_representative_id, 'region_id' => $sale->region_id, 'way_id' => $sale->way_id, 'customer_id' => $sale->customer_id, 'payment_type' => $sale->payment_type->value, 'total_amount' => $sale->total_amount, 'items' => $sale->items->map->only(['product_id', 'product_unit_id', 'quantity', 'base_quantity', 'unit_price', 'line_total', 'foc_product_unit_id', 'foc_quantity', 'foc_base_quantity'])->all()];
     }
 
     /** @return array<string, mixed> */

@@ -37,8 +37,8 @@ class SettingController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'username' => ['required', 'string', 'max:100', 'regex:/^[a-zA-Z0-9._-]+$/', Rule::unique('users')->ignore($user)],
             'email' => ['nullable', 'email', 'max:255', Rule::unique('users')->ignore($user)],
-            'current_password' => ['nullable', 'required_with:password', 'string'],
-            'password' => ['nullable', 'string', 'min:8', 'confirmed'],
+            'current_password' => ['nullable', 'required_with:password', 'string', 'min:6'],
+            'password' => ['nullable', 'string', 'min:6', 'confirmed'],
         ]);
 
         if (! empty($data['password']) && ! Hash::check($data['current_password'], $user->password)) {

@@ -18,6 +18,17 @@ class CustomerResource extends JsonResource
                 'code' => $this->warehouse->code,
                 'name' => $this->warehouse->name,
             ]),
+            'way_id' => $this->way_id,
+            'way' => $this->whenLoaded('way', fn () => $this->way ? [
+                'id' => $this->way->id,
+                'code' => $this->way->code,
+                'name' => $this->way->name,
+                'region' => [
+                    'id' => $this->way->region->id,
+                    'name' => $this->way->region->name,
+                    'warehouse_id' => $this->way->region->warehouse_id,
+                ],
+            ] : null),
             'code' => $this->code,
             'name' => $this->name,
             'customer_type' => $this->customer_type,

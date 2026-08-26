@@ -45,13 +45,13 @@ class RepresentativeManagementTest extends TestCase
         $representative = SalesRepresentative::query()->findOrFail($response->json('data.id'));
         $user = $representative->user;
         $this->assertTrue($user->hasRole(RoleName::SalesRepresentative->value));
-        $this->assertTrue(Hash::check('password', $user->password));
+        $this->assertTrue(Hash::check('secret', $user->password));
         $this->assertDatabaseHas('user_warehouse', ['user_id' => $user->id, 'warehouse_id' => $warehouse->id]);
         $this->assertDatabaseHas('vehicles', ['id' => $vehicle->id, 'sales_representative_id' => $representative->id]);
         $this->assertDatabaseHas('audit_logs', ['actor_id' => $admin->id, 'event' => 'representative.created', 'subject_id' => $representative->id]);
 
         $this->withHeader('Origin', 'http://localhost')->postJson('/api/auth/login', [
-            'login' => 'koaung', 'password' => 'password', 'portal' => 'sales', 'remember' => false,
+            'login' => 'koaung', 'password' => 'secret', 'portal' => 'sales', 'remember' => false,
         ])->assertOk()->assertJsonPath('user.representative_id', $representative->id);
     }
 
@@ -146,10 +146,7 @@ class RepresentativeManagementTest extends TestCase
         $this->postJson('/api/admin/representatives', $this->payload($inactiveWarehouse, ['code' => 'SR-INACTIVE', 'username' => 'inactive.warehouse', 'email' => null]))
             ->assertUnprocessable()->assertJsonValidationErrors('primary_warehouse_id');
         $this->postJson('/api/admin/representatives', $this->payload($warehouse, [
-            'password' => 'short7!', 'password_confirmation' => 'short7!',
-        ]))->assertUnprocessable()->assertJsonValidationErrors('password');
-        $this->postJson('/api/admin/representatives', $this->payload($warehouse, [
-            'password' => 'toolong99', 'password_confirmation' => 'toolong99',
+            'password' => 'short', 'password_confirmation' => 'short',
         ]))->assertUnprocessable()->assertJsonValidationErrors('password');
     }
 
@@ -160,7 +157,7 @@ class RepresentativeManagementTest extends TestCase
     {
         return array_merge([
             'code' => 'SR-NEW', 'name' => 'New Representative', 'phone' => '09-123456789', 'email' => 'new.rep@example.com',
-            'username' => 'new.rep', 'password' => 'password', 'password_confirmation' => 'password',
+            'username' => 'new.rep', 'password' => 'secret', 'password_confirmation' => 'secret',
             'primary_warehouse_id' => $warehouse->id, 'region' => 'Yangon', 'vehicle_id' => null,
             'notes' => 'Distribution representative.', 'is_active' => true,
         ], $overrides);

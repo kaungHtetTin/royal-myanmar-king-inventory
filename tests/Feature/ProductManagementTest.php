@@ -55,6 +55,11 @@ class ProductManagementTest extends TestCase
             ->assertJsonPath('data.0.id', $matching->id)
             ->assertJsonPath('meta.total', 1);
 
+        $this->getJson('/api/admin/products/'.$matching->id)
+            ->assertOk()
+            ->assertJsonPath('data.id', $matching->id)
+            ->assertJsonPath('data.sku', 'DW-1L');
+
         $this->getJson('/api/admin/product-options')->assertOk()
             ->assertJsonPath('categories.0', 'Accessories')
             ->assertJsonPath('categories.1', 'Water')

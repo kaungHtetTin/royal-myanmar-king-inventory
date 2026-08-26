@@ -20,7 +20,7 @@ class SaleSeeder extends Seeder
     {
         $representative = SalesRepresentative::query()->where('code', 'SR-001')->with('user')->firstOrFail();
         $customer = Customer::query()->where('code', 'CUS-ABC')->firstOrFail();
-        $products = Product::query()->whereIn('sku', ['DW-1L', 'MW-500ML', 'DW-12PK'])->get()->keyBy('sku');
+        $products = Product::query()->whereIn('sku', ['DW-1L', 'MW-500ML', 'JW-20L'])->get()->keyBy('sku');
         $request = $this->request($representative->user);
 
         $cash = $this->sale($representative, $customer, PaymentType::Cash, 'Local demo posted cash sale.', [
@@ -40,11 +40,11 @@ class SaleSeeder extends Seeder
         }
 
         $this->sale($representative, $customer, PaymentType::Cash, 'Local demo draft sale.', [
-            ['product' => $products['DW-12PK'], 'quantity' => 1],
+            ['product' => $products['DW-1L'], 'unit' => 'carton', 'quantity' => 1, 'foc_unit' => 'bottle', 'foc_quantity' => 2],
         ]);
     }
 
-    /** @param list<array{product: Product, quantity: int}> $lines */
+    /** @param list<array{product: Product, quantity: int, unit?: string, foc_unit?: string, foc_quantity?: int}> $lines */
     private function sale(SalesRepresentative $representative, Customer $customer, PaymentType $paymentType, string $notes, array $lines): Sale
     {
         return DB::transaction(function () use ($representative, $customer, $paymentType, $notes, $lines): Sale {
@@ -52,11 +52,33 @@ class SaleSeeder extends Seeder
             if ($existing) {
                 return $existing;
             }
-            $items = collect($lines)->map(fn (array $line) => ['product_id' => $line['product']->id, 'quantity' => $line['quantity'], 'unit_price' => $line['product']->selling_price, 'line_total' => $line['quantity'] * $line['product']->selling_price]);
+            $items = collect($lines)->map(function (array $line) use ($customer): array {
+                $unit = isset($line['unit'])
+                    ? $line['product']->units()->where('name', $line['unit'])->firstOrFail()
+                    : $line['product']->defaultSellingUnit()->firstOrFail();
+                $unitPrice = $unit->regionPrices()->where('region_id', $customer->way->region_id)->value('price');
+                if ($unitPrice === null) {
+                    throw new \LogicException("A regional price is missing for {$line['product']->sku}.");
+                }
+                $focUnit = isset($line['foc_unit'])
+                    ? $line['product']->units()->where('name', $line['foc_unit'])->firstOrFail()
+                    : null;
+                $focQuantity = $line['foc_quantity'] ?? 0;
+
+                return [
+                    'product_id' => $line['product']->id, 'product_unit_id' => $unit->id,
+                    'quantity' => $line['quantity'], 'base_quantity' => $line['quantity'] * $unit->conversion_factor,
+                    'unit_price' => $unitPrice, 'line_total' => $line['quantity'] * $unitPrice,
+                    'foc_product_unit_id' => $focUnit?->id, 'foc_quantity' => $focQuantity,
+                    'foc_base_quantity' => $focQuantity * ($focUnit?->conversion_factor ?? 0),
+                ];
+            });
             $sale = Sale::query()->create([
                 'reference' => app(DocumentReferenceGenerator::class)->next('sale', 'SAL'),
                 'sales_representative_id' => $representative->id,
                 'warehouse_id' => $representative->primary_warehouse_id,
+                'region_id' => $customer->way->region_id,
+                'way_id' => $customer->way_id,
                 'customer_id' => $customer->id,
                 'payment_type' => $paymentType,
                 'total_amount' => $items->sum('line_total'),

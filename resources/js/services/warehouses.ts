@@ -14,7 +14,25 @@ export type Warehouse = {
     township: string | null;
     updated_at: string | null;
     users_count: number;
+    regions: WarehouseRegion[];
 };
+export type WarehouseWay = {
+    id: number;
+    region_id: number;
+    code: string;
+    name: string;
+    notes: string | null;
+    is_active: boolean;
+};
+export type WarehouseRegion = {
+    id: number;
+    warehouse_id: number;
+    name: string;
+    notes: string | null;
+    is_active: boolean;
+    ways: WarehouseWay[];
+};
+export type CoverageInput = { name: string; notes: string; is_active: boolean };
 
 export type WarehouseInput = {
     address: string;
@@ -74,8 +92,19 @@ export const warehouseApi = {
                 params: { ...filters, per_page: 20 },
             }),
         ),
+    get: (id: number) => request<{ data: Warehouse }>(() => window.axios.get(`api/admin/warehouses/${id}`)),
     create: (input: WarehouseInput) =>
         request<{ data: Warehouse }>(() => window.axios.post('api/admin/warehouses', input)),
     update: (id: number, input: WarehouseInput) =>
         request<{ data: Warehouse }>(() => window.axios.put(`api/admin/warehouses/${id}`, input)),
+    createRegion: (warehouseId: number, input: CoverageInput) =>
+        request<{ data: WarehouseRegion }>(() =>
+            window.axios.post(`api/admin/warehouses/${warehouseId}/regions`, input),
+        ),
+    updateRegion: (id: number, input: CoverageInput) =>
+        request<{ data: WarehouseRegion }>(() => window.axios.put(`api/admin/regions/${id}`, input)),
+    createWay: (regionId: number, input: CoverageInput) =>
+        request<{ data: WarehouseWay }>(() => window.axios.post(`api/admin/regions/${regionId}/ways`, input)),
+    updateWay: (id: number, input: CoverageInput) =>
+        request<{ data: WarehouseWay }>(() => window.axios.put(`api/admin/ways/${id}`, input)),
 };

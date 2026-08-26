@@ -22,12 +22,12 @@ class AuthenticationTest extends TestCase
 
     public function test_active_user_can_log_in_with_email_and_restore_the_session(): void
     {
-        $user = User::factory()->create(['email' => 'admin@example.com']);
+        $user = User::factory()->create(['email' => 'admin@example.com', 'password' => 'secret']);
         $user->assignRole(RoleName::OfficeAdmin->value);
 
         $response = $this->withHeader('Origin', 'http://localhost')->postJson('/api/auth/login', [
             'login' => 'admin@example.com',
-            'password' => 'password',
+            'password' => 'secret',
             'portal' => 'admin',
         ]);
 
@@ -158,6 +158,7 @@ class AuthenticationTest extends TestCase
             ['POST', '/api/admin/representatives'],
             ['PUT', '/api/admin/representatives/999'],
             ['GET', '/api/admin/inventory'],
+            ['GET', '/api/admin/inventory/export'],
             ['GET', '/api/admin/inventory/options'],
             ['GET', '/api/admin/inventory/movements'],
             ['GET', '/api/admin/stock-imports'],

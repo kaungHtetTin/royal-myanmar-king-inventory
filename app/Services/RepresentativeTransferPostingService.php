@@ -35,15 +35,16 @@ class RepresentativeTransferPostingService
             $productIds = $transfer->items->pluck('product_id')->all();
             $representativeBalances = $this->representatives->lock($transfer->sales_representative_id, $productIds);
             foreach ($transfer->items as $item) {
-                $this->representatives->assertIncomingAllowed($transfer->sales_representative_id, $representativeBalances->get($item->product_id), $item->quantity);
+                $this->representatives->assertIncomingAllowed($transfer->sales_representative_id, $representativeBalances->get($item->product_id), $item->base_quantity + $item->foc_base_quantity);
             }
             $warehouseBalances = $this->warehouses->lock($transfer->source_warehouse_id, $productIds);
             $transitBalances = $this->inTransit->lock(self::TRANSIT_TYPE, $transfer->id, $productIds);
             $occurredAt = now();
             foreach ($transfer->items as $item) {
-                $this->warehouses->decrease($warehouseBalances->get($item->product_id), $item->quantity);
-                $this->inTransit->increase($transitBalances->get($item->product_id), $item->quantity);
-                $this->movement($transfer, $item->product_id, $item->quantity, StockMovementType::RepresentativeTransferDispatch, 'warehouse', $transfer->source_warehouse_id, 'in_transit', $transfer->id, $actor, $occurredAt);
+                $physical = $item->base_quantity + $item->foc_base_quantity;
+                $this->warehouses->decrease($warehouseBalances->get($item->product_id), $physical);
+                $this->inTransit->increase($transitBalances->get($item->product_id), $physical);
+                $this->movement($transfer, $item->product_id, $physical, StockMovementType::RepresentativeTransferDispatch, 'warehouse', $transfer->source_warehouse_id, 'in_transit', $transfer->id, $actor, $occurredAt);
             }
             $transfer->update(['status' => TransferStatus::Dispatched, 'dispatched_by' => $actor->id, 'dispatched_at' => $occurredAt]);
             $this->auditLogger->record($request, 'representative_transfer.dispatched', $actor, $transfer, $this->metadata($transfer));
@@ -66,9 +67,11 @@ class RepresentativeTransferPostingService
             $transitBalances = $this->inTransit->lock(self::TRANSIT_TYPE, $transfer->id, $productIds);
             $occurredAt = now();
             foreach ($transfer->items as $item) {
-                $this->inTransit->decrease($transitBalances->get($item->product_id), $item->quantity);
-                $this->representatives->increase($representativeBalances->get($item->product_id), $item->quantity);
-                $this->movement($transfer, $item->product_id, $item->quantity, StockMovementType::RepresentativeTransferReceive, 'in_transit', $transfer->id, 'representative', $transfer->sales_representative_id, $actor, $occurredAt);
+                $physical = $item->base_quantity + $item->foc_base_quantity;
+                $this->inTransit->decrease($transitBalances->get($item->product_id), $physical);
+                $this->representatives->increase($representativeBalances->get($item->product_id), $item->base_quantity);
+                $this->representatives->increaseFoc($representativeBalances->get($item->product_id), $item->foc_base_quantity);
+                $this->movement($transfer, $item->product_id, $physical, StockMovementType::RepresentativeTransferReceive, 'in_transit', $transfer->id, 'representative', $transfer->sales_representative_id, $actor, $occurredAt);
             }
             $transfer->update(['status' => TransferStatus::Received, 'received_by' => $actor->id, 'received_at' => $occurredAt]);
             $this->auditLogger->record($request, 'representative_transfer.received', $actor, $transfer, $this->metadata($transfer));
@@ -92,9 +95,11 @@ class RepresentativeTransferPostingService
             $warehouseBalances = $this->warehouses->lock($transfer->source_warehouse_id, $productIds);
             $occurredAt = now();
             foreach ($transfer->items as $item) {
-                $this->representatives->decrease($representativeBalances->get($item->product_id), $item->quantity);
-                $this->warehouses->increase($warehouseBalances->get($item->product_id), $item->quantity);
-                $this->movement($transfer, $item->product_id, $item->quantity, StockMovementType::RepresentativeReturn, 'representative', $transfer->sales_representative_id, 'warehouse', $transfer->source_warehouse_id, $actor, $occurredAt);
+                $physical = $item->base_quantity + $item->foc_base_quantity;
+                $this->representatives->decrease($representativeBalances->get($item->product_id), $item->base_quantity);
+                $this->representatives->decreaseFoc($representativeBalances->get($item->product_id), $item->foc_base_quantity);
+                $this->warehouses->increase($warehouseBalances->get($item->product_id), $physical);
+                $this->movement($transfer, $item->product_id, $physical, StockMovementType::RepresentativeReturn, 'representative', $transfer->sales_representative_id, 'warehouse', $transfer->source_warehouse_id, $actor, $occurredAt);
             }
             $transfer->update([
                 'status' => TransferStatus::Received,
@@ -136,23 +141,27 @@ class RepresentativeTransferPostingService
             $occurredAt = now();
             if ($transfer->direction === 'return') {
                 foreach ($transfer->items as $item) {
-                    $this->representatives->assertIncomingAllowed($transfer->sales_representative_id, $representativeBalances->get($item->product_id), $item->quantity);
-                    $this->warehouses->decrease($warehouseBalances->get($item->product_id), $item->quantity);
-                    $this->representatives->increase($representativeBalances->get($item->product_id), $item->quantity);
-                    $this->movement($transfer, $item->product_id, $item->quantity, StockMovementType::ReversalIn, 'warehouse', $transfer->source_warehouse_id, 'representative', $transfer->sales_representative_id, $actor, $occurredAt, $reason);
+                    $physical = $item->base_quantity + $item->foc_base_quantity;
+                    $this->warehouses->decrease($warehouseBalances->get($item->product_id), $physical);
+                    $this->representatives->increase($representativeBalances->get($item->product_id), $item->base_quantity);
+                    $this->representatives->increaseFoc($representativeBalances->get($item->product_id), $item->foc_base_quantity);
+                    $this->movement($transfer, $item->product_id, $physical, StockMovementType::ReversalIn, 'warehouse', $transfer->source_warehouse_id, 'representative', $transfer->sales_representative_id, $actor, $occurredAt, $reason);
                 }
             } elseif ($transfer->status === TransferStatus::Dispatched) {
                 $transitBalances = $this->inTransit->lock(self::TRANSIT_TYPE, $transfer->id, $productIds);
                 foreach ($transfer->items as $item) {
-                    $this->inTransit->decrease($transitBalances->get($item->product_id), $item->quantity);
-                    $this->warehouses->increase($warehouseBalances->get($item->product_id), $item->quantity);
-                    $this->movement($transfer, $item->product_id, $item->quantity, StockMovementType::ReversalIn, 'in_transit', $transfer->id, 'warehouse', $transfer->source_warehouse_id, $actor, $occurredAt, $reason);
+                    $physical = $item->base_quantity + $item->foc_base_quantity;
+                    $this->inTransit->decrease($transitBalances->get($item->product_id), $physical);
+                    $this->warehouses->increase($warehouseBalances->get($item->product_id), $physical);
+                    $this->movement($transfer, $item->product_id, $physical, StockMovementType::ReversalIn, 'in_transit', $transfer->id, 'warehouse', $transfer->source_warehouse_id, $actor, $occurredAt, $reason);
                 }
             } else {
                 foreach ($transfer->items as $item) {
-                    $this->representatives->decrease($representativeBalances->get($item->product_id), $item->quantity);
-                    $this->warehouses->increase($warehouseBalances->get($item->product_id), $item->quantity);
-                    $this->movement($transfer, $item->product_id, $item->quantity, StockMovementType::ReversalIn, 'representative', $transfer->sales_representative_id, 'warehouse', $transfer->source_warehouse_id, $actor, $occurredAt, $reason);
+                    $physical = $item->base_quantity + $item->foc_base_quantity;
+                    $this->representatives->decrease($representativeBalances->get($item->product_id), $item->base_quantity);
+                    $this->representatives->decreaseFoc($representativeBalances->get($item->product_id), $item->foc_base_quantity);
+                    $this->warehouses->increase($warehouseBalances->get($item->product_id), $physical);
+                    $this->movement($transfer, $item->product_id, $physical, StockMovementType::ReversalIn, 'representative', $transfer->sales_representative_id, 'warehouse', $transfer->source_warehouse_id, $actor, $occurredAt, $reason);
                 }
             }
             $transfer->update(['status' => TransferStatus::Reversed, 'reversed_by' => $actor->id, 'reversed_at' => $occurredAt, 'reversal_reason' => $reason]);
@@ -164,7 +173,7 @@ class RepresentativeTransferPostingService
 
     private function locked(RepresentativeTransfer $transfer): RepresentativeTransfer
     {
-        return RepresentativeTransfer::query()->with(['sourceWarehouse', 'representative', 'items.product'])->lockForUpdate()->findOrFail($transfer->id);
+        return RepresentativeTransfer::query()->with(['sourceWarehouse', 'representative', 'items.product', 'items.unit', 'items.focUnit'])->lockForUpdate()->findOrFail($transfer->id);
     }
 
     private function requireStatus(RepresentativeTransfer $transfer, TransferStatus $status): void
@@ -192,7 +201,7 @@ class RepresentativeTransferPostingService
     /** @return array<string, mixed> */
     private function metadata(RepresentativeTransfer $transfer): array
     {
-        return ['reference' => $transfer->reference, 'direction' => $transfer->direction, 'source_warehouse_id' => $transfer->source_warehouse_id, 'sales_representative_id' => $transfer->sales_representative_id, 'items' => $transfer->items->map->only(['product_id', 'quantity'])->all()];
+        return ['reference' => $transfer->reference, 'direction' => $transfer->direction, 'source_warehouse_id' => $transfer->source_warehouse_id, 'sales_representative_id' => $transfer->sales_representative_id, 'items' => $transfer->items->map->only(['product_id', 'product_unit_id', 'quantity', 'base_quantity', 'foc_product_unit_id', 'foc_quantity', 'foc_base_quantity'])->all()];
     }
 
     /** @return array<string, mixed> */

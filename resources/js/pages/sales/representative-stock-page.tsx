@@ -168,7 +168,7 @@ export function RepresentativeStockPage() {
                         <p className="ui-eyebrow">Available inventory</p>
                         <h2>Available products</h2>
                     </div>
-                    <small>Read only · maximum 100 units per product</small>
+                    <small>Read only · paid and FOC balances in base units</small>
                 </header>
                 {loading ? (
                     <div className="ui-loading">
@@ -201,19 +201,9 @@ export function RepresentativeStockPage() {
                                         <small>{row.product.unit}</small>
                                     </span>
                                     <span className="sales-capacity">
-                                        <small>Capacity left</small>
-                                        <strong>{number(row.capacity_remaining)}</strong>
-                                        <span
-                                            aria-label={`${number(row.capacity_remaining)} units of capacity remaining`}
-                                            className="sales-capacity__bar"
-                                            role="img"
-                                        >
-                                            <span
-                                                style={{
-                                                    width: `${Math.max(0, Math.min(100, row.capacity_remaining))}%`,
-                                                }}
-                                            />
-                                        </span>
+                                        <small>FOC stock</small>
+                                        <strong>{number(row.foc_quantity)}</strong>
+                                        <small>{row.product.unit}</small>
                                     </span>
                                 </div>
                             </article>

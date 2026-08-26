@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Sale extends Model
 {
-    protected $fillable = ['reference', 'sales_representative_id', 'warehouse_id', 'customer_id', 'payment_type', 'total_amount', 'status', 'notes', 'created_by', 'posted_by', 'posted_at', 'voided_by', 'voided_at', 'void_reason'];
+    protected $fillable = ['reference', 'sales_representative_id', 'warehouse_id', 'region_id', 'way_id', 'customer_id', 'payment_type', 'total_amount', 'status', 'notes', 'created_by', 'posted_by', 'posted_at', 'voided_by', 'voided_at', 'void_reason'];
 
     protected function casts(): array
     {
@@ -30,6 +30,16 @@ class Sale extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    public function region(): BelongsTo
+    {
+        return $this->belongsTo(Region::class);
+    }
+
+    public function way(): BelongsTo
+    {
+        return $this->belongsTo(Way::class);
     }
 
     public function items(): HasMany

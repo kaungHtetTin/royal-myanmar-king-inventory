@@ -7,6 +7,8 @@ use App\Exceptions\DomainConflictException;
 use App\Http\Controllers\Concerns\HandlesTransferCommands;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\RepresentativeTransferResource;
+use App\Models\Product;
+use App\Models\ProductUnit;
 use App\Models\RepresentativeTransfer;
 use App\Models\SalesRepresentative;
 use App\Models\Warehouse;
@@ -19,6 +21,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class RepresentativeTransferController extends Controller
 {
@@ -79,6 +82,7 @@ class RepresentativeTransferController extends Controller
                 'notes' => $data['notes'] ?? null,
                 'created_by' => $request->user()->id,
             ]);
+            $data['items'] = $this->preparedItems($data['items']);
             $transfer->items()->createMany($data['items']);
             $this->auditLogger->record($request, 'representative_transfer.created', $request->user(), $transfer, ['new' => $data]);
 
@@ -111,7 +115,7 @@ class RepresentativeTransferController extends Controller
             $old = $representativeTransfer->load('items')->toArray();
             $representativeTransfer->update(['source_warehouse_id' => $data['source_warehouse_id'], 'sales_representative_id' => $data['sales_representative_id'], 'notes' => $data['notes'] ?? null]);
             $representativeTransfer->items()->delete();
-            $representativeTransfer->items()->createMany($data['items']);
+            $representativeTransfer->items()->createMany($this->preparedItems($data['items']));
             $this->auditLogger->record($request, 'representative_transfer.updated', $request->user(), $representativeTransfer, ['old' => $old, 'new' => $data]);
         });
 
@@ -154,7 +158,10 @@ class RepresentativeTransferController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
             'items' => ['required', 'array', 'min:1', 'max:100'],
             'items.*.product_id' => ['required', 'integer', 'distinct', Rule::exists('products', 'id')->where('is_active', true)],
-            'items.*.quantity' => ['required', 'integer', 'min:1', 'max:100'],
+            'items.*.quantity' => ['required', 'integer', 'min:1', 'max:4294967295'],
+            'items.*.product_unit_id' => ['nullable', 'integer', 'exists:product_units,id'],
+            'items.*.foc_quantity' => ['nullable', 'integer', 'min:0', 'max:4294967295'],
+            'items.*.foc_product_unit_id' => ['nullable', 'integer', 'exists:product_units,id'],
         ];
     }
 
@@ -188,11 +195,41 @@ class RepresentativeTransferController extends Controller
     /** @return list<string> */
     private function relations(): array
     {
-        return ['sourceWarehouse', 'representative', 'items.product', 'transit', 'creator', 'dispatcher', 'receiver', 'canceller', 'reverser'];
+        return ['sourceWarehouse', 'representative.regions', 'items.product', 'items.unit', 'items.focUnit', 'transit', 'creator', 'dispatcher', 'receiver', 'canceller', 'reverser'];
     }
 
     private function load(RepresentativeTransfer $transfer): RepresentativeTransfer
     {
         return $transfer->fresh($this->relations());
+    }
+
+    /** @param list<array<string, mixed>> $items */
+    private function preparedItems(array $items): array
+    {
+        return collect($items)->map(function (array $item): array {
+            $product = Product::query()->with(['baseUnit', 'defaultSellingUnit'])->findOrFail($item['product_id']);
+            $unit = ProductUnit::query()->where('product_id', $product->id)->where('is_active', true)
+                ->find($item['product_unit_id'] ?? $product->defaultSellingUnit?->id);
+            if (! $unit) {
+                throw ValidationException::withMessages(['items' => ['Select a valid active unit for every product.']]);
+            }
+            $focQuantity = (int) ($item['foc_quantity'] ?? 0);
+            $focUnit = $focQuantity > 0
+                ? ProductUnit::query()->where('product_id', $product->id)->where('is_active', true)->find($item['foc_product_unit_id'] ?? $unit->id)
+                : null;
+            if ($focQuantity > 0 && ! $focUnit) {
+                throw ValidationException::withMessages(['items' => ['FOC must use an active unit of the same product.']]);
+            }
+
+            return [
+                'product_id' => $product->id,
+                'product_unit_id' => $unit->id,
+                'quantity' => (int) $item['quantity'],
+                'base_quantity' => (int) $item['quantity'] * $unit->conversion_factor,
+                'foc_product_unit_id' => $focUnit?->id,
+                'foc_quantity' => $focQuantity,
+                'foc_base_quantity' => $focQuantity * ($focUnit?->conversion_factor ?? 0),
+            ];
+        })->all();
     }
 }

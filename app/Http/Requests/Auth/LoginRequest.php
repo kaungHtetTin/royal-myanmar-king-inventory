@@ -16,7 +16,7 @@ class LoginRequest extends FormRequest
     {
         return [
             'login' => ['required', 'string', 'max:255'],
-            'password' => ['required', 'string', 'max:255'],
+            'password' => ['required', 'string', 'min:6', 'max:255'],
             'remember' => ['sometimes', 'boolean'],
             'portal' => ['required', 'in:admin,sales'],
         ];

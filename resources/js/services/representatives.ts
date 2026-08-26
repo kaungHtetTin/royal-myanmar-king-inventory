@@ -32,6 +32,8 @@ export type Representative = {
     primary_warehouse: RepresentativeWarehouse;
     primary_warehouse_id: number;
     region: string | null;
+    region_ids: number[];
+    regions: Array<{ id: number; warehouse_id: number; name: string }>;
     updated_at: string | null;
     vehicle: Omit<RepresentativeVehicle, 'sales_representative_id'> | null;
 };
@@ -47,6 +49,7 @@ export type RepresentativeInput = {
     phone: string;
     primary_warehouse_id: number;
     region: string;
+    region_ids: number[];
     username: string;
     vehicle_id: number | null;
 };
@@ -63,6 +66,7 @@ export type RepresentativeFilters = {
 export type RepresentativeOptions = {
     vehicles: RepresentativeVehicle[];
     warehouses: RepresentativeWarehouse[];
+    regions: Array<{ id: number; warehouse_id: number; name: string; warehouse: RepresentativeWarehouse }>;
 };
 export type RepresentativeSummary = { active: number; signed_in: number; total: number; with_vehicle: number };
 export type RepresentativeOverview = {

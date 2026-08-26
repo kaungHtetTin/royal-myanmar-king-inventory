@@ -57,6 +57,11 @@ const ProductManagementPage = lazy(() =>
         default: module.ProductManagementPage,
     })),
 );
+const ProductFormPage = lazy(() =>
+    import('./pages/admin/product-management-page').then((module) => ({
+        default: module.ProductFormPage,
+    })),
+);
 const ReportsPage = lazy(() =>
     import('./pages/admin/reports-page').then((module) => ({
         default: module.ReportsPage,
@@ -113,6 +118,11 @@ const WarehouseManagementPage = lazy(() =>
         default: module.WarehouseManagementPage,
     })),
 );
+const WarehouseCoveragePage = lazy(() =>
+    import('./pages/admin/warehouse-coverage-page').then((module) => ({
+        default: module.WarehouseCoveragePage,
+    })),
+);
 const SettingsPage = lazy(() =>
     import('./pages/admin/settings-page').then((module) => ({
         default: module.SettingsPage,
@@ -136,6 +146,12 @@ const StockIssueHistoryPage = lazy(() =>
 );
 const ProfileSettingsPage = lazy(() =>
     import('./pages/sales/profile-settings-page').then((module) => ({ default: module.ProfileSettingsPage })),
+);
+const SalesCustomerPage = lazy(() =>
+    import('./pages/sales/customer-page').then((module) => ({ default: module.SalesCustomerPage })),
+);
+const NewSalesCustomerPage = lazy(() =>
+    import('./pages/sales/customer-page').then((module) => ({ default: module.NewSalesCustomerPage })),
 );
 const SalesReportPage = lazy(() =>
     import('./pages/sales/sales-report-page').then((module) => ({
@@ -235,8 +251,14 @@ export default function Root({ initialUser }: { initialUser?: SessionUser | null
                                             />
                                             <Route path="users" element={<AccessManagementPage />} />
                                             <Route path="products" element={<ProductManagementPage />} />
+                                            <Route path="products/new" element={<ProductFormPage />} />
+                                            <Route path="products/:productId/edit" element={<ProductFormPage />} />
                                             <Route path="vehicles" element={<VehicleManagementPage />} />
                                             <Route path="warehouses" element={<WarehouseManagementPage />} />
+                                            <Route
+                                                path="warehouses/:warehouseId/settings"
+                                                element={<WarehouseCoveragePage />}
+                                            />
                                             <Route path="settings" element={<SettingsPage />} />
                                             <Route path="*" element={<AdminFoundationPage />} />
                                         </Routes>
@@ -257,6 +279,8 @@ export default function Root({ initialUser }: { initialUser?: SessionUser | null
                                             <Route path="my-stock" element={<RepresentativeStockPage />} />
                                             <Route path="stock-issue-history" element={<StockIssueHistoryPage />} />
                                             <Route path="profile" element={<ProfileSettingsPage />} />
+                                            <Route path="customers" element={<SalesCustomerPage />} />
+                                            <Route path="customers/new" element={<NewSalesCustomerPage />} />
                                             <Route path="receivings/:transferId" element={<ReceivingDetailPage />} />
                                             <Route path="new-sale" element={<NewSalePage />} />
                                             <Route path="sales-history" element={<SalesHistoryPage />} />

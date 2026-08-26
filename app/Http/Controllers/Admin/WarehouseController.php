@@ -32,6 +32,7 @@ class WarehouseController extends Controller
         ]);
 
         $query = $this->warehouseAccess->scope(Warehouse::query(), $request->user())
+            ->with(['regions' => fn ($query) => $query->with('ways')->orderBy('name')])
             ->withCount('users')
             ->when($data['search'] ?? null, function ($query, string $search): void {
                 $query->where(fn ($builder) => $builder
@@ -63,8 +64,17 @@ class WarehouseController extends Controller
         $warehouse = Warehouse::query()->create($this->normalized($data));
         $this->auditLogger->record($request, 'warehouse.created', $request->user(), $warehouse, ['new' => $warehouse->toArray()]);
 
-        return (new WarehouseResource($warehouse->loadCount('users')))
+        return (new WarehouseResource($warehouse->load(['regions.ways'])->loadCount('users')))
             ->response()->setStatusCode(201);
+    }
+
+    public function show(Request $request, Warehouse $warehouse): WarehouseResource
+    {
+        Gate::authorize('view', $warehouse);
+
+        return new WarehouseResource(
+            $warehouse->load(['regions' => fn ($query) => $query->with('ways')->orderBy('name')])->loadCount('users')
+        );
     }
 
     public function update(Request $request, Warehouse $warehouse): WarehouseResource
@@ -79,7 +89,7 @@ class WarehouseController extends Controller
             'new' => $warehouse->only(array_keys($old)),
         ]);
 
-        return new WarehouseResource($warehouse->loadCount('users'));
+        return new WarehouseResource($warehouse->load(['regions.ways'])->loadCount('users'));
     }
 
     /** @return array<string, mixed> */

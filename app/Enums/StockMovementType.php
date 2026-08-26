@@ -15,5 +15,7 @@ enum StockMovementType: string
     case RepresentativeTransferReceive = 'REPRESENTATIVE_TRANSFER_RECEIVE';
     case RepresentativeReturn = 'REPRESENTATIVE_RETURN';
     case SaleOut = 'SALE_OUT';
+    case SaleFocOut = 'SALE_FOC_OUT';
     case SaleVoidIn = 'SALE_VOID_IN';
+    case SaleFocVoidIn = 'SALE_FOC_VOID_IN';
 }

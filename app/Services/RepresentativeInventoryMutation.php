@@ -3,14 +3,11 @@
 namespace App\Services;
 
 use App\Exceptions\DomainConflictException;
-use App\Models\InTransitInventory;
 use App\Models\RepresentativeInventory;
 use Illuminate\Support\Collection;
 
 class RepresentativeInventoryMutation
 {
-    public const MAX_QUANTITY = 100;
-
     /** @param list<int> $productIds
      * @return Collection<int, RepresentativeInventory>
      */
@@ -23,6 +20,7 @@ class RepresentativeInventoryMutation
                 'sales_representative_id' => $representativeId,
                 'product_id' => $productId,
                 'quantity' => 0,
+                'foc_quantity' => 0,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -37,36 +35,11 @@ class RepresentativeInventoryMutation
 
     public function assertIncomingAllowed(int $representativeId, RepresentativeInventory $balance, int $newQuantity): void
     {
-        $pending = (int) InTransitInventory::query()
-            ->join('representative_transfers', function ($join): void {
-                $join->on('representative_transfers.id', '=', 'in_transit_inventories.transfer_id')
-                    ->where('in_transit_inventories.transfer_type', '=', 'representative_transfer');
-            })
-            ->where('representative_transfers.sales_representative_id', $representativeId)
-            ->where('representative_transfers.status', 'dispatched')
-            ->where('transfer_type', 'representative_transfer')
-            ->where('in_transit_inventories.product_id', $balance->product_id)
-            ->lockForUpdate()
-            ->get(['in_transit_inventories.quantity'])
-            ->sum('quantity');
-        $projected = $balance->quantity + $pending + $newQuantity;
-        if ($projected > self::MAX_QUANTITY) {
-            throw new DomainConflictException('Representative product holding would exceed 100 units.', 'REPRESENTATIVE_STOCK_LIMIT_EXCEEDED', [
-                'current' => $balance->quantity,
-                'pending' => $pending,
-                'requested' => $newQuantity,
-                'projected' => $projected,
-                'limit' => self::MAX_QUANTITY,
-                'product_id' => $balance->product_id,
-            ]);
-        }
+        // Representative capacity is intentionally unlimited. Locking is retained for callers.
     }
 
     public function increase(RepresentativeInventory $balance, int $quantity): void
     {
-        if ($balance->quantity + $quantity > self::MAX_QUANTITY) {
-            throw new DomainConflictException('Representative product holding would exceed 100 units.', 'REPRESENTATIVE_STOCK_LIMIT_EXCEEDED');
-        }
         $balance->update(['quantity' => $balance->quantity + $quantity]);
     }
 
@@ -80,5 +53,22 @@ class RepresentativeInventoryMutation
             ]);
         }
         $balance->update(['quantity' => $balance->quantity - $quantity]);
+    }
+
+    public function increaseFoc(RepresentativeInventory $balance, int $quantity): void
+    {
+        $balance->update(['foc_quantity' => $balance->foc_quantity + $quantity]);
+    }
+
+    public function decreaseFoc(RepresentativeInventory $balance, int $quantity): void
+    {
+        if ($balance->foc_quantity < $quantity) {
+            throw new DomainConflictException('Insufficient representative FOC stock.', 'INSUFFICIENT_REPRESENTATIVE_FOC_STOCK', [
+                'available' => $balance->foc_quantity,
+                'requested' => $quantity,
+                'product_id' => $balance->product_id,
+            ]);
+        }
+        $balance->update(['foc_quantity' => $balance->foc_quantity - $quantity]);
     }
 }

@@ -48,7 +48,6 @@ class RepresentativeOwnershipTest extends TestCase
             'username' => 'updated.rep',
             'email' => 'updated@example.com',
             'phone' => '0912345678',
-            'region' => 'Yangon East',
         ])->assertOk()
             ->assertJsonPath('user.username', 'updated.rep')
             ->assertJsonPath('representative.phone', '0912345678');
@@ -57,20 +56,20 @@ class RepresentativeOwnershipTest extends TestCase
         $this->assertDatabaseHas('sales_representatives', [
             'id' => $representative->id,
             'name' => 'Updated Representative',
-            'region' => 'Yangon East',
         ]);
+        $this->assertCount(1, $representative->fresh()->regions);
         $this->putJson('/api/sales/profile/password', [
             'current_password' => 'wrong-password',
-            'password' => 'new-password',
-            'password_confirmation' => 'new-password',
+            'password' => 'secret',
+            'password_confirmation' => 'secret',
         ])->assertUnprocessable()->assertJsonValidationErrors('current_password');
         $this->putJson('/api/sales/profile/password', [
             'current_password' => 'old-password',
-            'password' => 'new-password',
-            'password_confirmation' => 'new-password',
+            'password' => 'secret',
+            'password_confirmation' => 'secret',
         ])->assertOk();
 
-        $this->assertTrue(Hash::check('new-password', $user->fresh()->password));
+        $this->assertTrue(Hash::check('secret', $user->fresh()->password));
         $this->assertDatabaseHas('audit_logs', ['event' => 'sales.profile_updated', 'actor_id' => $user->id]);
         $this->assertDatabaseHas('audit_logs', ['event' => 'sales.password_updated', 'actor_id' => $user->id]);
     }

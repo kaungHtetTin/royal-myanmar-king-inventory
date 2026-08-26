@@ -199,6 +199,49 @@ class Phase5SalesTest extends TestCase
         $this->getJson('/api/sales/sale-options')->assertOk()->assertJsonCount(0, 'customers')->assertJsonCount(0, 'products');
     }
 
+    public function test_representative_can_create_cash_only_customer_for_own_warehouse(): void
+    {
+        [$representative, $user] = $this->fixture(20, 1000);
+        $foreignWarehouse = Warehouse::factory()->create();
+
+        $response = $this->actingAs($user)->postJson('/api/sales/customers', [
+            'name' => ' New Route Shop ',
+            'customer_type' => 'Shop',
+            'phone' => '09-111222333',
+            'region' => 'Yangon',
+            'township' => 'Hlaing',
+            'address' => 'Main Road',
+            'notes' => 'Created on route.',
+            'warehouse_id' => $foreignWarehouse->id,
+            'credit_allowed' => true,
+            'credit_limit' => 500000,
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('customer.code', 'CUS-000001')
+            ->assertJsonPath('customer.name', 'New Route Shop')
+            ->assertJsonPath('customer.credit_allowed', false)
+            ->assertJsonPath('customer.credit_limit', 0);
+        $this->assertDatabaseHas('customers', [
+            'id' => $response->json('customer.id'),
+            'warehouse_id' => $representative->primary_warehouse_id,
+            'credit_allowed' => false,
+            'credit_limit' => 0,
+            'is_active' => true,
+        ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'event' => 'customer.created',
+            'actor_id' => $user->id,
+            'subject_id' => $response->json('customer.id'),
+        ]);
+        Customer::factory()->create(['warehouse_id' => $foreignWarehouse->id, 'name' => 'Foreign Shop']);
+        $this->getJson('/api/sales/customers?search=Route')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $response->json('customer.id'))
+            ->assertJsonPath('meta.total', 1);
+    }
+
     public function test_stock_cash_and_credit_balances_reconcile_to_append_only_ledgers(): void
     {
         [$representative, $user, $customer, $product] = $this->fixture(30, 1000, true, 20000);

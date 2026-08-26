@@ -170,7 +170,9 @@ export function AdminShell({ children }: AdminShellProps) {
     const { branding } = useBranding();
     const pageTitle = location.pathname.startsWith('/admin/representatives/')
         ? 'Representative details'
-        : (routeTitles[location.pathname] ?? 'Dashboard');
+        : location.pathname.startsWith('/admin/warehouses/')
+          ? 'Warehouse settings'
+          : (routeTitles[location.pathname] ?? 'Dashboard');
 
     useEffect(() => {
         window.localStorage.setItem('inventory.sidebar', collapsed ? 'collapsed' : 'expanded');
@@ -373,7 +375,6 @@ export function AdminShell({ children }: AdminShellProps) {
                                 <span aria-hidden="true" />
                                 {online ? 'Online' : 'Offline'}
                             </span>
-                            <IconButton icon="bell" label="Notifications" />
                         </div>
                         <div className="admin-profile-menu" ref={profileMenuRef}>
                             <button

@@ -15,8 +15,8 @@ class RepresentativeInventoryResource extends JsonResource
             'representative' => ['id' => $this->representative->id, 'code' => $this->representative->code, 'name' => $this->representative->name],
             'product' => ['id' => $this->product->id, 'sku' => $this->product->sku, 'name' => $this->product->name, 'unit' => $this->product->unit],
             'quantity' => $this->quantity,
+            'foc_quantity' => $this->foc_quantity,
             'pending_quantity' => (int) ($this->pending_quantity ?? 0),
-            'capacity_remaining' => max(0, 100 - $this->quantity - (int) ($this->pending_quantity ?? 0)),
             'updated_at' => $this->updated_at?->toISOString(),
         ];
     }

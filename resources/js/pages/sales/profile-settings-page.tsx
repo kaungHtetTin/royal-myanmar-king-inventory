@@ -190,7 +190,7 @@ export function ProfileSettingsPage() {
                         </header>
                         <div className="sales-profile-settings-form__body">
                             <p className="sales-profile-security-note">
-                                Use at least 8 characters. Your current password is required to confirm this change.
+                                Use at least 6 characters. Your current password is required to confirm this change.
                             </p>
                             <ProfileField
                                 error={fieldError(passwordErrors, 'current_password')}
@@ -198,6 +198,7 @@ export function ProfileSettingsPage() {
                             >
                                 <input
                                     autoComplete="current-password"
+                                    minLength={6}
                                     onChange={(event) =>
                                         setPassword({ ...password, current_password: event.target.value })
                                     }
@@ -209,7 +210,7 @@ export function ProfileSettingsPage() {
                             <ProfileField error={fieldError(passwordErrors, 'password')} label="New password">
                                 <input
                                     autoComplete="new-password"
-                                    minLength={8}
+                                    minLength={6}
                                     onChange={(event) => setPassword({ ...password, password: event.target.value })}
                                     required
                                     type="password"
@@ -222,7 +223,7 @@ export function ProfileSettingsPage() {
                             >
                                 <input
                                     autoComplete="new-password"
-                                    minLength={8}
+                                    minLength={6}
                                     onChange={(event) =>
                                         setPassword({ ...password, password_confirmation: event.target.value })
                                     }

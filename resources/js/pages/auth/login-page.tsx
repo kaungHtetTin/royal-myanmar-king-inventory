@@ -133,6 +133,7 @@ export function LoginPage({ portal }: { portal: Portal }) {
                         <span>Password</span>
                         <input
                             autoComplete="current-password"
+                            minLength={6}
                             type="password"
                             value={password}
                             onChange={(event) => setPassword(event.target.value)}

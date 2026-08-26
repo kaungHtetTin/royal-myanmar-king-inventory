@@ -16,6 +16,7 @@ import {
     type StockMovement,
 } from '../../services/inventory';
 import { Icon, type IconName } from '../../ui/icons';
+import { editableNumber } from '../../ui/form-values';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
 
 type Tab = 'stock' | 'imports' | 'adjustments' | 'movements';
@@ -89,6 +90,7 @@ export function InventoryManagementPage() {
         subtype: '',
     });
     const [loading, setLoading] = useState(true);
+    const [exporting, setExporting] = useState(false);
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
     const [adjustDialog, setAdjustDialog] = useState<StockAdjustment | null | undefined>(undefined);
@@ -169,6 +171,25 @@ export function InventoryManagementPage() {
             setLoading(false);
         }
     };
+    const exportOnHand = async () => {
+        setExporting(true);
+        setError('');
+        try {
+            const { blob, filename } = await inventoryApi.exportBalances(filters);
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+        } catch (requestError) {
+            setError(errorMessage(requestError));
+        } finally {
+            setExporting(false);
+        }
+    };
     return (
         <div className="admin-page inventory-management">
             <header className="page-heading">
@@ -237,7 +258,23 @@ export function InventoryManagementPage() {
                 </div>
             ) : null}
 
-            <Panel className="inventory-panel" eyebrow="Warehouse ledger" title={tabLabels[tab]}>
+            <Panel
+                actions={
+                    tab === 'stock' ? (
+                        <Button
+                            disabled={loading || exporting || meta.total === 0}
+                            icon="download"
+                            onClick={() => void exportOnHand()}
+                            requiresOnline
+                        >
+                            {exporting ? 'Exporting…' : 'Export CSV'}
+                        </Button>
+                    ) : null
+                }
+                className="inventory-panel"
+                eyebrow="Warehouse ledger"
+                title={tabLabels[tab]}
+            >
                 <div
                     aria-label="Inventory sections"
                     className="section-tabs section-tabs--4 inventory-tabs"
@@ -1086,7 +1123,7 @@ function StockImportForm({
                                                     ...value,
                                                     items: value.items.map((line, lineIndex) =>
                                                         lineIndex === index
-                                                            ? { ...line, quantity: Number(event.target.value) }
+                                                            ? { ...line, quantity: editableNumber(event.target.value) }
                                                             : line,
                                                     ),
                                                 }))
@@ -1111,7 +1148,10 @@ function StockImportForm({
                                                         ...value,
                                                         items: value.items.map((line, lineIndex) =>
                                                             lineIndex === index
-                                                                ? { ...line, selling_price: Number(event.target.value) }
+                                                                ? {
+                                                                      ...line,
+                                                                      selling_price: editableNumber(event.target.value),
+                                                                  }
                                                                 : line,
                                                         ),
                                                     }))
@@ -1353,7 +1393,7 @@ function AdjustmentDialog({
                         <span>Quantity</span>
                         <input
                             min={1}
-                            onChange={(event) => change('quantity', Number(event.target.value))}
+                            onChange={(event) => change('quantity', editableNumber(event.target.value))}
                             required
                             step={1}
                             type="number"

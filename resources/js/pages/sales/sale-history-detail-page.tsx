@@ -154,6 +154,13 @@ export function SaleHistoryDetailPage() {
                                 </dd>
                             </div>
                             <div>
+                                <dt>Region / Way</dt>
+                                <dd>
+                                    <strong>{sale.region?.name ?? '—'}</strong>
+                                    <small>{sale.way ? `${sale.way.name} · ${sale.way.code}` : 'Not assigned'}</small>
+                                </dd>
+                            </div>
+                            <div>
                                 <dt>Created</dt>
                                 <dd>{dateTime(sale.created_at)}</dd>
                             </div>
@@ -184,38 +191,59 @@ export function SaleHistoryDetailPage() {
                                 <p className="ui-eyebrow">Products sold</p>
                                 <h2>Line items</h2>
                             </div>
-                            <small>{sale.total_quantity} units</small>
+                            <small>
+                                {sale.total_quantity} sold · {sale.total_foc_quantity ?? 0} FOC
+                            </small>
                         </header>
-                        <div className="sale-detail-items__list">
-                            {sale.items.map((item) => (
-                                <article key={item.id}>
-                                    <span className="sale-detail-items__icon">
-                                        <Icon name="box" size={17} />
-                                    </span>
-                                    <div className="sale-detail-items__identity">
-                                        <strong>{item.product.name}</strong>
-                                        <small>
-                                            {item.product.sku} · {item.product.unit}
-                                        </small>
-                                    </div>
-                                    <div className="sale-detail-items__metric">
-                                        <small>Quantity</small>
-                                        <strong>{item.quantity}</strong>
-                                    </div>
-                                    <div className="sale-detail-items__metric">
-                                        <small>Unit price</small>
-                                        <strong>{money(item.unit_price)}</strong>
-                                    </div>
-                                    <div className="sale-detail-items__metric is-total">
-                                        <small>Line total</small>
-                                        <strong>{money(item.line_total)}</strong>
-                                    </div>
-                                </article>
-                            ))}
+                        <div className="ui-table-wrap sale-detail-items__table-wrap">
+                            <table className="ui-table sale-detail-items__table">
+                                <caption className="sr-only">Sale line items</caption>
+                                <thead>
+                                    <tr>
+                                        <th>Product</th>
+                                        <th>Unit</th>
+                                        <th className="is-numeric">Paid qty</th>
+                                        <th className="is-numeric">FOC</th>
+                                        <th className="is-numeric">Unit price</th>
+                                        <th className="is-numeric">Line total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {sale.items.map((item) => (
+                                        <tr key={item.id}>
+                                            <td className="sale-detail-items__product">
+                                                <strong>{item.product.name}</strong>
+                                                <small>{item.product.sku}</small>
+                                            </td>
+                                            <td>{item.unit?.name ?? item.product.unit}</td>
+                                            <td className="is-numeric">{item.quantity}</td>
+                                            <td className="is-numeric">
+                                                {item.foc_quantity ? (
+                                                    <>
+                                                        <strong>{item.foc_quantity}</strong>
+                                                        <small>
+                                                            {item.foc_unit?.name ??
+                                                                item.unit?.name ??
+                                                                item.product.unit}
+                                                        </small>
+                                                    </>
+                                                ) : (
+                                                    '—'
+                                                )}
+                                            </td>
+                                            <td className="is-numeric">{money(item.unit_price)}</td>
+                                            <td className="is-numeric sale-detail-items__line-total">
+                                                {money(item.line_total)}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                         <footer className="sale-detail-total">
                             <span>
-                                {sale.items.length} products · {sale.total_quantity} units
+                                {sale.items.length} products · {sale.total_quantity} sold ·{' '}
+                                {sale.total_foc_quantity ?? 0} FOC
                             </span>
                             <div>
                                 <small>Sale total</small>

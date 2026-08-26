@@ -49,8 +49,8 @@ class SettingsTest extends TestCase
             'username' => 'owner',
             'email' => 'owner@example.com',
             'current_password' => 'old-password',
-            'password' => 'new-password',
-            'password_confirmation' => 'new-password',
+            'password' => 'secret',
+            'password_confirmation' => 'secret',
         ])->assertOk()->assertJsonPath('profile.username', 'owner');
 
         $pixel = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=');

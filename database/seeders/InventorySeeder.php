@@ -19,7 +19,7 @@ class InventorySeeder extends Seeder
     {
         $actor = User::query()->where('username', env('SUPER_ADMIN_USERNAME', 'superadmin'))->firstOrFail();
         $warehouse = Warehouse::query()->where('code', 'YGN-MAIN')->firstOrFail();
-        $products = Product::query()->whereIn('sku', ['DW-1L', 'MW-500ML', 'DW-12PK'])->orderBy('id')->get();
+        $products = Product::query()->whereIn('sku', ['DW-1L', 'MW-500ML', 'JW-20L'])->orderBy('id')->get();
         $import = DB::transaction(function () use ($actor, $warehouse, $products): StockImport {
             $existing = StockImport::query()->where('notes', 'Local demo opening stock.')->first();
             if ($existing) {

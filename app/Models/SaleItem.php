@@ -7,11 +7,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SaleItem extends Model
 {
-    protected $fillable = ['product_id', 'quantity', 'unit_price', 'line_total'];
+    protected $fillable = ['product_id', 'product_unit_id', 'quantity', 'base_quantity', 'unit_price', 'line_total', 'foc_product_unit_id', 'foc_quantity', 'foc_base_quantity'];
 
     protected function casts(): array
     {
-        return ['quantity' => 'integer', 'unit_price' => 'integer', 'line_total' => 'integer'];
+        return ['quantity' => 'integer', 'base_quantity' => 'integer', 'unit_price' => 'integer', 'line_total' => 'integer', 'foc_quantity' => 'integer', 'foc_base_quantity' => 'integer'];
     }
 
     public function sale(): BelongsTo
@@ -22,5 +22,15 @@ class SaleItem extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function unit(): BelongsTo
+    {
+        return $this->belongsTo(ProductUnit::class, 'product_unit_id');
+    }
+
+    public function focUnit(): BelongsTo
+    {
+        return $this->belongsTo(ProductUnit::class, 'foc_product_unit_id');
     }
 }

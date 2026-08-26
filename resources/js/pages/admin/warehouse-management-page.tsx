@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { useSession } from '../../auth/session-context';
 import type { PaginationMeta } from '../../services/administration';
 import {
@@ -8,6 +9,8 @@ import {
     type WarehouseFilters,
     type WarehouseInput,
     type WarehouseSummary,
+    type WarehouseRegion,
+    type WarehouseWay,
 } from '../../services/warehouses';
 import { Icon } from '../../ui/icons';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
@@ -266,6 +269,14 @@ export function WarehouseManagementPage() {
                                         </td>
                                         {canEdit ? (
                                             <td className="ui-table__actions">
+                                                <Link
+                                                    aria-label={`Open settings for ${warehouse.name}`}
+                                                    className="ui-icon-button ui-icon-button--secondary"
+                                                    title={`Open settings for ${warehouse.name}`}
+                                                    to={`/admin/warehouses/${warehouse.id}/settings`}
+                                                >
+                                                    <Icon name="warehouse" />
+                                                </Link>
                                                 <IconButton
                                                     icon="settings"
                                                     label={`Edit ${warehouse.name}`}
@@ -329,6 +340,224 @@ export function WarehouseManagementPage() {
                 warehouse={selected}
             />
         </div>
+    );
+}
+
+export function CoverageDialog({
+    warehouse,
+    onClose,
+    onChanged,
+}: {
+    warehouse: Warehouse | null;
+    onClose: () => void;
+    onChanged: () => Promise<void>;
+}) {
+    const [regionName, setRegionName] = useState('');
+    const [wayNames, setWayNames] = useState<Record<number, string>>({});
+    const [busy, setBusy] = useState(false);
+    const [message, setMessage] = useState('');
+    if (!warehouse) return null;
+    const run = async (operation: () => Promise<unknown>, success: string) => {
+        setBusy(true);
+        setMessage('');
+        try {
+            await operation();
+            setMessage(success);
+            await onChanged();
+        } catch (error) {
+            setMessage(errorMessage(error));
+        } finally {
+            setBusy(false);
+        }
+    };
+    const updateRegion = (region: WarehouseRegion, patch: Partial<WarehouseRegion>) =>
+        run(
+            () =>
+                warehouseApi.updateRegion(region.id, {
+                    name: patch.name ?? region.name,
+                    notes: patch.notes ?? region.notes ?? '',
+                    is_active: patch.is_active ?? region.is_active,
+                }),
+            'Region updated.',
+        );
+    const updateWay = (way: WarehouseWay, patch: Partial<WarehouseWay>) =>
+        run(
+            () =>
+                warehouseApi.updateWay(way.id, {
+                    name: patch.name ?? way.name,
+                    notes: patch.notes ?? way.notes ?? '',
+                    is_active: patch.is_active ?? way.is_active,
+                }),
+            'Way updated.',
+        );
+    return (
+        <Dialog
+            description="Representatives are assigned to regions; every customer is assigned to one generated-code Way."
+            footer={
+                <Button onClick={onClose} tone="secondary">
+                    Close
+                </Button>
+            }
+            onClose={onClose}
+            open
+            title={`Coverage · ${warehouse.name}`}
+            width="wide"
+        >
+            <div className="coverage-manager">
+                {message ? (
+                    <div className="ui-form-note" role="status">
+                        {message}
+                    </div>
+                ) : null}
+                <form
+                    className="coverage-manager__create"
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        if (!regionName.trim()) return;
+                        void run(
+                            () =>
+                                warehouseApi.createRegion(warehouse.id, {
+                                    name: regionName.trim(),
+                                    notes: '',
+                                    is_active: true,
+                                }),
+                            'Region created.',
+                        ).then(() => setRegionName(''));
+                    }}
+                >
+                    <label className="ui-field">
+                        <span>New region name</span>
+                        <input
+                            disabled={busy}
+                            onChange={(event) => setRegionName(event.target.value)}
+                            placeholder="Enter region name"
+                            value={regionName}
+                        />
+                    </label>
+                    <Button disabled={busy || !regionName.trim()} icon="plus" type="submit">
+                        Add region
+                    </Button>
+                </form>
+                <div className="coverage-manager__regions">
+                    {warehouse.regions.map((region) => (
+                        <section className="coverage-region" key={region.id}>
+                            <header>
+                                <CoverageNameEditor
+                                    busy={busy}
+                                    key={`${region.id}-${region.name}`}
+                                    label="Region name"
+                                    name={region.name}
+                                    onSave={(name) => updateRegion(region, { name })}
+                                    supportingText={`${region.ways.length} ways`}
+                                />
+                                <Button
+                                    disabled={busy}
+                                    onClick={() => void updateRegion(region, { is_active: !region.is_active })}
+                                    tone="secondary"
+                                >
+                                    {region.is_active ? 'Deactivate' : 'Activate'}
+                                </Button>
+                            </header>
+                            <div className="coverage-way-list">
+                                {region.ways.map((way) => (
+                                    <div className="coverage-way" key={way.id}>
+                                        <CoverageNameEditor
+                                            busy={busy}
+                                            key={`${way.id}-${way.name}`}
+                                            label={`${way.code} name`}
+                                            name={way.name}
+                                            onSave={(name) => updateWay(way, { name })}
+                                            supportingText={way.code}
+                                        />
+                                        <StatusBadge tone={way.is_active ? 'success' : 'danger'}>
+                                            {way.is_active ? 'Active' : 'Inactive'}
+                                        </StatusBadge>
+                                        <Button
+                                            disabled={busy}
+                                            onClick={() => void updateWay(way, { is_active: !way.is_active })}
+                                            tone="secondary"
+                                        >
+                                            {way.is_active ? 'Deactivate' : 'Activate'}
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                            <form
+                                className="coverage-way-create"
+                                onSubmit={(event) => {
+                                    event.preventDefault();
+                                    const name = wayNames[region.id]?.trim();
+                                    if (!name) return;
+                                    void run(
+                                        () => warehouseApi.createWay(region.id, { name, notes: '', is_active: true }),
+                                        'Way created with an automatic code.',
+                                    ).then(() => setWayNames((value) => ({ ...value, [region.id]: '' })));
+                                }}
+                            >
+                                <input
+                                    aria-label={`New way in ${region.name}`}
+                                    disabled={busy || !region.is_active}
+                                    onChange={(event) =>
+                                        setWayNames((value) => ({ ...value, [region.id]: event.target.value }))
+                                    }
+                                    placeholder="New Way name"
+                                    value={wayNames[region.id] ?? ''}
+                                />
+                                <Button
+                                    disabled={busy || !region.is_active || !wayNames[region.id]?.trim()}
+                                    icon="plus"
+                                    type="submit"
+                                >
+                                    Add Way
+                                </Button>
+                            </form>
+                        </section>
+                    ))}
+                </div>
+            </div>
+        </Dialog>
+    );
+}
+
+function CoverageNameEditor({
+    busy,
+    label,
+    name,
+    onSave,
+    supportingText,
+}: {
+    busy: boolean;
+    label: string;
+    name: string;
+    onSave: (name: string) => Promise<unknown>;
+    supportingText: string;
+}) {
+    const [value, setValue] = useState(name);
+    const changed = value.trim() !== name;
+    return (
+        <form
+            className="coverage-name-editor"
+            onSubmit={(event) => {
+                event.preventDefault();
+                if (changed && value.trim()) void onSave(value.trim());
+            }}
+        >
+            <label>
+                <span className="sr-only">{label}</span>
+                <input
+                    disabled={busy}
+                    maxLength={100}
+                    onChange={(event) => setValue(event.target.value)}
+                    value={value}
+                />
+            </label>
+            <small>{supportingText}</small>
+            {changed ? (
+                <Button disabled={busy || !value.trim()} tone="secondary" type="submit">
+                    Save
+                </Button>
+            ) : null}
+        </form>
     );
 }
 

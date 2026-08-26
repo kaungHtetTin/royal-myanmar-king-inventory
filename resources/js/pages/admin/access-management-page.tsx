@@ -668,10 +668,10 @@ function UserDialog({
                             <FieldError errors={errors} name="email" />
                         </label>
                         <label className="ui-field">
-                            <span>{mode === 'edit' ? 'New password (optional)' : 'Password'}</span>
+                            <span>{mode === 'edit' ? 'New password (optional, minimum 6 characters)' : 'Password (minimum 6 characters)'}</span>
                             <input
                                 autoComplete="new-password"
-                                minLength={12}
+                                minLength={6}
                                 onChange={(event) =>
                                     setForm((value) => ({
                                         ...value,
@@ -688,7 +688,7 @@ function UserDialog({
                             <span>Confirm password</span>
                             <input
                                 autoComplete="new-password"
-                                minLength={12}
+                                minLength={6}
                                 onChange={(event) =>
                                     setForm((value) => ({
                                         ...value,

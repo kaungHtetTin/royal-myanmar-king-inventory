@@ -91,7 +91,7 @@ class Phase7ReportingTest extends TestCase
     {
         $fixture = $this->fixture();
         $admin = $this->office($fixture['warehouse'], PermissionName::ReportView);
-        $this->actingAs($admin)->getJson('/api/admin/report-options')->assertOk()->assertJsonPath('reports', ['sales']);
+        $this->actingAs($admin)->getJson('/api/admin/report-options')->assertOk()->assertJsonPath('reports', ['sales', 'way-sales-power', 'stock-issues']);
         foreach (['warehouse-stock', 'representative-stock', 'stock-movements', 'warehouse-transfers', 'representative-transfers', 'cash-hold', 'customer-credit'] as $removedReport) {
             $this->getJson('/api/admin/reports/'.$removedReport.'?per_page=10')->assertNotFound();
         }
@@ -101,11 +101,12 @@ class Phase7ReportingTest extends TestCase
     {
         $fixture = $this->fixture();
         $admin = $this->office($fixture['warehouse'], PermissionName::ReportView);
+        $todayIndex = today()->day - 1;
         $this->actingAs($admin)->getJson('/api/admin/reports/sales?per_page=10')->assertOk()->assertJsonPath('meta.total', 4)
             ->assertJsonPath('summary.month_sales', 800)->assertJsonPath('summary.year_sales', 800)
             ->assertJsonPath('summary.gross_sales', 800)->assertJsonPath('summary.cash_sales', 500)->assertJsonPath('summary.credit_sales', 300)->assertJsonPath('summary.units_sold', 8)
-            ->assertJsonCount(31, 'analysis.month_trend')->assertJsonPath('analysis.month_trend.21.amount', 800)
-            ->assertJsonCount(12, 'analysis.year_trend')->assertJsonPath('analysis.year_trend.7.amount', 800)
+            ->assertJsonCount(today()->daysInMonth, 'analysis.month_trend')->assertJsonPath("analysis.month_trend.{$todayIndex}.amount", 800)
+            ->assertJsonCount(12, 'analysis.year_trend')->assertJsonPath('analysis.year_trend.'.(today()->month - 1).'.amount', 800)
             ->assertJsonCount(1, 'analysis.top_products')->assertJsonPath('analysis.top_products.0.product.id', $fixture['product']->id)->assertJsonPath('analysis.top_products.0.units', 8)
             ->assertJsonPath('rules.financial_totals', 'posted_only');
     }

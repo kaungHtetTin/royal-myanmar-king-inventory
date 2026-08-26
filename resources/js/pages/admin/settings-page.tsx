@@ -9,6 +9,7 @@ import {
     type SettingsInput,
 } from '../../services/settings';
 import { Icon, type IconName } from '../../ui/icons';
+import { editableNumber } from '../../ui/form-values';
 import { Button } from '../../ui/primitives';
 import { RoleManagementSection } from './access-management-page';
 
@@ -335,6 +336,7 @@ export function SettingsPage() {
                                     <Field error={fieldError(fields, 'current_password')} label="Current password">
                                         <input
                                             autoComplete="current-password"
+                                            minLength={6}
                                             onChange={(event) =>
                                                 setProfile((value) => ({
                                                     ...value,
@@ -348,7 +350,7 @@ export function SettingsPage() {
                                     <Field error={fieldError(fields, 'password')} label="New password">
                                         <input
                                             autoComplete="new-password"
-                                            minLength={8}
+                                            minLength={6}
                                             onChange={(event) =>
                                                 setProfile((value) => ({ ...value, password: event.target.value }))
                                             }
@@ -362,7 +364,7 @@ export function SettingsPage() {
                                     >
                                         <input
                                             autoComplete="new-password"
-                                            minLength={8}
+                                            minLength={6}
                                             onChange={(event) =>
                                                 setProfile((value) => ({
                                                     ...value,
@@ -626,7 +628,7 @@ export function SettingsPage() {
                                             onChange={(event) =>
                                                 setSettings((value) => ({
                                                     ...value,
-                                                    low_stock_threshold: Number(event.target.value),
+                                                    low_stock_threshold: editableNumber(event.target.value),
                                                 }))
                                             }
                                             required

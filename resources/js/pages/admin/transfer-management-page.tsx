@@ -17,6 +17,7 @@ import {
     type WarehouseTransferOptions,
 } from '../../services/transfers';
 import { Icon, type IconName } from '../../ui/icons';
+import { editableNumber } from '../../ui/form-values';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
 
 type Tab = 'warehouse' | 'representative' | 'return' | 'stock';
@@ -931,8 +932,8 @@ function StockTable({ rows }: { rows: RepresentativeInventory[] }) {
                                 <strong>{row.pending_quantity}</strong>
                             </td>
                             <td className="is-numeric">
-                                <strong>{row.capacity_remaining}</strong>
-                                <small>of 100</small>
+                                <strong>{row.foc_quantity}</strong>
+                                <small>FOC base units</small>
                             </td>
                             <td>{dateTime(row.updated_at)}</td>
                         </tr>
@@ -1025,7 +1026,7 @@ function Lines({
                                         lineIndex === index
                                             ? {
                                                   ...line,
-                                                  quantity: Number(event.target.value),
+                                                  quantity: editableNumber(event.target.value),
                                               }
                                             : line,
                                     ),
@@ -1168,7 +1169,10 @@ function WarehouseTransferForm({
                       items: [],
                   },
         );
-    }, [transfer?.id]);
+    }, [options.destination_warehouses, options.source_warehouses, transfer]);
+    const destinationWarehouses = options.destination_warehouses.filter(
+        (warehouse) => warehouse.id !== form.source_warehouse_id,
+    );
     const next = () => {
         const nextErrors: Record<string, string[]> = {};
         if (step === 1) {
@@ -1254,12 +1258,26 @@ function WarehouseTransferForm({
                         <label className="ui-field">
                             <span>Source warehouse</span>
                             <select
-                                onChange={(event) =>
-                                    setForm((value) => ({
-                                        ...value,
-                                        source_warehouse_id: Number(event.target.value),
-                                    }))
-                                }
+                                onChange={(event) => {
+                                    const sourceWarehouseId = Number(event.target.value);
+                                    setForm((value) => {
+                                        const destinationIsValid = options.destination_warehouses.some(
+                                            (warehouse) =>
+                                                warehouse.id === value.destination_warehouse_id &&
+                                                warehouse.id !== sourceWarehouseId,
+                                        );
+
+                                        return {
+                                            ...value,
+                                            source_warehouse_id: sourceWarehouseId,
+                                            destination_warehouse_id: destinationIsValid
+                                                ? value.destination_warehouse_id
+                                                : (options.destination_warehouses.find(
+                                                      (warehouse) => warehouse.id !== sourceWarehouseId,
+                                                  )?.id ?? 0),
+                                        };
+                                    });
+                                }}
                                 value={form.source_warehouse_id}
                             >
                                 {options.source_warehouses.map((warehouse) => (
@@ -1273,6 +1291,7 @@ function WarehouseTransferForm({
                         <label className="ui-field">
                             <span>Destination warehouse</span>
                             <select
+                                disabled={destinationWarehouses.length === 0}
                                 onChange={(event) =>
                                     setForm((value) => ({
                                         ...value,
@@ -1281,13 +1300,14 @@ function WarehouseTransferForm({
                                 }
                                 value={form.destination_warehouse_id}
                             >
-                                {options.destination_warehouses
-                                    .filter((warehouse) => warehouse.id !== form.source_warehouse_id)
-                                    .map((warehouse) => (
-                                        <option key={warehouse.id} value={warehouse.id}>
-                                            {warehouse.code} · {warehouse.name}
-                                        </option>
-                                    ))}
+                                {destinationWarehouses.length === 0 ? (
+                                    <option value={0}>No destination warehouse available</option>
+                                ) : null}
+                                {destinationWarehouses.map((warehouse) => (
+                                    <option key={warehouse.id} value={warehouse.id}>
+                                        {warehouse.code} · {warehouse.name}
+                                    </option>
+                                ))}
                             </select>
                             <FieldError errors={errors} name="destination_warehouse_id" />
                         </label>
@@ -1328,7 +1348,17 @@ function WarehouseTransferForm({
                                                     ...value,
                                                     items: selected
                                                         ? value.items.filter((item) => item.product_id !== product.id)
-                                                        : [...value.items, { product_id: product.id, quantity: 1 }],
+                                                        : [
+                                                              ...value.items,
+                                                              {
+                                                                  product_id: product.id,
+                                                                  product_unit_id: product.units?.find(
+                                                                      (unit) => unit.is_default_selling,
+                                                                  )?.id,
+                                                                  quantity: 1,
+                                                                  foc_quantity: 0,
+                                                              },
+                                                          ],
                                                 }))
                                             }
                                             type="checkbox"
@@ -1373,7 +1403,10 @@ function WarehouseTransferForm({
                                                         ...value,
                                                         items: value.items.map((line, lineIndex) =>
                                                             lineIndex === index
-                                                                ? { ...line, quantity: Number(event.target.value) }
+                                                                ? {
+                                                                      ...line,
+                                                                      quantity: editableNumber(event.target.value),
+                                                                  }
                                                                 : line,
                                                         ),
                                                     }))
@@ -1620,13 +1653,22 @@ function RepresentativeTransferWizard({
         )
             nextErrors.sales_representative_id = ['Select a representative assigned to this warehouse.'];
         if (step === 2 && !form.items.length) nextErrors.items = ['Select at least one product.'];
-        if (step === 3 && form.items.some((item) => item.quantity < 1 || item.quantity > 100))
-            nextErrors.items = ['Each quantity must be between 1 and 100.'];
+        if (step === 3 && form.items.some((item) => item.quantity < 1))
+            nextErrors.items = ['Each paid quantity must be at least 1.'];
         if (
             step === 3 &&
             form.items.some((item) => {
                 const product = options.products.find((value) => value.id === item.product_id);
-                return item.quantity > (product?.warehouse_stock?.[String(form.source_warehouse_id)] ?? 0);
+                const unit =
+                    product?.units?.find((unit) => unit.id === item.product_unit_id) ??
+                    product?.units?.find((unit) => unit.is_default_selling) ??
+                    product?.units?.[0];
+                const focUnit = product?.units?.find((unit) => unit.id === item.foc_product_unit_id) ?? unit;
+                return (
+                    item.quantity * (unit?.conversion_factor ?? 1) +
+                        (item.foc_quantity ?? 0) * (focUnit?.conversion_factor ?? 1) >
+                    (product?.warehouse_stock?.[String(form.source_warehouse_id)] ?? 0)
+                );
             })
         )
             nextErrors.items = ['One or more quantities exceed the available warehouse stock.'];
@@ -1790,13 +1832,24 @@ function RepresentativeTransferWizard({
                     <div className="transfer-wizard-section">
                         <div className="import-lines__heading">
                             <strong>Set issue quantities</strong>
-                            <small>Maximum representative capacity is validated at dispatch.</small>
+                            <small>
+                                Paid and FOC stock are tracked separately; all quantities are converted to base units.
+                            </small>
                         </div>
                         <div className="transfer-wizard-quantities">
                             {form.items.map((item, index) => {
                                 const product = options.products.find((value) => value.id === item.product_id);
                                 const available = product?.warehouse_stock?.[String(form.source_warehouse_id)] ?? 0;
-                                const exceedsStock = item.quantity > available;
+                                const unit =
+                                    product?.units?.find((unit) => unit.id === item.product_unit_id) ??
+                                    product?.units?.find((unit) => unit.is_default_selling) ??
+                                    product?.units?.[0];
+                                const focUnit =
+                                    product?.units?.find((unit) => unit.id === item.foc_product_unit_id) ?? unit;
+                                const physical =
+                                    item.quantity * (unit?.conversion_factor ?? 1) +
+                                    (item.foc_quantity ?? 0) * (focUnit?.conversion_factor ?? 1);
+                                const exceedsStock = physical > available;
                                 return (
                                     <div
                                         className={`import-line import-line--quantity ${exceedsStock ? 'is-invalid' : ''}`}
@@ -1809,24 +1862,49 @@ function RepresentativeTransferWizard({
                                                     exceedsStock ? 'stock-availability is-danger' : 'stock-availability'
                                                 }
                                             >
-                                                Available: {number(available)} {product?.unit}
+                                                Available: {number(available)} base units
                                             </small>
                                             <small>
                                                 {product?.sku} · {product?.unit}
                                             </small>
                                         </div>
                                         <label className="ui-field">
-                                            <span>Quantity</span>
+                                            <span>Issue unit</span>
+                                            <select
+                                                onChange={(event) =>
+                                                    setForm((value) => ({
+                                                        ...value,
+                                                        items: value.items.map((line, lineIndex) =>
+                                                            lineIndex === index
+                                                                ? {
+                                                                      ...line,
+                                                                      product_unit_id: Number(event.target.value),
+                                                                  }
+                                                                : line,
+                                                        ),
+                                                    }))
+                                                }
+                                                value={unit?.id}
+                                            >
+                                                {product?.units?.map((option) => (
+                                                    <option key={option.id} value={option.id}>
+                                                        {option.name} ({option.conversion_factor} base)
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <span>Paid stock quantity</span>
                                             <input
                                                 aria-invalid={exceedsStock}
-                                                max={Math.min(100, available)}
                                                 min={1}
                                                 onChange={(event) =>
                                                     setForm((value) => ({
                                                         ...value,
                                                         items: value.items.map((line, lineIndex) =>
                                                             lineIndex === index
-                                                                ? { ...line, quantity: Number(event.target.value) }
+                                                                ? {
+                                                                      ...line,
+                                                                      quantity: editableNumber(event.target.value),
+                                                                  }
                                                                 : line,
                                                         ),
                                                     }))
@@ -1841,6 +1919,55 @@ function RepresentativeTransferWizard({
                                                 </small>
                                             ) : null}
                                         </label>
+                                        <label className="ui-field">
+                                            <span>FOC unit</span>
+                                            <select
+                                                onChange={(event) =>
+                                                    setForm((value) => ({
+                                                        ...value,
+                                                        items: value.items.map((line, lineIndex) =>
+                                                            lineIndex === index
+                                                                ? {
+                                                                      ...line,
+                                                                      foc_product_unit_id: Number(event.target.value),
+                                                                  }
+                                                                : line,
+                                                        ),
+                                                    }))
+                                                }
+                                                value={focUnit?.id}
+                                            >
+                                                {product?.units?.map((option) => (
+                                                    <option key={option.id} value={option.id}>
+                                                        {option.name} ({option.conversion_factor} base)
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <span>FOC quantity</span>
+                                            <input
+                                                min={0}
+                                                onChange={(event) =>
+                                                    setForm((value) => ({
+                                                        ...value,
+                                                        items: value.items.map((line, lineIndex) =>
+                                                            lineIndex === index
+                                                                ? {
+                                                                      ...line,
+                                                                      foc_quantity: editableNumber(event.target.value),
+                                                                      foc_product_unit_id:
+                                                                          line.foc_product_unit_id ?? focUnit?.id,
+                                                                  }
+                                                                : line,
+                                                        ),
+                                                    }))
+                                                }
+                                                type="number"
+                                                value={item.foc_quantity ?? 0}
+                                            />
+                                        </label>
+                                        <strong className="transfer-base-total">
+                                            {number(physical)} base units total
+                                        </strong>
                                     </div>
                                 );
                             })}
@@ -1993,7 +2120,7 @@ export function RepresentativeTransferDialog({
     };
     return (
         <Dialog
-            description="Dispatch validates warehouse stock and reserves current plus pending representative capacity up to 100 per product."
+            description="Dispatch validates warehouse stock, converts selected units to base stock, and keeps paid and FOC balances separate."
             footer={
                 <>
                     <Button onClick={onClose}>Cancel</Button>

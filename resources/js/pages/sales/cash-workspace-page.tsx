@@ -8,6 +8,7 @@ import {
     type CashTransaction,
 } from '../../services/finance';
 import { Icon } from '../../ui/icons';
+import { editableNumber } from '../../ui/form-values';
 import { Button, Dialog, EmptyState, IconButton, Pagination, StatusBadge } from '../../ui/primitives';
 
 const emptyOverview: CashOverview = {
@@ -353,7 +354,7 @@ export function CashWorkspacePage() {
                             onChange={(event) =>
                                 setForm((value) => ({
                                     ...value,
-                                    amount: Number(event.target.value),
+                                    amount: editableNumber(event.target.value),
                                 }))
                             }
                             required

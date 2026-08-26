@@ -13,6 +13,18 @@ export type Product = {
     sku: string;
     unit: string;
     updated_at: string | null;
+    units: ProductUnit[];
+};
+export type UnitPrice = { region_id: number; price: number };
+export type ProductUnit = {
+    id?: number;
+    name: string;
+    conversion_factor: number;
+    barcode: string | null;
+    is_base: boolean;
+    is_default_selling: boolean;
+    is_active: boolean;
+    prices: UnitPrice[];
 };
 
 export type ProductInput = {
@@ -24,6 +36,7 @@ export type ProductInput = {
     selling_price: number;
     sku: string;
     unit: string;
+    units: ProductUnit[];
 };
 
 export type ProductFilters = {
@@ -36,7 +49,8 @@ export type ProductFilters = {
     unit?: string;
 };
 
-export type ProductOptions = { categories: string[]; units: string[] };
+export type ProductRegion = { id: number; name: string; warehouse: { id: number; code: string; name: string } };
+export type ProductOptions = { categories: string[]; units: string[]; regions: ProductRegion[] };
 export type ProductSummary = { active: number; categories: number; inactive: number; total: number };
 
 export class ProductApiError extends Error {
@@ -77,6 +91,7 @@ export const productApi = {
                 params: { ...filters, per_page: 20 },
             }),
         ),
+    get: (id: number) => request<{ data: Product }>(() => window.axios.get(`api/admin/products/${id}`)),
     options: () => request<ProductOptions>(() => window.axios.get('api/admin/product-options')),
     create: (input: ProductInput) => request<{ data: Product }>(() => window.axios.post('api/admin/products', input)),
     update: (id: number, input: ProductInput) =>

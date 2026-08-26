@@ -59,6 +59,23 @@ class WarehouseManagementTest extends TestCase
             ->assertJsonPath('meta.total', 1);
     }
 
+    public function test_assigned_user_can_open_a_warehouse_settings_page_with_its_coverage_hierarchy(): void
+    {
+        $admin = $this->officeAdmin();
+        $warehouse = Warehouse::factory()->create(['code' => 'YGN']);
+        $admin->warehouses()->attach($warehouse, ['assigned_by' => $admin->id]);
+        $region = $warehouse->regions()->firstOrFail();
+
+        $this->actingAs($admin)->getJson('/api/admin/warehouses/'.$warehouse->id)
+            ->assertOk()
+            ->assertJsonPath('data.id', $warehouse->id)
+            ->assertJsonPath('data.regions.0.id', $region->id)
+            ->assertJsonPath('data.regions.0.ways.0.region_id', $region->id);
+
+        $foreign = Warehouse::factory()->create();
+        $this->getJson('/api/admin/warehouses/'.$foreign->id)->assertForbidden();
+    }
+
     public function test_office_admin_without_mutation_permissions_cannot_create_or_edit(): void
     {
         $admin = $this->officeAdmin();

@@ -13,6 +13,7 @@ export type IconName =
     | 'customers'
     | 'dashboard'
     | 'density'
+    | 'download'
     | 'edit'
     | 'logout'
     | 'menu'
@@ -106,6 +107,13 @@ const iconContent: Record<IconName, ReactNode> = {
             <path d="M4 6h16" />
             <path d="M4 12h16" />
             <path d="M4 18h16" />
+        </>
+    ),
+    download: (
+        <>
+            <path d="M12 3v12" />
+            <path d="m7 10 5 5 5-5" />
+            <path d="M5 21h14" />
         </>
     ),
     edit: (

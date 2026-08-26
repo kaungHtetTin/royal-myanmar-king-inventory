@@ -8,6 +8,7 @@ import {
     type RepresentativeTransferOptions,
 } from '../../services/transfers';
 import { Button } from '../../ui/primitives';
+import { editableNumber } from '../../ui/form-values';
 
 const emptyOptions: RepresentativeTransferOptions = { products: [], representatives: [], source_warehouses: [] };
 const message = (error: unknown) => (error instanceof Error ? error.message : 'Unable to save representative return.');
@@ -328,7 +329,10 @@ function RepresentativeReturnWizard({
                                                         ...form,
                                                         items: form.items.map((line, lineIndex) =>
                                                             lineIndex === index
-                                                                ? { ...line, quantity: Number(event.target.value) }
+                                                                ? {
+                                                                      ...line,
+                                                                      quantity: editableNumber(event.target.value),
+                                                                  }
                                                                 : line,
                                                         ),
                                                     })

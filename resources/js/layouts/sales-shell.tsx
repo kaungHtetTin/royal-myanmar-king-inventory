@@ -3,7 +3,6 @@ import { Link, useLocation } from 'react-router-dom';
 import { useSession } from '../auth/session-context';
 import { useBranding } from '../branding/branding-context';
 import { Icon, type IconName } from '../ui/icons';
-import { IconButton } from '../ui/primitives';
 import { OfflineBanner } from '../ui/offline-banner';
 import { useOnlineStatus, useUiPreferences } from '../ui/preferences';
 
@@ -92,7 +91,6 @@ export function SalesShell({ children }: { children: ReactNode }) {
                                 <span aria-hidden="true" />
                                 {online ? 'Online' : 'Offline'}
                             </span>
-                            <IconButton icon="bell" label="Notifications" />
                         </div>
                         <div className="sales-profile-menu" ref={profileMenuRef}>
                             <button
@@ -128,6 +126,14 @@ export function SalesShell({ children }: { children: ReactNode }) {
                                         </span>
                                     </div>
                                     <div className="admin-profile-dropdown__section">
+                                        <Link
+                                            onClick={() => setProfileMenuOpen(false)}
+                                            role="menuitem"
+                                            to="/sales/customers"
+                                        >
+                                            <Icon name="customers" size={16} />
+                                            <span>Customers</span>
+                                        </Link>
                                         <Link
                                             onClick={() => setProfileMenuOpen(false)}
                                             role="menuitem"

@@ -14,6 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Validation\Rule;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class InventoryController extends Controller
 {
@@ -58,6 +59,56 @@ class InventoryController extends Controller
             'current_page' => $paginator->currentPage(), 'from' => $paginator->firstItem(), 'last_page' => $paginator->lastPage(),
             'per_page' => $paginator->perPage(), 'to' => $paginator->lastItem(), 'total' => $paginator->total(),
         ], 'summary' => $summary]);
+    }
+
+    public function export(Request $request): StreamedResponse
+    {
+        $data = $request->validate([
+            'warehouse_id' => ['nullable', 'integer', 'exists:warehouses,id'],
+            'search' => ['nullable', 'string', 'max:100'],
+            'stock' => ['nullable', Rule::in(['all', 'positive', 'zero'])],
+        ]);
+        $warehouseIds = $this->warehouseAccess->scope(Warehouse::query(), $request->user())->pluck('id');
+        if (isset($data['warehouse_id']) && ! $warehouseIds->contains((int) $data['warehouse_id'])) {
+            abort(403);
+        }
+
+        $query = WarehouseInventory::query()
+            ->selectRaw('product_id, SUM(quantity) as quantity, MAX(updated_at) as updated_at')
+            ->with('product:id,sku,name,unit')
+            ->whereIn('warehouse_id', $warehouseIds)
+            ->when($data['warehouse_id'] ?? null, fn ($query, $id) => $query->where('warehouse_id', $id))
+            ->when($data['search'] ?? null, fn ($query, $search) => $query->whereHas('product', fn ($product) => $product
+                ->where('sku', 'like', "%{$search}%")->orWhere('name', 'like', "%{$search}%")))
+            ->groupBy('product_id')
+            ->when(($data['stock'] ?? 'all') === 'positive', fn ($query) => $query->havingRaw('SUM(quantity) > 0'))
+            ->when(($data['stock'] ?? 'all') === 'zero', fn ($query) => $query->havingRaw('SUM(quantity) = 0'))
+            ->orderBy('product_id');
+
+        $filename = 'on-hand-stock-'.now()->format('Y-m-d-His').'.csv';
+
+        return response()->streamDownload(function () use ($query): void {
+            $output = fopen('php://output', 'wb');
+            fwrite($output, "\xEF\xBB\xBF");
+            fputcsv($output, ['SKU', 'Product', 'Base unit', 'On hand', 'Last changed']);
+            foreach ($query->lazy(500) as $row) {
+                fputcsv($output, [
+                    $this->csvValue($row->product->sku),
+                    $this->csvValue($row->product->name),
+                    $this->csvValue($row->product->unit),
+                    (int) $row->quantity,
+                    $row->updated_at?->toISOString(),
+                ]);
+            }
+            fclose($output);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    private function csvValue(?string $value): string
+    {
+        $value ??= '';
+
+        return preg_match('/^[=+\-@]/', $value) ? "'{$value}" : $value;
     }
 
     public function movements(Request $request): AnonymousResourceCollection

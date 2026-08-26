@@ -152,7 +152,12 @@ export function AdminSaleDetailPage() {
             ) : null}
             <section aria-label="Sale summary" className="metric-grid admin-sale-detail-kpis">
                 <MetricCard hint="Distinct products" icon="box" label="Products" value={String(sale.items.length)} />
-                <MetricCard hint="Units sold" icon="sales" label="Quantity" value={String(sale.total_quantity)} />
+                <MetricCard
+                    hint={`${sale.total_foc_quantity ?? 0} FOC units supplied`}
+                    icon="sales"
+                    label="Sold quantity"
+                    value={String(sale.total_quantity)}
+                />
                 <MetricCard
                     hint={sale.payment_type === 'cash' ? 'Cash transaction' : 'Customer credit'}
                     icon="cash"
@@ -169,6 +174,7 @@ export function AdminSaleDetailPage() {
                                     <th>Product</th>
                                     <th>Unit</th>
                                     <th className="is-numeric">Quantity</th>
+                                    <th className="is-numeric">FOC</th>
                                     <th className="is-numeric">Unit price</th>
                                     <th className="is-numeric">Line total</th>
                                 </tr>
@@ -180,8 +186,13 @@ export function AdminSaleDetailPage() {
                                             <strong>{item.product.name}</strong>
                                             <small>{item.product.sku}</small>
                                         </td>
-                                        <td>{item.product.unit}</td>
+                                        <td>{item.unit?.name ?? item.product.unit}</td>
                                         <td className="is-numeric">{item.quantity}</td>
+                                        <td className="is-numeric">
+                                            {item.foc_quantity
+                                                ? `${item.foc_quantity} ${item.foc_unit?.name ?? item.unit?.name ?? item.product.unit}`
+                                                : '—'}
+                                        </td>
                                         <td className="is-numeric">{money(item.unit_price)}</td>
                                         <td className="is-numeric">
                                             <strong>{money(item.line_total)}</strong>
@@ -194,6 +205,9 @@ export function AdminSaleDetailPage() {
                                     <td colSpan={2}>Total</td>
                                     <td className="is-numeric">
                                         <strong>{sale.total_quantity}</strong>
+                                    </td>
+                                    <td className="is-numeric">
+                                        <strong>{sale.total_foc_quantity ?? 0}</strong>
                                     </td>
                                     <td />
                                     <td className="is-numeric">
@@ -225,6 +239,13 @@ export function AdminSaleDetailPage() {
                             <dd>
                                 {sale.warehouse.name}
                                 <small>{sale.warehouse.code}</small>
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>Region / Way</dt>
+                            <dd>
+                                {sale.region?.name ?? '—'}
+                                <small>{sale.way ? `${sale.way.name} · ${sale.way.code}` : 'Not assigned'}</small>
                             </dd>
                         </div>
                         <div>

@@ -14,6 +14,7 @@ class Customer extends Model
 
     protected $fillable = [
         'warehouse_id',
+        'way_id',
         'code',
         'name',
         'customer_type',
@@ -36,9 +37,28 @@ class Customer extends Model
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::creating(function (Customer $customer): void {
+            if (! $customer->way_id && $customer->warehouse_id) {
+                $way = Way::query()->whereHas('region', fn ($query) => $query->where('warehouse_id', $customer->warehouse_id))->orderBy('id')->first();
+                if ($way) {
+                    $customer->way_id = $way->id;
+                    $customer->region ??= $way->region->name;
+                    $customer->township ??= $way->name;
+                }
+            }
+        });
+    }
+
     public function warehouse(): BelongsTo
     {
         return $this->belongsTo(Warehouse::class);
+    }
+
+    public function way(): BelongsTo
+    {
+        return $this->belongsTo(Way::class);
     }
 
     public function creditBalance(): HasOne

@@ -9,6 +9,7 @@ use App\Enums\SaleStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SalesRepresentativeResource;
 use App\Models\CashSubmission;
+use App\Models\Region;
 use App\Models\RepresentativeInventory;
 use App\Models\Sale;
 use App\Models\SalesRepresentative;
@@ -54,14 +55,14 @@ class SalesRepresentativeController extends Controller
         }
 
         $query = $this->representativeAccess->scope(SalesRepresentative::query(), $request->user())
-            ->with(['primaryWarehouse:id,code,name', 'user:id,username,email,is_active,last_login_at', 'vehicle:id,sales_representative_id,vehicle_number,vehicle_type'])
+            ->with(['primaryWarehouse:id,code,name', 'regions:id,warehouse_id,name', 'user:id,username,email,is_active,last_login_at', 'vehicle:id,sales_representative_id,vehicle_number,vehicle_type'])
             ->when($data['search'] ?? null, function ($query, string $search): void {
                 $query->where(fn ($builder) => $builder
                     ->where('code', 'like', "%{$search}%")
                     ->orWhere('name', 'like', "%{$search}%")
                     ->orWhere('phone', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%")
-                    ->orWhere('region', 'like', "%{$search}%")
+                    ->orWhereHas('regions', fn ($regions) => $regions->where('name', 'like', "%{$search}%"))
                     ->orWhereHas('user', fn ($user) => $user->where('username', 'like', "%{$search}%")));
             })
             ->when($data['status'] ?? null, fn ($query, string $status) => $query->where('is_active', $status === 'active'))
@@ -88,6 +89,12 @@ class SalesRepresentativeController extends Controller
         return response()->json([
             'warehouses' => $this->warehouseAccess->scope(Warehouse::query(), $request->user())
                 ->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
+            'regions' => Region::query()->with('warehouse:id,code,name')->where('is_active', true)
+                ->whereIn('warehouse_id', $this->warehouseAccess->scope(Warehouse::query(), $request->user())->select('id'))
+                ->orderBy('name')->get()->map(fn (Region $region) => [
+                    'id' => $region->id, 'warehouse_id' => $region->warehouse_id, 'name' => $region->name,
+                    'warehouse' => $region->warehouse->only(['id', 'code', 'name']),
+                ]),
             'vehicles' => Vehicle::query()->where('is_active', true)->orderBy('vehicle_number')
                 ->get(['id', 'vehicle_number', 'vehicle_type', 'sales_representative_id']),
         ]);
@@ -150,6 +157,7 @@ class SalesRepresentativeController extends Controller
     {
         Gate::authorize('create', SalesRepresentative::class);
         $request->merge($this->prepared($request));
+        $this->prepareRegionIds($request);
         $data = $request->validate($this->rules());
         $this->validateScopeAndVehicle($request, $data);
 
@@ -167,6 +175,7 @@ class SalesRepresentativeController extends Controller
             $user->warehouses()->syncWithPivotValues([$data['primary_warehouse_id']], ['assigned_by' => $request->user()->id]);
 
             $representative = SalesRepresentative::query()->create($this->profileData($data, $user->id));
+            $representative->regions()->sync($data['region_ids']);
             if ($data['vehicle_id']) {
                 Vehicle::query()->whereKey($data['vehicle_id'])->update(['sales_representative_id' => $representative->id]);
             }
@@ -184,6 +193,7 @@ class SalesRepresentativeController extends Controller
     {
         Gate::authorize('update', $salesRepresentative);
         $request->merge($this->prepared($request));
+        $this->prepareRegionIds($request, $salesRepresentative);
         $data = $request->validate($this->rules($salesRepresentative));
         $this->validateScopeAndVehicle($request, $data, $salesRepresentative);
 
@@ -205,6 +215,7 @@ class SalesRepresentativeController extends Controller
             $user->syncRoles([RoleName::SalesRepresentative->value]);
             $user->warehouses()->syncWithPivotValues([$data['primary_warehouse_id']], ['assigned_by' => $request->user()->id]);
             $salesRepresentative->update($this->profileData($data, $user->id));
+            $salesRepresentative->regions()->sync($data['region_ids']);
 
             if ($oldVehicleId !== $data['vehicle_id']) {
                 Vehicle::query()->where('sales_representative_id', $salesRepresentative->id)->update(['sales_representative_id' => null]);
@@ -234,9 +245,10 @@ class SalesRepresentativeController extends Controller
             'phone' => ['nullable', 'string', 'max:50'],
             'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user)],
             'username' => ['required', 'string', 'max:100', 'regex:/^[a-zA-Z0-9._-]+$/', Rule::unique('users', 'username')->ignore($user)],
-            'password' => [$representative ? 'nullable' : 'required', 'string', 'size:8', 'confirmed'],
+            'password' => [$representative ? 'nullable' : 'required', 'string', 'min:6', 'confirmed'],
             'primary_warehouse_id' => ['required', 'integer', 'exists:warehouses,id'],
-            'region' => ['nullable', 'string', 'max:100'],
+            'region_ids' => ['required', 'array', 'min:1'],
+            'region_ids.*' => ['required', 'integer', 'distinct', 'exists:regions,id'],
             'vehicle_id' => ['nullable', 'integer', 'exists:vehicles,id'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'is_active' => ['required', 'boolean'],
@@ -247,6 +259,9 @@ class SalesRepresentativeController extends Controller
     private function validateScopeAndVehicle(Request $request, array $data, ?SalesRepresentative $representative = null): void
     {
         abort_unless($this->warehouseAccess->allows($request->user(), $data['primary_warehouse_id']), 403);
+        if (Region::query()->whereIn('id', $data['region_ids'])->where('warehouse_id', '!=', $data['primary_warehouse_id'])->exists()) {
+            throw ValidationException::withMessages(['region_ids' => ['Every assigned region must belong to the primary warehouse.']]);
+        }
         if ((int) $data['primary_warehouse_id'] !== $representative?->primary_warehouse_id
             && ! Warehouse::query()->whereKey($data['primary_warehouse_id'])->where('is_active', true)->exists()) {
             throw ValidationException::withMessages(['primary_warehouse_id' => ['The primary warehouse must be active.']]);
@@ -267,7 +282,7 @@ class SalesRepresentativeController extends Controller
             'code' => strtoupper(trim($request->string('code')->toString())),
             'username' => strtolower(trim($request->string('username')->toString())),
         ];
-        foreach (['name', 'phone', 'email', 'region', 'notes'] as $field) {
+        foreach (['name', 'phone', 'email', 'notes'] as $field) {
             if ($request->exists($field)) {
                 $value = trim($request->string($field)->toString());
                 $prepared[$field] = $field === 'email' ? (strtolower($value) ?: null) : ($value ?: null);
@@ -285,22 +300,40 @@ class SalesRepresentativeController extends Controller
      */
     private function profileData(array $data, int $userId): array
     {
-        return collect($data)->only(['code', 'name', 'phone', 'email', 'primary_warehouse_id', 'region', 'notes', 'is_active'])
-            ->merge(['user_id' => $userId])->all();
+        return collect($data)->only(['code', 'name', 'phone', 'email', 'primary_warehouse_id', 'notes', 'is_active'])
+            ->merge(['user_id' => $userId, 'region' => Region::query()->whereKey($data['region_ids'][0])->value('name')])->all();
     }
 
     private function load(SalesRepresentative $representative): SalesRepresentative
     {
-        return $representative->load(['primaryWarehouse:id,code,name', 'user:id,username,email,is_active,last_login_at', 'vehicle:id,sales_representative_id,vehicle_number,vehicle_type']);
+        return $representative->load(['primaryWarehouse:id,code,name', 'regions:id,warehouse_id,name', 'user:id,username,email,is_active,last_login_at', 'vehicle:id,sales_representative_id,vehicle_number,vehicle_type']);
     }
 
     /** @return array<string, mixed> */
     private function auditData(SalesRepresentative $representative, User $user, ?int $vehicleId): array
     {
         return $representative->only(['code', 'name', 'phone', 'email', 'primary_warehouse_id', 'region', 'notes', 'is_active']) + [
+            'region_ids' => $representative->regions()->pluck('regions.id')->all(),
             'username' => $user->username,
             'account_is_active' => $user->is_active,
             'vehicle_id' => $vehicleId,
         ];
+    }
+
+    private function prepareRegionIds(Request $request, ?SalesRepresentative $representative = null): void
+    {
+        if ($request->has('region_ids')) {
+            return;
+        }
+        $ids = $representative?->regions()->pluck('regions.id')->all() ?? [];
+        if (! $ids && $request->filled('primary_warehouse_id')) {
+            $query = Region::query()->where('warehouse_id', $request->integer('primary_warehouse_id'))->where('is_active', true);
+            if ($request->filled('region')) {
+                $query->where('name', $request->string('region')->toString());
+            }
+            $id = $query->value('id') ?? Region::query()->where('warehouse_id', $request->integer('primary_warehouse_id'))->where('is_active', true)->value('id');
+            $ids = $id ? [(int) $id] : [];
+        }
+        $request->merge(['region_ids' => $ids]);
     }
 }

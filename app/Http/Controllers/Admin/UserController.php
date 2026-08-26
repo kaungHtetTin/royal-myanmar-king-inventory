@@ -129,7 +129,7 @@ class UserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'username' => ['required', 'string', 'max:100', 'regex:/^[a-zA-Z0-9._-]+$/', Rule::unique('users')->ignore($user)],
             'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($user)],
-            'password' => [$user ? 'nullable' : 'required', 'string', 'min:12', 'confirmed'],
+            'password' => [$user ? 'nullable' : 'required', 'string', 'min:6', 'confirmed'],
             'is_active' => ['required', 'boolean'],
             'roles' => [$user ? 'sometimes' : 'required', 'array', 'min:1'],
             'roles.*' => ['string', 'distinct', 'max:100'],

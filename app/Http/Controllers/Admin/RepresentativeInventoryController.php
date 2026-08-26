@@ -41,7 +41,7 @@ class RepresentativeInventoryController extends Controller
         }
 
         $matching = (clone $query)->get();
-        $summary = ['total' => $matching->count(), 'units' => (int) $matching->sum('quantity'), 'products' => $matching->pluck('product_id')->unique()->count(), 'in_transit' => $matching->where('pending_quantity', '>', 0)->count()];
+        $summary = ['total' => $matching->count(), 'units' => (int) $matching->sum('quantity'), 'foc_units' => (int) $matching->sum('foc_quantity'), 'products' => $matching->pluck('product_id')->unique()->count(), 'in_transit' => $matching->where('pending_quantity', '>', 0)->count()];
 
         return RepresentativeInventoryResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString())->additional(['summary' => $summary]);
     }

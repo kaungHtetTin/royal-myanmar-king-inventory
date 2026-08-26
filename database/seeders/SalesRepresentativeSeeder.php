@@ -15,8 +15,9 @@ class SalesRepresentativeSeeder extends Seeder
     public function run(): void
     {
         $records = [
-            ['code' => 'SR-001', 'name' => 'Ko Aung', 'username' => 'koaung', 'email' => 'koaung@example.com', 'phone' => '09-450000001', 'warehouse' => 'YGN-MAIN', 'region' => 'Yangon', 'vehicle' => 'YGN-3N-4821'],
-            ['code' => 'SR-002', 'name' => 'Ma Su', 'username' => 'masu', 'email' => null, 'phone' => '09-450000002', 'warehouse' => 'MDY-MAIN', 'region' => 'Mandalay', 'vehicle' => null],
+            ['code' => 'SR-001', 'name' => 'Ko Aung', 'username' => 'koaung', 'email' => 'koaung@example.com', 'phone' => '09-450000001', 'warehouse' => 'YGN-MAIN', 'regions' => ['Yangon West', 'Yangon East'], 'vehicle' => 'YGN-3N-4821'],
+            ['code' => 'SR-002', 'name' => 'Ma Su', 'username' => 'masu', 'email' => null, 'phone' => '09-450000002', 'warehouse' => 'MDY-MAIN', 'regions' => ['Mandalay Central', 'Mandalay South'], 'vehicle' => null],
+            ['code' => 'SR-003', 'name' => 'Ko Min', 'username' => 'komin', 'email' => null, 'phone' => '09-450000003', 'warehouse' => 'NPT-MAIN', 'regions' => ['Nay Pyi Taw North', 'Nay Pyi Taw South'], 'vehicle' => null],
         ];
 
         foreach ($records as $record) {
@@ -29,8 +30,13 @@ class SalesRepresentativeSeeder extends Seeder
                 $user->warehouses()->syncWithPivotValues([$warehouse->id], ['assigned_by' => User::query()->where('username', 'superadmin')->value('id')]);
                 $representative = SalesRepresentative::query()->updateOrCreate(['code' => $record['code']], [
                     'user_id' => $user->id, 'primary_warehouse_id' => $warehouse->id, 'name' => $record['name'], 'phone' => $record['phone'],
-                    'email' => $record['email'], 'region' => $record['region'], 'notes' => null, 'is_active' => true,
+                    'email' => $record['email'], 'region' => $record['regions'][0], 'notes' => null, 'is_active' => true,
                 ]);
+                $regionIds = $warehouse->regions()->whereIn('name', $record['regions'])->pluck('id');
+                if ($regionIds->count() !== count($record['regions'])) {
+                    throw new \LogicException("One or more seeded regions are missing for {$record['code']}.");
+                }
+                $representative->regions()->sync($regionIds->all());
                 Vehicle::query()->where('sales_representative_id', $representative->id)->update(['sales_representative_id' => null]);
                 if ($record['vehicle']) {
                     Vehicle::query()->where('vehicle_number', $record['vehicle'])->update(['sales_representative_id' => $representative->id]);

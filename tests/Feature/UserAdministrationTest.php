@@ -31,8 +31,8 @@ class UserAdministrationTest extends TestCase
             'name' => 'Office Operator',
             'username' => 'office.operator',
             'email' => 'office@example.com',
-            'password' => 'secure-password',
-            'password_confirmation' => 'secure-password',
+            'password' => 'secret',
+            'password_confirmation' => 'secret',
             'is_active' => true,
             'roles' => [RoleName::OfficeAdmin->value],
             'warehouse_ids' => [$warehouse->id],
@@ -45,7 +45,7 @@ class UserAdministrationTest extends TestCase
             ->assertJsonMissingPath('data.password');
         $this->assertDatabaseHas('audit_logs', ['actor_id' => $admin->id, 'event' => 'user.created']);
         $this->assertDatabaseHas('audit_logs', ['actor_id' => $admin->id, 'event' => 'user.access_updated']);
-        $this->assertTrue(Hash::check('secure-password', User::query()->findOrFail($response->json('data.id'))->password));
+        $this->assertTrue(Hash::check('secret', User::query()->findOrFail($response->json('data.id'))->password));
     }
 
     public function test_user_without_permission_cannot_open_user_management(): void

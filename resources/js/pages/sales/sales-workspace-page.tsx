@@ -3,9 +3,18 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useBranding } from '../../branding/branding-context';
 import type { PaginationMeta } from '../../services/administration';
 import { printInvoice } from '../../services/invoice-print';
-import { SaleApiError, saleApi, type Sale, type SaleInput, type SaleOptions } from '../../services/sales';
+import {
+    SaleApiError,
+    saleApi,
+    type Sale,
+    type SaleCustomerOption,
+    type SaleInput,
+    type SaleOptions,
+    type SalesCustomerInput,
+} from '../../services/sales';
 import { Icon } from '../../ui/icons';
-import { Button, EmptyState, IconButton, Pagination, StatusBadge } from '../../ui/primitives';
+import { editableNumber } from '../../ui/form-values';
+import { Button, Dialog, EmptyState, IconButton, Pagination, StatusBadge } from '../../ui/primitives';
 
 const emptyOptions: SaleOptions = {
     cash_hold: 0,
@@ -59,7 +68,10 @@ function formFromSale(sale: Sale): SaleInput {
         notes: sale.notes ?? '',
         items: sale.items.map((item) => ({
             product_id: item.product.id,
+            product_unit_id: item.unit?.id,
             quantity: item.quantity,
+            foc_product_unit_id: item.foc_unit?.id,
+            foc_quantity: item.foc_quantity,
         })),
     };
 }
@@ -84,6 +96,7 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
     const [wizardStep, setWizardStep] = useState<SaleWizardStep>(1);
     const [customerQuery, setCustomerQuery] = useState('');
     const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
+    const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
     const customerPickerRef = useRef<HTMLDivElement>(null);
     const load = useCallback(async () => {
         try {
@@ -148,6 +161,38 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
         };
     }, []);
     const selectedCustomer = options.customers.find((customer) => customer.id === form.customer_id);
+    const selectedRegionId = selectedCustomer?.way?.region?.id ?? 0;
+    const selectedRegionName = selectedCustomer?.way?.region?.name ?? 'select customer';
+    const productUnits = useCallback(
+        (product: SaleOptions['products'][number]) =>
+            product.units?.length
+                ? product.units
+                : [
+                      {
+                          id: 0,
+                          name: product.unit,
+                          conversion_factor: 1,
+                          is_base: true,
+                          is_default_selling: true,
+                          prices: selectedCustomer
+                              ? [{ region_id: selectedRegionId, price: product.selling_price }]
+                              : [],
+                      },
+                  ],
+        [selectedCustomer, selectedRegionId],
+    );
+    const lineUnit = useCallback(
+        (line: SaleInput['items'][number], product = options.products.find((item) => item.id === line.product_id)) =>
+            (product ? productUnits(product) : []).find((unit) => unit.id === line.product_unit_id) ??
+            (product ? productUnits(product) : []).find((unit) => unit.is_default_selling) ??
+            (product ? productUnits(product) : [])[0],
+        [options.products, productUnits],
+    );
+    const linePrice = useCallback(
+        (line: SaleInput['items'][number]) =>
+            lineUnit(line)?.prices?.find((price) => price.region_id === selectedRegionId)?.price ?? 0,
+        [lineUnit, selectedRegionId],
+    );
     const filteredCustomers = useMemo(() => {
         const query = customerQuery.trim().toLowerCase();
         if (!query) return options.customers;
@@ -174,15 +219,8 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
         };
     }, []);
     const preview = useMemo(
-        () =>
-            form.items.reduce(
-                (total, line) =>
-                    total +
-                    line.quantity *
-                        (options.products.find((product) => product.id === line.product_id)?.selling_price ?? 0),
-                0,
-            ),
-        [form.items, options.products],
+        () => form.items.reduce((total, line) => total + line.quantity * linePrice(line), 0),
+        [form.items, linePrice],
     );
     const chooseCustomer = (customerId: number) => {
         const customer = options.customers.find((option) => option.id === customerId);
@@ -225,8 +263,27 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
             else seen.add(line.product_id);
             if (!Number.isInteger(line.quantity) || line.quantity < 1)
                 next[`items.${index}.quantity`] = ['Enter a whole quantity of at least 1.'];
-            else if (forPosting && product && line.quantity > product.quantity)
-                next[`items.${index}.quantity`] = [`Only ${product.quantity} units are currently available.`];
+            else if (
+                forPosting &&
+                product &&
+                line.quantity * (lineUnit(line, product)?.conversion_factor ?? 1) > product.quantity
+            )
+                next[`items.${index}.quantity`] = [`Only ${product.quantity} base units are currently available.`];
+            if (
+                (line.foc_quantity ?? 0) *
+                    (product?.units.find((unit) => unit.id === line.foc_product_unit_id)?.conversion_factor ?? 1) >
+                (product?.foc_quantity ?? 0)
+            )
+                next[`items.${index}.foc_quantity`] = [
+                    `Only ${product?.foc_quantity ?? 0} FOC base units are available.`,
+                ];
+            if (
+                product &&
+                selectedCustomer &&
+                linePrice(line) === 0 &&
+                !lineUnit(line)?.prices?.some((price) => price.region_id === selectedRegionId)
+            )
+                next[`items.${index}.product_unit_id`] = ['This unit has no price for the customer region.'];
         });
         if (
             forPosting &&
@@ -264,8 +321,15 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                 const product = options.products.find((item) => item.id === line.product_id);
                 if (!Number.isInteger(line.quantity) || line.quantity < 1)
                     next[`items.${index}.quantity`] = ['Enter a whole quantity of at least 1.'];
-                else if (product && line.quantity > product.quantity)
-                    next[`items.${index}.quantity`] = [`Only ${product.quantity} units are currently available.`];
+                else if (
+                    product &&
+                    line.quantity * (lineUnit(line, product)?.conversion_factor ?? 1) > product.quantity
+                )
+                    next[`items.${index}.quantity`] = [
+                        `Only ${product.quantity} ${
+                            (lineUnit(line, product)?.conversion_factor ?? 1) === 1 ? 'units' : 'base units'
+                        } are currently available.`,
+                    ];
             });
         }
         setFields(next);
@@ -286,12 +350,23 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
         setWizardStep((wizardStep - 1) as SaleWizardStep);
     };
     const toggleProduct = (productId: number) => {
+        const selectedProduct = options.products.find((product) => product.id === productId);
         setFields({});
         setForm((value) => ({
             ...value,
             items: value.items.some((item) => item.product_id === productId)
                 ? value.items.filter((item) => item.product_id !== productId)
-                : [...value.items, { product_id: productId, quantity: 1 }],
+                : [
+                      ...value.items,
+                      {
+                          product_id: productId,
+                          product_unit_id: selectedProduct
+                              ? productUnits(selectedProduct).find((unit) => unit.is_default_selling)?.id
+                              : undefined,
+                          quantity: 1,
+                          foc_quantity: 0,
+                      },
+                  ],
         }));
     };
     const save = async (postAfter: boolean) => {
@@ -352,6 +427,24 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
 
     return (
         <div className="sales-stock-page sales-workspace">
+            <NewCustomerDialog
+                onClose={() => setCustomerDialogOpen(false)}
+                onCreated={(customer) => {
+                    setOptions((value) => ({
+                        ...value,
+                        customers: [...value.customers, customer].sort((left, right) =>
+                            left.name.localeCompare(right.name),
+                        ),
+                    }));
+                    setForm((value) => ({ ...value, customer_id: customer.id, payment_type: 'cash' }));
+                    setCustomerQuery(`${customer.code} · ${customer.name}`);
+                    setCustomerPickerOpen(false);
+                    setCustomerDialogOpen(false);
+                    showNotice(`${customer.name} created as a cash-only customer.`);
+                }}
+                open={customerDialogOpen}
+                regions={options.representative.regions ?? []}
+            />
             <header className="sales-page-heading">
                 <div>
                     <p>Customer sales</p>
@@ -402,16 +495,29 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                 <p className="ui-eyebrow">Sale details</p>
                                 <h2>{editing ? 'Update draft' : 'Create customer sale'}</h2>
                             </div>
-                            {editing ? <Button onClick={reset}>New</Button> : null}
+                            {editing ? (
+                                <Button onClick={reset}>New</Button>
+                            ) : (
+                                <Button
+                                    icon="plus"
+                                    onClick={() => {
+                                        setCustomerPickerOpen(false);
+                                        setCustomerDialogOpen(true);
+                                    }}
+                                    tone="ghost"
+                                >
+                                    New customer
+                                </Button>
+                            )}
                         </header>
                         {loading ? (
                             <div className="ui-loading">
                                 <span />
                                 Loading sale options…
                             </div>
-                        ) : options.customers.length === 0 || options.products.length === 0 ? (
+                        ) : options.products.length === 0 ? (
                             <EmptyState
-                                description="An active customer and received representative stock are required."
+                                description="Received representative stock is required before creating a sale."
                                 title="Sale entry is not ready"
                             />
                         ) : (
@@ -622,16 +728,27 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                     </div>
                                                     {selectedCustomer.credit_allowed ? (
                                                         <dl>
-                                                            <div><dt>Available</dt><dd>{money(selectedCustomer.available_credit)}</dd></div>
-                                                            <div><dt>Outstanding</dt><dd>{money(selectedCustomer.outstanding_amount)}</dd></div>
-                                                            <div><dt>Credit limit</dt><dd>{money(selectedCustomer.credit_limit)}</dd></div>
+                                                            <div>
+                                                                <dt>Available</dt>
+                                                                <dd>{money(selectedCustomer.available_credit)}</dd>
+                                                            </div>
+                                                            <div>
+                                                                <dt>Outstanding</dt>
+                                                                <dd>{money(selectedCustomer.outstanding_amount)}</dd>
+                                                            </div>
+                                                            <div>
+                                                                <dt>Credit limit</dt>
+                                                                <dd>{money(selectedCustomer.credit_limit)}</dd>
+                                                            </div>
                                                         </dl>
                                                     ) : (
                                                         <div className="sale-credit-status__notice" role="status">
                                                             <Icon name="warning" size={16} />
                                                             <span>
                                                                 <strong>Credit not allowed</strong>
-                                                                <small>This customer is configured for cash payments only.</small>
+                                                                <small>
+                                                                    This customer is configured for cash payments only.
+                                                                </small>
                                                             </span>
                                                         </div>
                                                     )}
@@ -694,8 +811,18 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                             <small>available</small>
                                                         </span>
                                                         <span className="sale-product-option__price">
-                                                            <strong>{money(product.selling_price)}</strong>
-                                                            <small>unit price</small>
+                                                            <strong>
+                                                                {money(
+                                                                    linePrice({
+                                                                        product_id: product.id,
+                                                                        product_unit_id: productUnits(product).find(
+                                                                            (unit) => unit.is_default_selling,
+                                                                        )?.id,
+                                                                        quantity: 1,
+                                                                    }),
+                                                                )}
+                                                            </strong>
+                                                            <small>{selectedRegionName} price</small>
                                                         </span>
                                                     </label>
                                                 );
@@ -721,45 +848,150 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                         </span>
                                                         <div className="sale-quantity-list__identity">
                                                             <strong>{product.name}</strong>
-                                                            <small>
-                                                                {product.sku} · {product.quantity} available
-                                                            </small>
+                                                            <small>{product.quantity} available</small>
                                                         </div>
-                                                        <label className="ui-field sale-quantity-list__field">
-                                                            <input
-                                                                aria-label={`Quantity for ${product.name}`}
-                                                                max={product.quantity}
-                                                                min={1}
-                                                                onChange={(event) =>
-                                                                    setForm((value) => ({
-                                                                        ...value,
-                                                                        items: value.items.map((item, itemIndex) =>
-                                                                            itemIndex === index
-                                                                                ? {
-                                                                                      ...item,
-                                                                                      quantity: Number(
-                                                                                          event.target.value,
-                                                                                      ),
-                                                                                  }
-                                                                                : item,
-                                                                        ),
-                                                                    }))
-                                                                }
-                                                                required
-                                                                type="number"
-                                                                value={line.quantity}
-                                                            />
-                                                            {fields[`items.${index}.quantity`]?.[0] ? (
-                                                                <small className="ui-field__error">
-                                                                    {fields[`items.${index}.quantity`][0]}
-                                                                </small>
-                                                            ) : null}
-                                                        </label>
-                                                        <div className="sale-quantity-list__total">
-                                                            <small>Line total</small>
-                                                            <strong>
-                                                                {money(product.selling_price * line.quantity)}
-                                                            </strong>
+                                                        <div className="sale-quantity-list__controls sale-quantity-list__controls--paid">
+                                                            <label className="ui-field">
+                                                                <span>Selling unit</span>
+                                                                <select
+                                                                    onChange={(event) =>
+                                                                        setForm((value) => ({
+                                                                            ...value,
+                                                                            items: value.items.map((item, itemIndex) =>
+                                                                                itemIndex === index
+                                                                                    ? {
+                                                                                          ...item,
+                                                                                          product_unit_id: Number(
+                                                                                              event.target.value,
+                                                                                          ),
+                                                                                      }
+                                                                                    : item,
+                                                                            ),
+                                                                        }))
+                                                                    }
+                                                                    value={lineUnit(line, product)?.id}
+                                                                >
+                                                                    {productUnits(product).map((unit) => (
+                                                                        <option
+                                                                            disabled={
+                                                                                !unit.prices?.some(
+                                                                                    (price) =>
+                                                                                        price.region_id ===
+                                                                                        selectedRegionId,
+                                                                                )
+                                                                            }
+                                                                            key={unit.id}
+                                                                            value={unit.id}
+                                                                        >
+                                                                            {unit.name}
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                            </label>
+                                                            <label className="ui-field">
+                                                                <span>Paid quantity</span>
+                                                                <input
+                                                                    aria-label={`Quantity for ${product.name}`}
+                                                                    inputMode="numeric"
+                                                                    onChange={(event) =>
+                                                                        setForm((value) => ({
+                                                                            ...value,
+                                                                            items: value.items.map((item, itemIndex) =>
+                                                                                itemIndex === index
+                                                                                    ? {
+                                                                                          ...item,
+                                                                                          quantity: editableNumber(
+                                                                                              event.target.value.replace(
+                                                                                                  /\D/g,
+                                                                                                  '',
+                                                                                              ),
+                                                                                          ),
+                                                                                      }
+                                                                                    : item,
+                                                                            ),
+                                                                        }))
+                                                                    }
+                                                                    pattern="[0-9]*"
+                                                                    required
+                                                                    type="text"
+                                                                    value={line.quantity}
+                                                                />
+                                                                {fields[`items.${index}.quantity`]?.[0] ? (
+                                                                    <small className="ui-field__error">
+                                                                        {fields[`items.${index}.quantity`][0]}
+                                                                    </small>
+                                                                ) : null}
+                                                            </label>
+                                                        </div>
+                                                        <div className="sale-quantity-list__controls sale-quantity-list__controls--foc">
+                                                            <label className="ui-field">
+                                                                <span>FOC unit</span>
+                                                                <select
+                                                                    disabled={(product.foc_quantity ?? 0) <= 0}
+                                                                    onChange={(event) =>
+                                                                        setForm((value) => ({
+                                                                            ...value,
+                                                                            items: value.items.map((item, itemIndex) =>
+                                                                                itemIndex === index
+                                                                                    ? {
+                                                                                          ...item,
+                                                                                          foc_product_unit_id: Number(
+                                                                                              event.target.value,
+                                                                                          ),
+                                                                                      }
+                                                                                    : item,
+                                                                            ),
+                                                                        }))
+                                                                    }
+                                                                    value={
+                                                                        line.foc_product_unit_id ??
+                                                                        lineUnit(line, product)?.id
+                                                                    }
+                                                                >
+                                                                    {productUnits(product).map((unit) => (
+                                                                        <option key={unit.id} value={unit.id}>
+                                                                            {unit.name}
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                            </label>
+                                                            <label className="ui-field">
+                                                                <span>FOC quantity</span>
+                                                                <input
+                                                                    disabled={(product.foc_quantity ?? 0) <= 0}
+                                                                    inputMode="numeric"
+                                                                    onChange={(event) =>
+                                                                        setForm((value) => ({
+                                                                            ...value,
+                                                                            items: value.items.map((item, itemIndex) =>
+                                                                                itemIndex === index
+                                                                                    ? {
+                                                                                          ...item,
+                                                                                          foc_quantity: editableNumber(
+                                                                                              event.target.value.replace(
+                                                                                                  /\D/g,
+                                                                                                  '',
+                                                                                              ),
+                                                                                          ),
+                                                                                          foc_product_unit_id:
+                                                                                              item.foc_product_unit_id ??
+                                                                                              lineUnit(item, product)
+                                                                                                  ?.id,
+                                                                                      }
+                                                                                    : item,
+                                                                            ),
+                                                                        }))
+                                                                    }
+                                                                    pattern="[0-9]*"
+                                                                    type="text"
+                                                                    value={line.foc_quantity ?? 0}
+                                                                />
+                                                                {fields[`items.${index}.foc_quantity`]?.[0] ? (
+                                                                    <small className="ui-field__error">
+                                                                        {fields[`items.${index}.foc_quantity`][0]}
+                                                                    </small>
+                                                                ) : null}
+                                                            </label>
                                                         </div>
                                                     </article>
                                                 );
@@ -800,11 +1032,10 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                                 <small>{product.sku}</small>
                                                             </div>
                                                             <span>
-                                                                {line.quantity} × {money(product.selling_price)}
+                                                                {line.quantity} {lineUnit(line, product)?.name} ×{' '}
+                                                                {money(linePrice(line))}
                                                             </span>
-                                                            <strong>
-                                                                {money(line.quantity * product.selling_price)}
-                                                            </strong>
+                                                            <strong>{money(line.quantity * linePrice(line))}</strong>
                                                         </article>
                                                     );
                                                 })}
@@ -983,6 +1214,179 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                 </section>
             )}
         </div>
+    );
+}
+
+const emptyCustomerForm: SalesCustomerInput = {
+    address: '',
+    customer_type: 'Shop',
+    name: '',
+    notes: '',
+    phone: '',
+    region: '',
+    township: '',
+    way_id: 0,
+};
+
+function NewCustomerDialog({
+    onClose,
+    onCreated,
+    open,
+    regions,
+}: {
+    onClose: () => void;
+    onCreated: (customer: SaleCustomerOption) => void;
+    open: boolean;
+    regions: Array<{ id: number; name: string; ways: Array<{ id: number; code: string; name: string }> }>;
+}) {
+    const [form, setForm] = useState<SalesCustomerInput>(emptyCustomerForm);
+    const [errors, setErrors] = useState<Record<string, string[]>>({});
+    const [saving, setSaving] = useState(false);
+    useEffect(() => {
+        if (!open) return;
+        setForm(emptyCustomerForm);
+        setErrors({});
+    }, [open]);
+    const change = (field: keyof SalesCustomerInput, value: string | number) =>
+        setForm((current) => ({ ...current, [field]: value }));
+    const submitCustomer = async (event: FormEvent) => {
+        event.preventDefault();
+        setSaving(true);
+        setErrors({});
+        try {
+            const response = await saleApi.createCustomer(form);
+            onCreated(response.customer);
+        } catch (requestError) {
+            if (requestError instanceof SaleApiError) setErrors(requestError.fields);
+            setErrors((current) => ({ ...current, form: [message(requestError)] }));
+        } finally {
+            setSaving(false);
+        }
+    };
+    const fieldError = (name: keyof SalesCustomerInput) =>
+        errors[name]?.[0] ? <small className="ui-field__error">{errors[name][0]}</small> : null;
+
+    return (
+        <Dialog
+            description="The customer is assigned to your warehouse. Credit is disabled and the credit limit starts at 0."
+            footer={
+                <>
+                    <Button disabled={saving} onClick={onClose}>
+                        Cancel
+                    </Button>
+                    <Button
+                        disabled={saving}
+                        form="sales-new-customer-form"
+                        requiresOnline
+                        tone="primary"
+                        type="submit"
+                    >
+                        {saving ? 'Creating…' : 'Create customer'}
+                    </Button>
+                </>
+            }
+            onClose={onClose}
+            open={open}
+            title="New customer"
+        >
+            <form className="management-form" id="sales-new-customer-form" onSubmit={submitCustomer}>
+                {errors.form?.[0] ? <div className="ui-form-error">{errors.form[0]}</div> : null}
+                <div className="form-grid">
+                    <label className="ui-field">
+                        <span>Customer name</span>
+                        <input
+                            autoFocus
+                            maxLength={255}
+                            onChange={(event) => change('name', event.target.value)}
+                            required
+                            value={form.name}
+                        />
+                        {fieldError('name')}
+                    </label>
+                    <label className="ui-field">
+                        <span>Customer type</span>
+                        <input
+                            maxLength={100}
+                            onChange={(event) => change('customer_type', event.target.value)}
+                            value={form.customer_type}
+                        />
+                        {fieldError('customer_type')}
+                    </label>
+                    <label className="ui-field">
+                        <span>Phone</span>
+                        <input
+                            maxLength={50}
+                            onChange={(event) => change('phone', event.target.value)}
+                            value={form.phone}
+                        />
+                        {fieldError('phone')}
+                    </label>
+                    <label className="ui-field">
+                        <span>Region</span>
+                        <select
+                            onChange={(event) => {
+                                const region = regions.find((item) => item.id === Number(event.target.value));
+                                setForm((value) => ({
+                                    ...value,
+                                    region: region?.name ?? '',
+                                    way_id: region?.ways[0]?.id ?? 0,
+                                    township: region?.ways[0]?.name ?? '',
+                                }));
+                            }}
+                            required
+                            value={regions.find((region) => region.name === form.region)?.id ?? 0}
+                        >
+                            <option value={0}>Select region</option>
+                            {regions.map((region) => (
+                                <option key={region.id} value={region.id}>
+                                    {region.name}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                    <label className="ui-field">
+                        <span>Way</span>
+                        <select
+                            onChange={(event) => {
+                                const way = regions
+                                    .flatMap((region) => region.ways)
+                                    .find((item) => item.id === Number(event.target.value));
+                                setForm((value) => ({ ...value, way_id: way?.id ?? 0, township: way?.name ?? '' }));
+                            }}
+                            required
+                            value={form.way_id}
+                        >
+                            <option value={0}>Select Way</option>
+                            {(regions.find((region) => region.name === form.region)?.ways ?? []).map((way) => (
+                                <option key={way.id} value={way.id}>
+                                    {way.name} · {way.code}
+                                </option>
+                            ))}
+                        </select>
+                        {fieldError('way_id')}
+                    </label>
+                    <label className="ui-field form-grid__wide">
+                        <span>Address</span>
+                        <input
+                            maxLength={500}
+                            onChange={(event) => change('address', event.target.value)}
+                            value={form.address}
+                        />
+                        {fieldError('address')}
+                    </label>
+                    <label className="ui-field form-grid__wide">
+                        <span>Notes</span>
+                        <textarea
+                            maxLength={1000}
+                            onChange={(event) => change('notes', event.target.value)}
+                            rows={3}
+                            value={form.notes}
+                        />
+                        {fieldError('notes')}
+                    </label>
+                </div>
+            </form>
+        </Dialog>
     );
 }
 

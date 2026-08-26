@@ -39,8 +39,9 @@ export function invoiceDocument(sale: Sale, branding: Branding = fallbackBrandin
         .map(
             (item, index) => `<tr>
                 <td class="number">${index + 1}</td>
-                <td><strong>${escapeHtml(item.product.name)}</strong><small>${escapeHtml(item.product.sku)} · ${escapeHtml(item.product.unit)}</small></td>
-                <td class="number">${item.quantity}</td>
+                <td><strong>${escapeHtml(item.product.name)}</strong><small>${escapeHtml(item.product.sku)}</small></td>
+                <td class="number">${item.quantity} ${escapeHtml(item.unit?.name ?? item.product.unit)}</td>
+                <td class="number">${item.foc_quantity ? `${item.foc_quantity} ${escapeHtml(item.foc_unit?.name ?? item.unit?.name ?? item.product.unit)}` : '—'}</td>
                 <td class="number">${escapeHtml(money(item.unit_price))}</td>
                 <td class="number"><strong>${escapeHtml(money(item.line_total))}</strong></td>
             </tr>`,
@@ -55,8 +56,8 @@ export function invoiceDocument(sale: Sale, branding: Branding = fallbackBrandin
 </style></head><body><main>
 <header class="top"><div><div class="brand"><span class="mark">${branding.logo_url ? `<img alt="" src="${escapeHtml(branding.logo_url)}">` : 'SF'}</span><span><strong>${escapeHtml(branding.business_name)}</strong><small>${escapeHtml(branding.business_tagline || 'Inventory & Sales')}</small></span></div>${businessContact ? `<p class="muted">${businessContact}</p>` : ''}</div><div class="title"><h1>INVOICE</h1><strong>${escapeHtml(sale.reference)}</strong><span class="status ${escapeHtml(sale.status)}">${escapeHtml(sale.status)}</span></div></header>
 ${sale.status === 'voided' ? '<div class="void">VOID</div>' : ''}
-<section class="details"><div><h2>Bill to</h2><p><strong>${escapeHtml(sale.customer.name)}</strong><br><span class="muted">${escapeHtml(sale.customer.code)}${contact ? `<br>${contact}` : ''}</span></p></div><dl class="meta"><dt>Invoice date</dt><dd>${escapeHtml(dateTime(issuedAt))}</dd><dt>Payment</dt><dd>${escapeHtml(sale.payment_type.toUpperCase())}</dd><dt>Representative</dt><dd>${escapeHtml(sale.representative.name)} (${escapeHtml(sale.representative.code)})</dd><dt>Warehouse</dt><dd>${escapeHtml(sale.warehouse.name)}</dd></dl></section>
-<table><thead><tr><th class="number">#</th><th>Product</th><th class="number">Qty</th><th class="number">Unit price</th><th class="number">Amount</th></tr></thead><tbody>${lines}</tbody><tfoot><tr><td colspan="3"></td><td class="number">Total units</td><td class="number"><strong>${sale.total_quantity}</strong></td></tr><tr class="grand"><td colspan="3"></td><td class="number"><strong>Total</strong></td><td class="number"><strong>${escapeHtml(money(sale.total_amount))}</strong></td></tr></tfoot></table>
+<section class="details"><div><h2>Bill to</h2><p><strong>${escapeHtml(sale.customer.name)}</strong><br><span class="muted">${escapeHtml(sale.customer.code)}${contact ? `<br>${contact}` : ''}</span></p></div><dl class="meta"><dt>Invoice date</dt><dd>${escapeHtml(dateTime(issuedAt))}</dd><dt>Payment</dt><dd>${escapeHtml(sale.payment_type.toUpperCase())}</dd><dt>Representative</dt><dd>${escapeHtml(sale.representative.name)} (${escapeHtml(sale.representative.code)})</dd><dt>Coverage</dt><dd>${escapeHtml([sale.region?.name, sale.way?.name].filter(Boolean).join(' / ') || sale.warehouse.name)}</dd></dl></section>
+<table><thead><tr><th class="number">#</th><th>Product</th><th class="number">Sold</th><th class="number">FOC</th><th class="number">Unit price</th><th class="number">Amount</th></tr></thead><tbody>${lines}</tbody><tfoot><tr><td colspan="4"></td><td class="number">Sold / FOC</td><td class="number"><strong>${sale.total_quantity} / ${sale.total_foc_quantity ?? 0}</strong></td></tr><tr class="grand"><td colspan="4"></td><td class="number"><strong>Total</strong></td><td class="number"><strong>${escapeHtml(money(sale.total_amount))}</strong></td></tr></tfoot></table>
 ${sale.notes ? `<section class="notes"><strong>Notes</strong>${escapeHtml(sale.notes)}</section>` : ''}${sale.void_reason ? `<section class="notes"><strong>Void reason</strong>${escapeHtml(sale.void_reason)}</section>` : ''}
 <section class="signatures"><div class="signature">Customer signature</div><div class="signature">Authorized signature</div></section><footer class="footer">${escapeHtml(branding.invoice_footer || 'Thank you for your business')} · Generated from ${escapeHtml(branding.business_name)}</footer>
 </main></body></html>`;

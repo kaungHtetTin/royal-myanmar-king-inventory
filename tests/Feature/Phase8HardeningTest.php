@@ -30,7 +30,7 @@ class Phase8HardeningTest extends TestCase
         $this->assertSame('./admin/dashboard', $manifest['start_url']);
         $this->assertSame('./', $manifest['scope']);
         $this->assertContains('maskable', array_column($manifest['icons'], 'purpose'));
-        $this->assertStringContainsString('stockflow-shell-v2', $worker);
+        $this->assertStringContainsString('stockflow-shell-v3', $worker);
         $this->assertStringContainsString("new URL('build/manifest.json', scopeUrl)", $worker);
         $this->assertStringContainsString("relativePath.startsWith('api/')", $worker);
 

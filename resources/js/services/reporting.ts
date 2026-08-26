@@ -71,10 +71,14 @@ export type SalesDashboard = {
         dispatched_at: string | null;
     }>;
 };
-export type ReportName = 'sales';
+export type ReportName = 'sales' | 'way-sales-power' | 'stock-issues';
 export type ReportOptions = {
     warehouses: Identity[];
     reports: ReportName[];
+    regions: Array<{ id: number; warehouse_id: number; name: string }>;
+    ways: Array<{ id: number; region_id: number; code: string; name: string }>;
+    representatives: Identity[];
+    products: ProductIdentity[];
 };
 export type ReportFilters = {
     page?: number;
@@ -84,6 +88,8 @@ export type ReportFilters = {
     product_id?: number;
     category?: string;
     region?: string;
+    region_id?: number;
+    way_id?: number;
     status?: string;
     payment_type?: string;
     movement_type?: string;
@@ -185,6 +191,39 @@ export const reportingApi = {
                 params: params(filters),
             }),
         ),
+    exportWaySalesPower: async (filters: ReportFilters) => {
+        try {
+            const exportFilters = { ...filters };
+            delete exportFilters.page;
+            const response = await window.axios.get<Blob>('api/admin/reports/way-sales-power/export', {
+                params: exportFilters,
+                responseType: 'blob',
+            });
+            const disposition = String(response.headers['content-disposition'] ?? '');
+            const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] ?? 'way-sales-power.csv';
+
+            return { blob: response.data, filename };
+        } catch (error) {
+            throw apiError(error);
+        }
+    },
+    exportStockIssues: async (filters: ReportFilters) => {
+        try {
+            const exportFilters = { ...filters };
+            delete exportFilters.page;
+            delete exportFilters.status;
+            const response = await window.axios.get<Blob>('api/admin/reports/stock-issues/export', {
+                params: exportFilters,
+                responseType: 'blob',
+            });
+            const disposition = String(response.headers['content-disposition'] ?? '');
+            const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] ?? 'stock-issues.csv';
+
+            return { blob: response.data, filename };
+        } catch (error) {
+            throw apiError(error);
+        }
+    },
     salesOptions: () => request<RepresentativeReportOptions>(() => window.axios.get('api/sales/report-options')),
     ownSales: (filters: ReportFilters & { period?: string }) =>
         request<Omit<ReportResponse, 'report'>>(() =>

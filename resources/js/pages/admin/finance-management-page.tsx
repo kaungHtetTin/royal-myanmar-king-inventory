@@ -11,6 +11,7 @@ import {
     type RepresentativeCashBalance,
 } from '../../services/finance';
 import { Icon } from '../../ui/icons';
+import { editableNumber } from '../../ui/form-values';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
 
 type Tab = 'cash-holds' | 'cash-submissions' | 'credit' | 'payments';
@@ -640,7 +641,7 @@ export function FinanceManagementPage() {
                             onChange={(event) =>
                                 setForm((value) => ({
                                     ...value,
-                                    amount: Number(event.target.value),
+                                    amount: editableNumber(event.target.value),
                                 }))
                             }
                             required
