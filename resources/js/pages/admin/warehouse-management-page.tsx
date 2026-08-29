@@ -187,7 +187,7 @@ export function WarehouseManagementPage() {
                                     search: event.target.value,
                                 }))
                             }
-                            placeholder="Search code, name, region, or township"
+                            placeholder="Search code, name, or address"
                             type="search"
                             value={draftFilters.search}
                         />
@@ -224,12 +224,12 @@ export function WarehouseManagementPage() {
                         title="No warehouses found"
                     />
                 ) : (
-                    <div className="ui-table-wrap">
+                    <div className="ui-table-wrap warehouse-table-wrap">
                         <table className="ui-table warehouse-table">
                             <thead>
                                 <tr>
                                     <th>Warehouse</th>
-                                    <th>Location</th>
+                                    <th>Address</th>
                                     <th>Contact</th>
                                     <th>Assigned users</th>
                                     <th>Status</th>
@@ -245,11 +245,7 @@ export function WarehouseManagementPage() {
                                             <small>{warehouse.code}</small>
                                         </td>
                                         <td>
-                                            <strong>
-                                                {[warehouse.township, warehouse.region].filter(Boolean).join(', ') ||
-                                                    'Not specified'}
-                                            </strong>
-                                            <small>{warehouse.address || 'No address recorded'}</small>
+                                            <strong>{warehouse.address || 'No address recorded'}</strong>
                                         </td>
                                         <td>
                                             <span className="table-primary">{warehouse.phone || 'Not specified'}</span>
@@ -583,8 +579,6 @@ function WarehouseDialog({
         name: '',
         notes: '',
         phone: '',
-        region: '',
-        township: '',
     });
     const [errors, setErrors] = useState<Record<string, string[]>>({});
     const [saving, setSaving] = useState(false);
@@ -598,8 +592,6 @@ function WarehouseDialog({
             name: warehouse?.name ?? '',
             notes: warehouse?.notes ?? '',
             phone: warehouse?.phone ?? '',
-            region: warehouse?.region ?? '',
-            township: warehouse?.township ?? '',
         });
     }, [open, warehouse]);
 
@@ -681,26 +673,6 @@ function WarehouseDialog({
                             value={form.name}
                         />
                         <FieldError errors={errors} name="name" />
-                    </label>
-                    <label className="ui-field">
-                        <span>Region</span>
-                        <input
-                            maxLength={100}
-                            onChange={(event) => change('region', event.target.value)}
-                            placeholder="Yangon"
-                            value={form.region}
-                        />
-                        <FieldError errors={errors} name="region" />
-                    </label>
-                    <label className="ui-field">
-                        <span>Township</span>
-                        <input
-                            maxLength={100}
-                            onChange={(event) => change('township', event.target.value)}
-                            placeholder="Hlaing"
-                            value={form.township}
-                        />
-                        <FieldError errors={errors} name="township" />
                     </label>
                     <label className="ui-field form-grid__wide">
                         <span>Address</span>

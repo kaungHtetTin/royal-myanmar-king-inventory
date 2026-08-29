@@ -92,7 +92,14 @@ function RepresentativeReturnWizard({
     const [step, setStep] = useState(1);
     const [draftRecord, setDraftRecord] = useState(record);
     const [form, setForm] = useState<RepresentativeReturnInput>({
-        items: record?.items.map((item) => ({ product_id: item.product.id, quantity: item.quantity })) ?? [],
+        items:
+            record?.items.map((item) => ({
+                product_id: item.product.id,
+                product_unit_id: item.unit?.id,
+                quantity: item.quantity,
+                foc_product_unit_id: item.foc_unit?.id,
+                foc_quantity: item.foc_quantity ?? 0,
+            })) ?? [],
         notes: record?.notes ?? '',
         sales_representative_id: initialRepresentative,
         target_warehouse_id: initialWarehouse,
@@ -105,9 +112,13 @@ function RepresentativeReturnWizard({
     );
     const availableProducts = useMemo(
         () =>
-            options.products.filter(
-                (product) => (product.representative_stock?.[String(form.sales_representative_id)] ?? 0) > 0,
-            ),
+            options.products.filter((product) => {
+                const representativeId = String(form.sales_representative_id);
+                return (
+                    (product.representative_stock?.[representativeId] ?? 0) > 0 ||
+                    (product.representative_foc_stock?.[representativeId] ?? 0) > 0
+                );
+            }),
         [form.sales_representative_id, options.products],
     );
     const representative = options.representatives.find((value) => value.id === form.sales_representative_id);
@@ -119,15 +130,30 @@ function RepresentativeReturnWizard({
         if (step === 1 && !form.sales_representative_id)
             nextErrors.sales_representative_id = ['Select a representative.'];
         if (step === 2 && !form.items.length) nextErrors.items = ['Select at least one product.'];
-        if (
-            step === 3 &&
-            form.items.some((item) => {
+        if (step === 3) {
+            form.items.forEach((item, index) => {
                 const product = options.products.find((value) => value.id === item.product_id);
-                const available = product?.representative_stock?.[String(form.sales_representative_id)] ?? 0;
-                return item.quantity < 1 || item.quantity > available;
-            })
-        )
-            nextErrors.items = ['One or more quantities exceed the representative stock.'];
+                const paidUnit =
+                    product?.units?.find((unit) => unit.id === item.product_unit_id) ??
+                    product?.units?.find((unit) => unit.is_default_selling) ??
+                    product?.units?.[0];
+                const focUnit = product?.units?.find((unit) => unit.id === item.foc_product_unit_id) ?? paidUnit;
+                const paidBase = item.quantity * (paidUnit?.conversion_factor ?? 1);
+                const focBase = (item.foc_quantity ?? 0) * (focUnit?.conversion_factor ?? 1);
+                const paidAvailable = product?.representative_stock?.[String(form.sales_representative_id)] ?? 0;
+                const focAvailable = product?.representative_foc_stock?.[String(form.sales_representative_id)] ?? 0;
+                if (!Number.isInteger(item.quantity) || item.quantity < 0 || paidBase > paidAvailable)
+                    nextErrors[`items.${index}.quantity`] = [
+                        `Enter a whole paid quantity within ${number(paidAvailable)} available base units.`,
+                    ];
+                if (!Number.isInteger(item.foc_quantity ?? 0) || (item.foc_quantity ?? 0) < 0 || focBase > focAvailable)
+                    nextErrors[`items.${index}.foc_quantity`] = [
+                        `Enter a whole FOC quantity within ${number(focAvailable)} available base units.`,
+                    ];
+                if (paidBase + focBase < 1)
+                    nextErrors[`items.${index}.quantity`] = ['Return at least one paid or FOC base unit.'];
+            });
+        }
         setErrors(nextErrors);
         return Object.keys(nextErrors).length === 0;
     };
@@ -165,16 +191,18 @@ function RepresentativeReturnWizard({
         <section className="stock-import-form-page__panel warehouse-transfer-form-page__panel">
             <form className="management-form" onSubmit={(event) => event.preventDefault()}>
                 <ol aria-label="Representative return progress" className="form-stepper transfer-form-stepper">
-                    {['Return information', 'Product selection', 'Quantity', 'Review & post'].map((label, index) => (
-                        <li
-                            aria-current={step === index + 1 ? 'step' : undefined}
-                            className={step >= index + 1 ? 'is-active' : ''}
-                            key={label}
-                        >
-                            <span>{index + 1}</span>
-                            <strong>{label}</strong>
-                        </li>
-                    ))}
+                    {['Return information', 'Product selection', 'Unit & quantity', 'Review & post'].map(
+                        (label, index) => (
+                            <li
+                                aria-current={step === index + 1 ? 'step' : undefined}
+                                className={step >= index + 1 ? 'is-active' : ''}
+                                key={label}
+                            >
+                                <span>{index + 1}</span>
+                                <strong>{label}</strong>
+                            </li>
+                        ),
+                    )}
                 </ol>
                 {errors.form?.[0] ? <div className="ui-form-error">{errors.form[0]}</div> : null}
 
@@ -250,6 +278,10 @@ function RepresentativeReturnWizard({
                                     const selected = form.items.some((item) => item.product_id === product.id);
                                     const available =
                                         product.representative_stock?.[String(form.sales_representative_id)] ?? 0;
+                                    const focAvailable =
+                                        product.representative_foc_stock?.[String(form.sales_representative_id)] ?? 0;
+                                    const defaultUnit =
+                                        product.units?.find((unit) => unit.is_default_selling) ?? product.units?.[0];
                                     return (
                                         <label
                                             className={`stock-import-product ${selected ? 'is-selected' : ''}`}
@@ -265,7 +297,16 @@ function RepresentativeReturnWizard({
                                                             ? form.items.filter(
                                                                   (item) => item.product_id !== product.id,
                                                               )
-                                                            : [...form.items, { product_id: product.id, quantity: 1 }],
+                                                            : [
+                                                                  ...form.items,
+                                                                  {
+                                                                      product_id: product.id,
+                                                                      product_unit_id: defaultUnit?.id,
+                                                                      quantity: available > 0 ? 1 : 0,
+                                                                      foc_product_unit_id: defaultUnit?.id,
+                                                                      foc_quantity: 0,
+                                                                  },
+                                                              ],
                                                     })
                                                 }
                                                 type="checkbox"
@@ -273,7 +314,8 @@ function RepresentativeReturnWizard({
                                             <span>
                                                 <strong>{product.name}</strong>
                                                 <small>
-                                                    {product.sku} · {available} {product.unit} available
+                                                    {product.sku} · {number(available)} paid / {number(focAvailable)}{' '}
+                                                    FOC base available
                                                 </small>
                                             </span>
                                         </label>
@@ -293,37 +335,75 @@ function RepresentativeReturnWizard({
                 {step === 3 ? (
                     <div className="transfer-wizard-section">
                         <div className="import-lines__heading">
-                            <strong>Set return quantities</strong>
-                            <small>Checked against current representative stock.</small>
+                            <strong>Set return units and quantities</strong>
+                            <small>Paid and FOC balances are checked separately in base units.</small>
                         </div>
                         <div className="transfer-wizard-quantities">
                             {form.items.map((item, index) => {
                                 const product = options.products.find((value) => value.id === item.product_id);
-                                const available =
+                                const paidAvailable =
                                     product?.representative_stock?.[String(form.sales_representative_id)] ?? 0;
-                                const invalid = item.quantity < 1 || item.quantity > available;
+                                const focAvailable =
+                                    product?.representative_foc_stock?.[String(form.sales_representative_id)] ?? 0;
+                                const paidUnit =
+                                    product?.units?.find((unit) => unit.id === item.product_unit_id) ??
+                                    product?.units?.find((unit) => unit.is_default_selling) ??
+                                    product?.units?.[0];
+                                const focUnit =
+                                    product?.units?.find((unit) => unit.id === item.foc_product_unit_id) ?? paidUnit;
+                                const paidBase = item.quantity * (paidUnit?.conversion_factor ?? 1);
+                                const focBase = (item.foc_quantity ?? 0) * (focUnit?.conversion_factor ?? 1);
+                                const paidInvalid =
+                                    !Number.isInteger(item.quantity) || item.quantity < 0 || paidBase > paidAvailable;
+                                const focInvalid =
+                                    !Number.isInteger(item.foc_quantity ?? 0) ||
+                                    (item.foc_quantity ?? 0) < 0 ||
+                                    focBase > focAvailable;
                                 return (
                                     <div
-                                        className={`import-line import-line--quantity ${invalid ? 'is-invalid' : ''}`}
+                                        className={`import-line import-line--quantity transfer-quantity-line ${paidInvalid || focInvalid ? 'is-invalid' : ''}`}
                                         key={item.product_id}
                                     >
-                                        <div>
+                                        <div className="transfer-quantity-line__product">
                                             <strong>{product?.name}</strong>
-                                            <small
-                                                className={
-                                                    invalid ? 'stock-availability is-danger' : 'stock-availability'
-                                                }
-                                            >
-                                                Available: {number(available)} {product?.unit}
+                                            <small className="stock-availability">
+                                                Paid: {number(paidAvailable)} · FOC: {number(focAvailable)} base
+                                                available
                                             </small>
                                             <small>{product?.sku}</small>
                                         </div>
-                                        <label className="ui-field">
-                                            <span>Quantity</span>
+                                        <label className="ui-field transfer-quantity-line__paid-unit">
+                                            <span>Return unit</span>
+                                            <select
+                                                aria-label="Return unit"
+                                                onChange={(event) =>
+                                                    setForm({
+                                                        ...form,
+                                                        items: form.items.map((line, lineIndex) =>
+                                                            lineIndex === index
+                                                                ? {
+                                                                      ...line,
+                                                                      product_unit_id: Number(event.target.value),
+                                                                  }
+                                                                : line,
+                                                        ),
+                                                    })
+                                                }
+                                                value={paidUnit?.id}
+                                            >
+                                                {product?.units?.map((unit) => (
+                                                    <option key={unit.id} value={unit.id}>
+                                                        {unit.name} ({unit.conversion_factor} base)
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </label>
+                                        <label className="ui-field transfer-quantity-line__paid-quantity">
+                                            <span>Paid quantity</span>
                                             <input
-                                                aria-invalid={invalid}
-                                                max={available}
-                                                min={1}
+                                                aria-label="Paid quantity"
+                                                aria-invalid={paidInvalid}
+                                                min={0}
                                                 onChange={(event) =>
                                                     setForm({
                                                         ...form,
@@ -341,7 +421,73 @@ function RepresentativeReturnWizard({
                                                 type="number"
                                                 value={item.quantity}
                                             />
+                                            {errors[`items.${index}.quantity`]?.[0] ? (
+                                                <small className="ui-field__error">
+                                                    {errors[`items.${index}.quantity`][0]}
+                                                </small>
+                                            ) : null}
                                         </label>
+                                        <label className="ui-field transfer-quantity-line__foc-unit">
+                                            <span>FOC unit</span>
+                                            <select
+                                                aria-label="FOC unit"
+                                                disabled={focAvailable < 1}
+                                                onChange={(event) =>
+                                                    setForm({
+                                                        ...form,
+                                                        items: form.items.map((line, lineIndex) =>
+                                                            lineIndex === index
+                                                                ? {
+                                                                      ...line,
+                                                                      foc_product_unit_id: Number(event.target.value),
+                                                                  }
+                                                                : line,
+                                                        ),
+                                                    })
+                                                }
+                                                value={focUnit?.id}
+                                            >
+                                                {product?.units?.map((unit) => (
+                                                    <option key={unit.id} value={unit.id}>
+                                                        {unit.name} ({unit.conversion_factor} base)
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </label>
+                                        <label className="ui-field transfer-quantity-line__foc-quantity">
+                                            <span>FOC quantity</span>
+                                            <input
+                                                aria-label="FOC quantity"
+                                                aria-invalid={focInvalid}
+                                                disabled={focAvailable < 1}
+                                                min={0}
+                                                onChange={(event) =>
+                                                    setForm({
+                                                        ...form,
+                                                        items: form.items.map((line, lineIndex) =>
+                                                            lineIndex === index
+                                                                ? {
+                                                                      ...line,
+                                                                      foc_product_unit_id:
+                                                                          line.foc_product_unit_id ?? focUnit?.id,
+                                                                      foc_quantity: editableNumber(event.target.value),
+                                                                  }
+                                                                : line,
+                                                        ),
+                                                    })
+                                                }
+                                                type="number"
+                                                value={item.foc_quantity ?? 0}
+                                            />
+                                            {errors[`items.${index}.foc_quantity`]?.[0] ? (
+                                                <small className="ui-field__error">
+                                                    {errors[`items.${index}.foc_quantity`][0]}
+                                                </small>
+                                            ) : null}
+                                        </label>
+                                        <strong className="transfer-base-total">
+                                            {number(paidBase)} paid / {number(focBase)} FOC base
+                                        </strong>
                                     </div>
                                 );
                             })}
@@ -365,20 +511,47 @@ function RepresentativeReturnWizard({
                             <strong>{form.items.length}</strong>
                         </section>
                         <section>
-                            <span>Total units</span>
-                            <strong>{form.items.reduce((sum, item) => sum + item.quantity, 0)}</strong>
+                            <span>Paid / FOC base</span>
+                            <strong>
+                                {form.items.reduce((sum, item) => {
+                                    const product = options.products.find((value) => value.id === item.product_id);
+                                    const unit =
+                                        product?.units?.find((value) => value.id === item.product_unit_id) ??
+                                        product?.units?.find((value) => value.is_default_selling) ??
+                                        product?.units?.[0];
+                                    return sum + item.quantity * (unit?.conversion_factor ?? 1);
+                                }, 0)}{' '}
+                                /{' '}
+                                {form.items.reduce((sum, item) => {
+                                    const product = options.products.find((value) => value.id === item.product_id);
+                                    const unit =
+                                        product?.units?.find((value) => value.id === item.foc_product_unit_id) ??
+                                        product?.units?.find((value) => value.id === item.product_unit_id) ??
+                                        product?.units?.find((value) => value.is_default_selling) ??
+                                        product?.units?.[0];
+                                    return sum + (item.foc_quantity ?? 0) * (unit?.conversion_factor ?? 1);
+                                }, 0)}
+                            </strong>
                         </section>
                         <div className="ui-table-wrap">
                             <table className="ui-table transfer-wizard-review__table">
                                 <thead>
                                     <tr>
                                         <th>Product</th>
-                                        <th className="is-numeric">Quantity</th>
+                                        <th className="is-numeric">Paid</th>
+                                        <th className="is-numeric">FOC</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {form.items.map((item) => {
                                         const product = options.products.find((value) => value.id === item.product_id);
+                                        const paidUnit =
+                                            product?.units?.find((unit) => unit.id === item.product_unit_id) ??
+                                            product?.units?.find((unit) => unit.is_default_selling) ??
+                                            product?.units?.[0];
+                                        const focUnit =
+                                            product?.units?.find((unit) => unit.id === item.foc_product_unit_id) ??
+                                            paidUnit;
                                         return (
                                             <tr key={item.product_id}>
                                                 <td>
@@ -389,6 +562,18 @@ function RepresentativeReturnWizard({
                                                 </td>
                                                 <td className="is-numeric">
                                                     <strong>{item.quantity}</strong>
+                                                    <small>
+                                                        {paidUnit?.name ?? product?.unit} ·{' '}
+                                                        {item.quantity * (paidUnit?.conversion_factor ?? 1)} base
+                                                    </small>
+                                                </td>
+                                                <td className="is-numeric">
+                                                    <strong>{item.foc_quantity ?? 0}</strong>
+                                                    <small>
+                                                        {focUnit?.name ?? product?.unit} ·{' '}
+                                                        {(item.foc_quantity ?? 0) * (focUnit?.conversion_factor ?? 1)}{' '}
+                                                        base
+                                                    </small>
                                                 </td>
                                             </tr>
                                         );

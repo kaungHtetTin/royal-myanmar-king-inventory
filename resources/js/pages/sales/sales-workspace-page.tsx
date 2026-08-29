@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useBranding } from '../../branding/branding-context';
 import type { PaginationMeta } from '../../services/administration';
-import { printInvoice } from '../../services/invoice-print';
 import {
     SaleApiError,
     saleApi,
@@ -13,6 +11,7 @@ import {
     type SalesCustomerInput,
 } from '../../services/sales';
 import { Icon } from '../../ui/icons';
+import { InvoicePrintButton } from '../../ui/invoice-print-dialog';
 import { editableNumber } from '../../ui/form-values';
 import { Button, Dialog, EmptyState, IconButton, Pagination, StatusBadge } from '../../ui/primitives';
 
@@ -43,6 +42,8 @@ const wizardSteps = [
     { label: 'Review & submit', number: 4 },
 ] as const;
 type SaleWizardStep = (typeof wizardSteps)[number]['number'];
+type CreationLocation = { accuracy: number; latitude: number; longitude: number };
+type LocationStatus = 'idle' | 'locating' | 'ready' | 'error';
 function money(value: number) {
     return `${new Intl.NumberFormat('en-US').format(value)} MMK`;
 }
@@ -79,7 +80,6 @@ function formFromSale(sale: Sale): SaleInput {
 type SalesWorkspaceView = 'entry' | 'history';
 
 function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: SalesWorkspaceView }) {
-    const { branding } = useBranding();
     const navigate = useNavigate();
     const [options, setOptions] = useState(emptyOptions);
     const [sales, setSales] = useState<Sale[]>([]);
@@ -97,7 +97,48 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
     const [customerQuery, setCustomerQuery] = useState('');
     const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
     const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
+    const [creationLocation, setCreationLocation] = useState<CreationLocation | null>(null);
+    const [locationStatus, setLocationStatus] = useState<LocationStatus>('idle');
+    const [locationMessage, setLocationMessage] = useState('');
+    const [locationRequest, setLocationRequest] = useState(0);
     const customerPickerRef = useRef<HTMLDivElement>(null);
+    const lastAutomaticLocationRequest = useRef(-1);
+    const captureLocation = useCallback((): Promise<CreationLocation | null> => {
+        if (!navigator.geolocation) {
+            setLocationStatus('error');
+            setLocationMessage('Location is not supported by this device or browser.');
+            return Promise.resolve(null);
+        }
+        setLocationStatus('locating');
+        setLocationMessage('Waiting for device location permission…');
+        return new Promise((resolve) =>
+            navigator.geolocation.getCurrentPosition(
+                ({ coords }) => {
+                    const nextLocation = {
+                        accuracy: coords.accuracy,
+                        latitude: coords.latitude,
+                        longitude: coords.longitude,
+                    };
+                    setCreationLocation(nextLocation);
+                    setLocationStatus('ready');
+                    setLocationMessage(`Location ready · accuracy about ${Math.round(coords.accuracy)} m`);
+                    setFields((current) => ({ ...current, creation_location: [] }));
+                    resolve(nextLocation);
+                },
+                (locationError) => {
+                    setCreationLocation(null);
+                    setLocationStatus('error');
+                    setLocationMessage(
+                        locationError.code === locationError.PERMISSION_DENIED
+                            ? 'Location permission is required to create a sale. Enable it in browser settings, then retry.'
+                            : 'Current location could not be determined. Check GPS or network access, then retry.',
+                    );
+                    resolve(null);
+                },
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 15_000 },
+            ),
+        );
+    }, []);
     const load = useCallback(async () => {
         try {
             const [nextOptions, history, editResponse] = await Promise.all([
@@ -134,6 +175,12 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
     useEffect(() => {
         void Promise.resolve().then(load);
     }, [load]);
+    useEffect(() => {
+        if (view === 'entry' && !editId && lastAutomaticLocationRequest.current !== locationRequest) {
+            lastAutomaticLocationRequest.current = locationRequest;
+            void captureLocation();
+        }
+    }, [captureLocation, editId, locationRequest, view]);
     useEffect(() => {
         const closeActionMenu = (event: KeyboardEvent | PointerEvent) => {
             if (event instanceof KeyboardEvent) {
@@ -193,6 +240,12 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
             lineUnit(line)?.prices?.find((price) => price.region_id === selectedRegionId)?.price ?? 0,
         [lineUnit, selectedRegionId],
     );
+    const lineFocUnit = useCallback(
+        (line: SaleInput['items'][number], product = options.products.find((item) => item.id === line.product_id)) =>
+            (product ? productUnits(product) : []).find((unit) => unit.id === line.foc_product_unit_id) ??
+            lineUnit(line, product),
+        [lineUnit, options.products, productUnits],
+    );
     const filteredCustomers = useMemo(() => {
         const query = customerQuery.trim().toLowerCase();
         if (!query) return options.customers;
@@ -222,6 +275,18 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
         () => form.items.reduce((total, line) => total + line.quantity * linePrice(line), 0),
         [form.items, linePrice],
     );
+    const paidBaseTotal = useMemo(
+        () => form.items.reduce((total, line) => total + line.quantity * (lineUnit(line)?.conversion_factor ?? 1), 0),
+        [form.items, lineUnit],
+    );
+    const focBaseTotal = useMemo(
+        () =>
+            form.items.reduce(
+                (total, line) => total + (line.foc_quantity ?? 0) * (lineFocUnit(line)?.conversion_factor ?? 1),
+                0,
+            ),
+        [form.items, lineFocUnit],
+    );
     const chooseCustomer = (customerId: number) => {
         const customer = options.customers.find((option) => option.id === customerId);
         if (!customer) return;
@@ -249,11 +314,17 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
         setCustomerQuery('');
         setCustomerPickerOpen(false);
         setWizardStep(1);
+        setCreationLocation(null);
+        setLocationStatus('idle');
+        setLocationMessage('');
+        setLocationRequest((value) => value + 1);
         navigate('/sales/new-sale', { replace: true });
     };
     const validate = (forPosting: boolean) => {
         const next: Record<string, string[]> = {};
         if (!form.customer_id) next.customer_id = ['Select a customer.'];
+        if (!editing && !creationLocation)
+            next.creation_location = ['Capture the device location before creating this sale.'];
         const seen = new Set<number>();
         form.items.forEach((line, index) => {
             const product = options.products.find((item) => item.id === line.product_id);
@@ -269,9 +340,10 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                 line.quantity * (lineUnit(line, product)?.conversion_factor ?? 1) > product.quantity
             )
                 next[`items.${index}.quantity`] = [`Only ${product.quantity} base units are currently available.`];
-            if (
-                (line.foc_quantity ?? 0) *
-                    (product?.units.find((unit) => unit.id === line.foc_product_unit_id)?.conversion_factor ?? 1) >
+            if (!Number.isInteger(line.foc_quantity ?? 0) || (line.foc_quantity ?? 0) < 0)
+                next[`items.${index}.foc_quantity`] = ['Enter a whole FOC quantity of 0 or more.'];
+            else if (
+                (line.foc_quantity ?? 0) * (lineFocUnit(line, product)?.conversion_factor ?? 1) >
                 (product?.foc_quantity ?? 0)
             )
                 next[`items.${index}.foc_quantity`] = [
@@ -305,6 +377,8 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
     const validateWizardStep = (step: SaleWizardStep) => {
         const next: Record<string, string[]> = {};
         if (step === 1 && !form.customer_id) next.customer_id = ['Select a customer.'];
+        if (step === 1 && !editing && !creationLocation)
+            next.creation_location = ['Capture the device location before continuing.'];
         if (step === 2) {
             if (form.items.length === 0) next.items = ['Select at least one product.'];
             const selected = new Set<number>();
@@ -329,6 +403,16 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                         `Only ${product.quantity} ${
                             (lineUnit(line, product)?.conversion_factor ?? 1) === 1 ? 'units' : 'base units'
                         } are currently available.`,
+                    ];
+                if (!Number.isInteger(line.foc_quantity ?? 0) || (line.foc_quantity ?? 0) < 0)
+                    next[`items.${index}.foc_quantity`] = ['Enter a whole FOC quantity of 0 or more.'];
+                else if (
+                    product &&
+                    (line.foc_quantity ?? 0) * (lineFocUnit(line, product)?.conversion_factor ?? 1) >
+                        (product.foc_quantity ?? 0)
+                )
+                    next[`items.${index}.foc_quantity`] = [
+                        `Only ${product.foc_quantity ?? 0} FOC base units are available.`,
                     ];
             });
         }
@@ -374,12 +458,24 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
         setSaving(true);
         setError('');
         try {
-            const response = editing ? await saleApi.update(editing.id, form) : await saleApi.create(form);
+            const latestLocation = editing ? null : await captureLocation();
+            if (!editing && !latestLocation) {
+                setError('Current device location is required before this sale can be created.');
+                return;
+            }
+            const response = editing
+                ? await saleApi.update(editing.id, form)
+                : await saleApi.create({
+                      ...form,
+                      creation_latitude: latestLocation!.latitude,
+                      creation_longitude: latestLocation!.longitude,
+                      location_accuracy_meters: latestLocation!.accuracy,
+                  });
             const sale = response.data;
             if (postAfter) {
                 if (
                     !window.confirm(
-                        `Post ${sale.reference} for ${money(sale.total_amount)}? Stock and ${sale.payment_type === 'cash' ? 'cash hold' : 'customer credit'} will update immediately.`,
+                        `Post ${sale.reference} for ${money(sale.total_amount)}? ${paidBaseTotal} paid and ${focBaseTotal} FOC base units will leave stock. ${sale.payment_type === 'cash' ? 'Cash hold' : 'Customer credit'} will update immediately.`,
                     )
                 ) {
                     await load();
@@ -775,6 +871,54 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                     value={form.notes}
                                                 />
                                             </label>
+                                            <section
+                                                aria-label="Sale creation location"
+                                                aria-live="polite"
+                                                className={`sale-location-status is-${editing ? 'stored' : locationStatus}`}
+                                            >
+                                                <span className="sale-location-status__icon">
+                                                    <Icon
+                                                        name={
+                                                            editing || locationStatus === 'ready'
+                                                                ? 'check'
+                                                                : locationStatus === 'error'
+                                                                  ? 'warning'
+                                                                  : 'location'
+                                                        }
+                                                        size={17}
+                                                    />
+                                                </span>
+                                                <span className="sale-location-status__copy">
+                                                    <strong>
+                                                        {editing
+                                                            ? 'Original sale location preserved'
+                                                            : locationStatus === 'ready'
+                                                              ? 'Device location captured'
+                                                              : locationStatus === 'locating'
+                                                                ? 'Getting current location'
+                                                                : 'Device location required'}
+                                                    </strong>
+                                                    <small>
+                                                        {editing
+                                                            ? 'Editing this draft will not replace where it was created.'
+                                                            : locationMessage ||
+                                                              'The office will receive this point with the sale record.'}
+                                                    </small>
+                                                </span>
+                                                {!editing && locationStatus !== 'ready' ? (
+                                                    <Button
+                                                        disabled={locationStatus === 'locating'}
+                                                        onClick={() => void captureLocation()}
+                                                    >
+                                                        {locationStatus === 'locating' ? 'Locating…' : 'Retry location'}
+                                                    </Button>
+                                                ) : null}
+                                                {fields.creation_location?.[0] ? (
+                                                    <small className="ui-field__error">
+                                                        {fields.creation_location[0]}
+                                                    </small>
+                                                ) : null}
+                                            </section>
                                         </div>
                                     ) : null}
                                     {wizardStep === 2 ? (
@@ -807,8 +951,14 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                             </small>
                                                         </span>
                                                         <span className="sale-product-option__stock">
-                                                            <strong>{product.quantity}</strong>
-                                                            <small>available</small>
+                                                            <span>
+                                                                <strong>{product.quantity}</strong>
+                                                                <small>paid</small>
+                                                            </span>
+                                                            <span>
+                                                                <strong>{product.foc_quantity ?? 0}</strong>
+                                                                <small>FOC</small>
+                                                            </span>
                                                         </span>
                                                         <span className="sale-product-option__price">
                                                             <strong>
@@ -848,7 +998,10 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                         </span>
                                                         <div className="sale-quantity-list__identity">
                                                             <strong>{product.name}</strong>
-                                                            <small>{product.quantity} available</small>
+                                                            <small>
+                                                                {product.quantity} paid · {product.foc_quantity ?? 0}{' '}
+                                                                FOC base available
+                                                            </small>
                                                         </div>
                                                         <div className="sale-quantity-list__controls sale-quantity-list__controls--paid">
                                                             <label className="ui-field">
@@ -1031,14 +1184,38 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                                 <strong>{product.name}</strong>
                                                                 <small>{product.sku}</small>
                                                             </div>
-                                                            <span>
-                                                                {line.quantity} {lineUnit(line, product)?.name} ×{' '}
-                                                                {money(linePrice(line))}
+                                                            <span className="sale-review__calculation">
+                                                                <span>
+                                                                    {line.quantity} {lineUnit(line, product)?.name} ×{' '}
+                                                                    {money(linePrice(line))}
+                                                                </span>
+                                                                <small>
+                                                                    FOC: {line.foc_quantity ?? 0}{' '}
+                                                                    {lineFocUnit(line, product)?.name} ·{' '}
+                                                                    {(line.foc_quantity ?? 0) *
+                                                                        (lineFocUnit(line, product)
+                                                                            ?.conversion_factor ?? 1)}{' '}
+                                                                    base
+                                                                </small>
                                                             </span>
                                                             <strong>{money(line.quantity * linePrice(line))}</strong>
                                                         </article>
                                                     );
                                                 })}
+                                                <div
+                                                    className="sale-review__stock-summary"
+                                                    aria-label="Stock movement summary"
+                                                    role="region"
+                                                >
+                                                    <span>
+                                                        <small>Paid base units</small>
+                                                        <strong>{paidBaseTotal}</strong>
+                                                    </span>
+                                                    <span>
+                                                        <small>FOC base units</small>
+                                                        <strong>{focBaseTotal}</strong>
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
                                     ) : null}
@@ -1124,14 +1301,12 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                         <StatusBadge tone={tone(sale.status)}>{sale.status}</StatusBadge>
                                         {sale.status !== 'draft' ? (
                                             <>
-                                                <IconButton
-                                                    icon="print"
-                                                    label={`Print invoice ${sale.reference}`}
-                                                    onClick={() => {
-                                                        if (!printInvoice(sale, branding)) {
-                                                            setError('Allow pop-ups to print the invoice.');
-                                                        }
-                                                    }}
+                                                <InvoicePrintButton
+                                                    iconOnly
+                                                    onBlocked={() =>
+                                                        setError('Allow pop-ups to print the invoice.')
+                                                    }
+                                                    sale={sale}
                                                 />
                                                 <Link
                                                     aria-label={`View ${sale.reference}`}

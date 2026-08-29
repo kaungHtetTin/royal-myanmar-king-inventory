@@ -25,10 +25,21 @@ class RepresentativeStockController extends Controller
     {
         $representative = $request->user()->salesRepresentative;
         abort_unless($representative?->is_active, 403);
-        $data = $request->validate(['per_page' => ['nullable', 'integer', 'min:10', 'max:100']]);
+        $data = $request->validate([
+            'per_page' => ['nullable', 'integer', 'min:10', 'max:100'],
+            'search' => ['nullable', 'string', 'max:100'],
+        ]);
         $query = RepresentativeInventoryController::withPending(RepresentativeInventory::query())
             ->with(['representative', 'product'])
             ->where('sales_representative_id', $representative->id)
+            ->when($data['search'] ?? null, function ($query, string $search): void {
+                $query->whereHas('product', function ($productQuery) use ($search): void {
+                    $productQuery->where(function ($match) use ($search): void {
+                        $match->where('name', 'like', "%{$search}%")
+                            ->orWhere('sku', 'like', "%{$search}%");
+                    });
+                });
+            })
             ->orderBy('product_id');
 
         $summary = [

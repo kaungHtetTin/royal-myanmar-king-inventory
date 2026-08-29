@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { invoiceDocument } from './invoice-print';
+import { invoiceDocument, invoicePaperSizes } from './invoice-print';
 import type { Sale } from './sales';
 
 const sale: Sale = {
@@ -12,6 +12,7 @@ const sale: Sale = {
     total_amount: 2500,
     status: 'posted',
     notes: '<script>alert("unsafe")</script>',
+    creation_location: null,
     items: [
         {
             id: 1,
@@ -29,6 +30,16 @@ const sale: Sale = {
 };
 
 describe('invoice printing', () => {
+    it('supports full-page and thermal paper sizes', () => {
+        expect(invoicePaperSizes.map((option) => option.value)).toEqual(['a4', 'a5', '80mm', '58mm', '50mm']);
+
+        expect(invoiceDocument(sale, undefined, 'a4')).toContain('@page{size:A4;margin:14mm}');
+        expect(invoiceDocument(sale, undefined, 'a5')).toContain('class="paper-a5 page-sheet"');
+        expect(invoiceDocument(sale, undefined, '80mm')).toContain('@page{size:80mm auto;margin:3mm}');
+        expect(invoiceDocument(sale, undefined, '58mm')).toContain('class="paper-58mm thermal"');
+        expect(invoiceDocument(sale, undefined, '50mm')).toContain('class="paper-50mm thermal"');
+    });
+
     it('renders invoice identity, contacts, lines, and totals safely', () => {
         const document = invoiceDocument(sale);
 

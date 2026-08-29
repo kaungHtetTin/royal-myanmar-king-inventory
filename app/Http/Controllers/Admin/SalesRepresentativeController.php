@@ -212,7 +212,7 @@ class SalesRepresentativeController extends Controller
                 $user->password = $data['password'];
             }
             $user->save();
-            $user->syncRoles([RoleName::SalesRepresentative->value]);
+            $user->assignRole(RoleName::SalesRepresentative->value);
             $user->warehouses()->syncWithPivotValues([$data['primary_warehouse_id']], ['assigned_by' => $request->user()->id]);
             $salesRepresentative->update($this->profileData($data, $user->id));
             $salesRepresentative->regions()->sync($data['region_ids']);

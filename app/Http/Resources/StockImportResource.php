@@ -19,9 +19,11 @@ class StockImportResource extends JsonResource
             'items' => $this->whenLoaded('items', fn () => $this->items->map(fn ($item) => [
                 'id' => $item->id,
                 'product' => ['id' => $item->product->id, 'sku' => $item->product->sku, 'name' => $item->product->name, 'unit' => $item->product->unit, 'selling_price' => $item->product->selling_price],
+                'product_unit' => $item->productUnit ? ['id' => $item->productUnit->id, 'name' => $item->productUnit->name, 'conversion_factor' => $item->productUnit->conversion_factor, 'is_base' => $item->productUnit->is_base, 'is_default_selling' => $item->productUnit->is_default_selling] : null,
                 'quantity' => $item->quantity,
+                'base_quantity' => $item->base_quantity,
             ])),
-            'total_quantity' => (int) ($this->total_quantity ?? $this->items->sum('quantity')),
+            'total_quantity' => (int) ($this->total_quantity ?? $this->items->sum('base_quantity')),
             'created_by' => ['id' => $this->creator->id, 'name' => $this->creator->name],
             'posted_by' => $this->poster ? ['id' => $this->poster->id, 'name' => $this->poster->name] : null,
             'posted_at' => $this->posted_at?->toISOString(),

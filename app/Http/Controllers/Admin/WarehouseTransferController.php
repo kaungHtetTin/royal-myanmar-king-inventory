@@ -7,6 +7,7 @@ use App\Exceptions\DomainConflictException;
 use App\Http\Controllers\Concerns\HandlesTransferCommands;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\WarehouseTransferResource;
+use App\Models\ProductUnit;
 use App\Models\Warehouse;
 use App\Models\WarehouseTransfer;
 use App\Services\AuditLogger;
@@ -18,6 +19,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class WarehouseTransferController extends Controller
 {
@@ -44,7 +46,7 @@ class WarehouseTransferController extends Controller
         if (isset($data['warehouse_id']) && ! $warehouseIds->contains((int) $data['warehouse_id'])) {
             abort(403);
         }
-        $query = WarehouseTransfer::query()->with($this->relations())->withSum('items as total_quantity', 'quantity')
+        $query = WarehouseTransfer::query()->with($this->relations())->withSum('items as total_quantity', 'base_quantity')
             ->where(fn ($scope) => $scope->whereIn('source_warehouse_id', $warehouseIds)->orWhereIn('destination_warehouse_id', $warehouseIds))
             ->when($data['warehouse_id'] ?? null, fn ($query, $id) => $query->where(fn ($scope) => $scope->where('source_warehouse_id', $id)->orWhere('destination_warehouse_id', $id)))
             ->when($data['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
@@ -64,6 +66,7 @@ class WarehouseTransferController extends Controller
         $data = $request->validate($this->rules());
         $this->assertWarehouse($request, (int) $data['source_warehouse_id']);
         $transfer = DB::transaction(function () use ($request, $data): WarehouseTransfer {
+            $items = $this->prepareItems($data['items']);
             $transfer = WarehouseTransfer::query()->create([
                 'reference' => $this->references->next('warehouse_transfer', 'WTR'),
                 'source_warehouse_id' => $data['source_warehouse_id'],
@@ -72,7 +75,7 @@ class WarehouseTransferController extends Controller
                 'notes' => $data['notes'] ?? null,
                 'created_by' => $request->user()->id,
             ]);
-            $transfer->items()->createMany($data['items']);
+            $transfer->items()->createMany($items);
             $this->auditLogger->record($request, 'warehouse_transfer.created', $request->user(), $transfer, ['new' => $data]);
 
             return $transfer;
@@ -94,12 +97,13 @@ class WarehouseTransferController extends Controller
         $data = $request->validate($this->rules());
         $this->assertWarehouse($request, (int) $data['source_warehouse_id']);
         DB::transaction(function () use ($request, $warehouseTransfer, $data): void {
+            $items = $this->prepareItems($data['items']);
             $warehouseTransfer = WarehouseTransfer::query()->lockForUpdate()->findOrFail($warehouseTransfer->id);
             $this->requireDraft($warehouseTransfer);
             $old = $warehouseTransfer->load('items')->toArray();
             $warehouseTransfer->update(['source_warehouse_id' => $data['source_warehouse_id'], 'destination_warehouse_id' => $data['destination_warehouse_id'], 'notes' => $data['notes'] ?? null]);
             $warehouseTransfer->items()->delete();
-            $warehouseTransfer->items()->createMany($data['items']);
+            $warehouseTransfer->items()->createMany($items);
             $this->auditLogger->record($request, 'warehouse_transfer.updated', $request->user(), $warehouseTransfer, ['old' => $old, 'new' => $data]);
         });
 
@@ -150,8 +154,49 @@ class WarehouseTransferController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
             'items' => ['required', 'array', 'min:1', 'max:100'],
             'items.*.product_id' => ['required', 'integer', 'distinct', Rule::exists('products', 'id')->where('is_active', true)],
+            'items.*.product_unit_id' => ['nullable', 'integer', 'exists:product_units,id'],
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:4294967295'],
         ];
+    }
+
+    /** @param array<int, array<string, mixed>> $items
+     * @return array<int, array<string, mixed>>
+     */
+    private function prepareItems(array $items): array
+    {
+        foreach ($items as $index => &$item) {
+            $unit = isset($item['product_unit_id'])
+                ? ProductUnit::query()
+                    ->where('product_id', $item['product_id'])
+                    ->where('is_active', true)
+                    ->lockForUpdate()
+                    ->find($item['product_unit_id'])
+                : ProductUnit::query()
+                    ->where('product_id', $item['product_id'])
+                    ->where('is_active', true)
+                    ->where('is_base', true)
+                    ->lockForUpdate()
+                    ->first();
+
+            if (! $unit) {
+                throw ValidationException::withMessages([
+                    "items.{$index}.product_unit_id" => ['Select an active unit that belongs to this product.'],
+                ]);
+            }
+
+            $quantity = (int) $item['quantity'];
+            if ($quantity > intdiv(PHP_INT_MAX, $unit->conversion_factor)) {
+                throw ValidationException::withMessages([
+                    "items.{$index}.quantity" => ['The converted base quantity is too large.'],
+                ]);
+            }
+
+            $item['product_unit_id'] = $unit->id;
+            $item['base_quantity'] = $quantity * $unit->conversion_factor;
+        }
+        unset($item);
+
+        return $items;
     }
 
     private function requireDraft(WarehouseTransfer $transfer): void
@@ -174,7 +219,7 @@ class WarehouseTransferController extends Controller
     /** @return list<string> */
     private function relations(): array
     {
-        return ['sourceWarehouse', 'destinationWarehouse', 'items.product', 'transit', 'creator', 'dispatcher', 'receiver', 'canceller', 'reverser'];
+        return ['sourceWarehouse', 'destinationWarehouse', 'items.product', 'items.productUnit', 'transit', 'creator', 'dispatcher', 'receiver', 'canceller', 'reverser'];
     }
 
     private function load(WarehouseTransfer $transfer): WarehouseTransfer

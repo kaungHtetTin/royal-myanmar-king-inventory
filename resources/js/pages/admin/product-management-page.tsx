@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useSession } from '../../auth/session-context';
 import type { PaginationMeta } from '../../services/administration';
@@ -40,6 +40,17 @@ function dateTime(value: string | null) {
 
 function money(value: number) {
     return `${new Intl.NumberFormat('en-US').format(value)} MMK`;
+}
+
+const priceFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+
+function priceInputValue(value: number) {
+    return priceFormatter.format(Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0);
+}
+
+function priceFromInput(value: string) {
+    const digits = value.replace(/\D/g, '').slice(0, 15);
+    return digits ? Number(digits) : 0;
 }
 
 export function ProductManagementPage() {
@@ -454,6 +465,31 @@ function ProductForm({
     });
     const [errors, setErrors] = useState<Record<string, string[]>>({});
     const [saving, setSaving] = useState(false);
+    const sortedRegions = useMemo(
+        () =>
+            [...(options.regions ?? [])].sort(
+                (left, right) =>
+                    left.warehouse.name.localeCompare(right.warehouse.name) ||
+                    left.warehouse.code.localeCompare(right.warehouse.code) ||
+                    left.name.localeCompare(right.name) ||
+                    left.id - right.id,
+            ),
+        [options.regions],
+    );
+    const warehouseRegionGroups = useMemo(() => {
+        const groups = new Map<number, { code: string; name: string; regions: typeof sortedRegions }>();
+        sortedRegions.forEach((region) => {
+            const group = groups.get(region.warehouse.id);
+            if (group) group.regions.push(region);
+            else
+                groups.set(region.warehouse.id, {
+                    code: region.warehouse.code,
+                    name: region.warehouse.name,
+                    regions: [region],
+                });
+        });
+        return Array.from(groups.values());
+    }, [sortedRegions]);
 
     useEffect(() => {
         setErrors({});
@@ -461,7 +497,7 @@ function ProductForm({
             ? product.units.map((unit) => ({
                   ...unit,
                   barcode: unit.barcode ?? '',
-                  prices: (options.regions ?? []).map(
+                  prices: sortedRegions.map(
                       (region) =>
                           unit.prices.find((price) => price.region_id === region.id) ?? {
                               region_id: region.id,
@@ -477,7 +513,7 @@ function ProductForm({
                       is_base: true,
                       is_default_selling: true,
                       is_active: true,
-                      prices: (options.regions ?? []).map((region) => ({ region_id: region.id, price: 0 })),
+                      prices: sortedRegions.map((region) => ({ region_id: region.id, price: 0 })),
                   },
               ];
         setForm({
@@ -491,10 +527,29 @@ function ProductForm({
             unit: product?.unit ?? 'piece',
             units,
         });
-    }, [product, options.regions]);
+    }, [product, sortedRegions]);
 
     const change = (field: keyof ProductInput, value: boolean | number | string) =>
         setForm((current) => ({ ...current, [field]: value }));
+    const updateUnit = (unitIndex: number, patch: Partial<ProductInput['units'][number]>) =>
+        setForm((current) => ({
+            ...current,
+            units: current.units.map((unit, index) => (index === unitIndex ? { ...unit, ...patch } : unit)),
+        }));
+    const updateUnitPrice = (unitIndex: number, regionId: number, price: number) =>
+        setForm((current) => ({
+            ...current,
+            units: current.units.map((unit, index) => {
+                if (index !== unitIndex) return unit;
+                const hasRegion = unit.prices.some((entry) => entry.region_id === regionId);
+                return {
+                    ...unit,
+                    prices: hasRegion
+                        ? unit.prices.map((entry) => (entry.region_id === regionId ? { ...entry, price } : entry))
+                        : [...unit.prices, { region_id: regionId, price }],
+                };
+            }),
+        }));
     const submit = async (event: FormEvent) => {
         event.preventDefault();
         if (
@@ -593,7 +648,7 @@ function ProductForm({
                                 <strong>Units and regional prices</strong>
                                 <small>
                                     Stock is stored in the base unit. Conversion factors express how many base units are
-                                    in one selected unit.
+                                    in one selected unit. Regional prices are entered in MMK.
                                 </small>
                             </div>
                             <Button
@@ -610,7 +665,7 @@ function ProductForm({
                                                 is_base: false,
                                                 is_default_selling: false,
                                                 is_active: true,
-                                                prices: (options.regions ?? []).map((region) => ({
+                                                prices: sortedRegions.map((region) => ({
                                                     region_id: region.id,
                                                     price: 0,
                                                 })),
@@ -624,164 +679,199 @@ function ProductForm({
                                 Add unit
                             </Button>
                         </header>
-                        {form.units.map((unit, unitIndex) => (
-                            <div className="product-unit-row" key={unit.id ?? `new-${unitIndex}`}>
-                                <div className="product-unit-row__fields">
-                                    <label className="ui-field">
-                                        <span>Unit name</span>
-                                        <input
-                                            onChange={(event) =>
-                                                setForm((value) => ({
-                                                    ...value,
-                                                    units: value.units.map((item, index) =>
-                                                        index === unitIndex
-                                                            ? { ...item, name: event.target.value }
-                                                            : item,
-                                                    ),
-                                                }))
-                                            }
-                                            placeholder="bottle / box"
-                                            required
-                                            value={unit.name}
-                                        />
-                                    </label>
-                                    <label className="ui-field">
-                                        <span>Base units per unit</span>
-                                        <input
-                                            disabled={unit.is_base}
-                                            min={1}
-                                            onChange={(event) =>
-                                                setForm((value) => ({
-                                                    ...value,
-                                                    units: value.units.map((item, index) =>
-                                                        index === unitIndex
-                                                            ? {
-                                                                  ...item,
-                                                                  conversion_factor: editableNumber(event.target.value),
-                                                              }
-                                                            : item,
-                                                    ),
-                                                }))
-                                            }
-                                            required
-                                            type="number"
-                                            value={unit.conversion_factor}
-                                        />
-                                    </label>
-                                    <label className="ui-field">
-                                        <span>Unit barcode</span>
-                                        <input
-                                            onChange={(event) =>
-                                                setForm((value) => ({
-                                                    ...value,
-                                                    units: value.units.map((item, index) =>
-                                                        index === unitIndex
-                                                            ? { ...item, barcode: event.target.value }
-                                                            : item,
-                                                    ),
-                                                }))
-                                            }
-                                            value={unit.barcode ?? ''}
-                                        />
-                                    </label>
-                                    <label className="ui-check">
-                                        <input
-                                            checked={unit.is_base}
-                                            onChange={() =>
-                                                setForm((value) => ({
-                                                    ...value,
-                                                    units: value.units.map((item, index) => ({
-                                                        ...item,
-                                                        is_base: index === unitIndex,
-                                                        conversion_factor:
-                                                            index === unitIndex ? 1 : item.conversion_factor,
-                                                    })),
-                                                }))
-                                            }
-                                            type="radio"
-                                        />
-                                        <span>
-                                            <strong>Base unit</strong>
-                                            <small>Smallest physical unit</small>
-                                        </span>
-                                    </label>
-                                    <label className="ui-check">
-                                        <input
-                                            checked={unit.is_default_selling}
-                                            onChange={() =>
-                                                setForm((value) => ({
-                                                    ...value,
-                                                    units: value.units.map((item, index) => ({
-                                                        ...item,
-                                                        is_default_selling: index === unitIndex,
-                                                    })),
-                                                }))
-                                            }
-                                            type="radio"
-                                        />
-                                        <span>
-                                            <strong>Default selling</strong>
-                                            <small>Preselected in sales</small>
-                                        </span>
-                                    </label>
-                                </div>
-                                <div className="regional-price-grid">
-                                    {(options.regions ?? []).map((region) => {
-                                        const price =
-                                            unit.prices.find((item) => item.region_id === region.id)?.price ?? 0;
+                        <div className="ui-table-wrap product-unit-table-wrap">
+                            <table
+                                className="ui-table product-unit-table"
+                                style={{ minWidth: `${760 + sortedRegions.length * 150}px` }}
+                            >
+                                <caption className="sr-only">Product units and prices by warehouse Region</caption>
+                                <thead>
+                                    <tr>
+                                        <th rowSpan={sortedRegions.length ? 2 : 1} scope="col">
+                                            Unit name
+                                        </th>
+                                        <th rowSpan={sortedRegions.length ? 2 : 1} scope="col">
+                                            Base units
+                                        </th>
+                                        <th rowSpan={sortedRegions.length ? 2 : 1} scope="col">
+                                            Barcode
+                                        </th>
+                                        <th rowSpan={sortedRegions.length ? 2 : 1} scope="col">
+                                            Base unit
+                                        </th>
+                                        <th rowSpan={sortedRegions.length ? 2 : 1} scope="col">
+                                            Default selling
+                                        </th>
+                                        {warehouseRegionGroups.map((group) => (
+                                            <th colSpan={group.regions.length} key={group.code} scope="colgroup">
+                                                <strong>{group.name}</strong>
+                                                <small>{group.code}</small>
+                                            </th>
+                                        ))}
+                                        <th rowSpan={sortedRegions.length ? 2 : 1} scope="col">
+                                            Actions
+                                        </th>
+                                    </tr>
+                                    {sortedRegions.length ? (
+                                        <tr>
+                                            {sortedRegions.map((region) => (
+                                                <th data-region-id={region.id} key={region.id} scope="col">
+                                                    {region.name}
+                                                    <small>MMK</small>
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    ) : null}
+                                </thead>
+                                <tbody>
+                                    {form.units.map((unit, unitIndex) => {
+                                        const unitLabel = unit.name || `Unit ${unitIndex + 1}`;
                                         return (
-                                            <label className="ui-field" key={region.id}>
-                                                <span>
-                                                    {region.warehouse.code} · {region.name}
-                                                </span>
-                                                <input
-                                                    min={0}
-                                                    onChange={(event) =>
-                                                        setForm((value) => ({
-                                                            ...value,
-                                                            units: value.units.map((item, index) =>
-                                                                index === unitIndex
-                                                                    ? {
-                                                                          ...item,
-                                                                          prices: item.prices.map((entry) =>
-                                                                              entry.region_id === region.id
-                                                                                  ? {
-                                                                                        ...entry,
-                                                                                        price: editableNumber(
-                                                                                            event.target.value,
-                                                                                        ),
-                                                                                    }
-                                                                                  : entry,
-                                                                          ),
-                                                                      }
-                                                                    : item,
-                                                            ),
-                                                        }))
-                                                    }
-                                                    required
-                                                    type="number"
-                                                    value={price}
-                                                />
-                                            </label>
+                                            <tr key={unit.id ?? `new-${unitIndex}`}>
+                                                <td>
+                                                    <label>
+                                                        <span className="sr-only">
+                                                            Unit name for row {unitIndex + 1}
+                                                        </span>
+                                                        <input
+                                                            onChange={(event) =>
+                                                                updateUnit(unitIndex, { name: event.target.value })
+                                                            }
+                                                            placeholder="bottle / box"
+                                                            required
+                                                            value={unit.name}
+                                                        />
+                                                    </label>
+                                                </td>
+                                                <td>
+                                                    <label>
+                                                        <span className="sr-only">Base units in {unitLabel}</span>
+                                                        <input
+                                                            disabled={unit.is_base}
+                                                            min={1}
+                                                            onChange={(event) =>
+                                                                updateUnit(unitIndex, {
+                                                                    conversion_factor: editableNumber(
+                                                                        event.target.value,
+                                                                    ),
+                                                                })
+                                                            }
+                                                            required
+                                                            type="number"
+                                                            value={unit.conversion_factor}
+                                                        />
+                                                    </label>
+                                                </td>
+                                                <td>
+                                                    <label>
+                                                        <span className="sr-only">Barcode for {unitLabel}</span>
+                                                        <input
+                                                            onChange={(event) =>
+                                                                updateUnit(unitIndex, { barcode: event.target.value })
+                                                            }
+                                                            value={unit.barcode ?? ''}
+                                                        />
+                                                    </label>
+                                                </td>
+                                                <td className="product-unit-table__choice">
+                                                    <label>
+                                                        <input
+                                                            aria-label={`Use ${unitLabel} as base unit`}
+                                                            checked={unit.is_base}
+                                                            name="base-unit"
+                                                            onChange={() =>
+                                                                setForm((value) => ({
+                                                                    ...value,
+                                                                    units: value.units.map((item, index) => ({
+                                                                        ...item,
+                                                                        is_base: index === unitIndex,
+                                                                        conversion_factor:
+                                                                            index === unitIndex
+                                                                                ? 1
+                                                                                : item.conversion_factor,
+                                                                    })),
+                                                                }))
+                                                            }
+                                                            type="radio"
+                                                        />
+                                                    </label>
+                                                </td>
+                                                <td className="product-unit-table__choice">
+                                                    <label>
+                                                        <input
+                                                            aria-label={`Use ${unitLabel} as default selling unit`}
+                                                            checked={unit.is_default_selling}
+                                                            name="default-selling-unit"
+                                                            onChange={() =>
+                                                                setForm((value) => ({
+                                                                    ...value,
+                                                                    units: value.units.map((item, index) => ({
+                                                                        ...item,
+                                                                        is_default_selling: index === unitIndex,
+                                                                    })),
+                                                                }))
+                                                            }
+                                                            type="radio"
+                                                        />
+                                                    </label>
+                                                </td>
+                                                {sortedRegions.map((region) => (
+                                                    <td className="is-numeric" key={region.id}>
+                                                        <label className="product-price-input">
+                                                            <span className="sr-only">
+                                                                {region.name} price for {unitLabel} in MMK
+                                                            </span>
+                                                            <input
+                                                                autoComplete="off"
+                                                                inputMode="numeric"
+                                                                onChange={(event) =>
+                                                                    updateUnitPrice(
+                                                                        unitIndex,
+                                                                        region.id,
+                                                                        priceFromInput(event.target.value),
+                                                                    )
+                                                                }
+                                                                onFocus={(event) => event.currentTarget.select()}
+                                                                pattern="[0-9,]*"
+                                                                required
+                                                                type="text"
+                                                                value={priceInputValue(
+                                                                    unit.prices.find(
+                                                                        (price) => price.region_id === region.id,
+                                                                    )?.price ?? 0,
+                                                                )}
+                                                            />
+                                                        </label>
+                                                    </td>
+                                                ))}
+                                                <td className="product-unit-table__actions">
+                                                    {form.units.length > 1 &&
+                                                    !unit.is_base &&
+                                                    !unit.is_default_selling ? (
+                                                        <Button
+                                                            onClick={() =>
+                                                                setForm((value) => ({
+                                                                    ...value,
+                                                                    units: value.units.filter(
+                                                                        (_, index) => index !== unitIndex,
+                                                                    ),
+                                                                }))
+                                                            }
+                                                            tone="secondary"
+                                                            type="button"
+                                                        >
+                                                            Remove
+                                                        </Button>
+                                                    ) : (
+                                                        <span aria-hidden="true">—</span>
+                                                    )}
+                                                </td>
+                                            </tr>
                                         );
                                     })}
-                                </div>
-                                {form.units.length > 1 && !unit.is_base && !unit.is_default_selling ? (
-                                    <Button
-                                        onClick={() =>
-                                            setForm((value) => ({
-                                                ...value,
-                                                units: value.units.filter((_, index) => index !== unitIndex),
-                                            }))
-                                        }
-                                        tone="secondary"
-                                        type="button"
-                                    >
-                                        Remove unit
-                                    </Button>
-                                ) : null}
-                            </div>
-                        ))}
+                                </tbody>
+                            </table>
+                        </div>
                         <FieldError errors={errors} name="units" />
                     </section>
                     <label className="ui-field form-grid__wide">

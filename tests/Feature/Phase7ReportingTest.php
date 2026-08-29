@@ -179,6 +179,7 @@ class Phase7ReportingTest extends TestCase
     private function office(Warehouse $warehouse, PermissionName ...$permissions): User
     {
         $user = User::factory()->create();
+        $user->assignRole(RoleName::OfficeAdmin->value);
         $user->givePermissionTo(collect($permissions)->map->value->all());
         $user->warehouses()->attach($warehouse, ['assigned_by' => $user->id]);
 

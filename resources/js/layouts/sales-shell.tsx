@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useSession } from '../auth/session-context';
 import { useBranding } from '../branding/branding-context';
 import { Icon, type IconName } from '../ui/icons';
+import { PrintSettingsDialog } from '../ui/invoice-print-dialog';
 import { OfflineBanner } from '../ui/offline-banner';
 import { useOnlineStatus, useUiPreferences } from '../ui/preferences';
 
@@ -24,6 +25,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
     const location = useLocation();
     const profileMenuRef = useRef<HTMLDivElement>(null);
     const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+    const [printSettingsOpen, setPrintSettingsOpen] = useState(false);
     const online = useOnlineStatus();
     const { density, theme, toggleDensity, toggleTheme } = useUiPreferences();
     const { logout, user } = useSession();
@@ -164,6 +166,17 @@ export function SalesShell({ children }: { children: ReactNode }) {
                                             <Icon name="density" size={16} />
                                             <span>Use {density === 'compact' ? 'comfortable' : 'compact'} density</span>
                                         </button>
+                                        <button
+                                            onClick={() => {
+                                                setProfileMenuOpen(false);
+                                                setPrintSettingsOpen(true);
+                                            }}
+                                            role="menuitem"
+                                            type="button"
+                                        >
+                                            <Icon name="print" size={16} />
+                                            <span>Print settings</span>
+                                        </button>
                                     </div>
                                     <div className="admin-profile-dropdown__section admin-profile-dropdown__section--signout">
                                         <button
@@ -226,6 +239,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
                     })}
                 </nav>
             </div>
+            <PrintSettingsDialog onClose={() => setPrintSettingsOpen(false)} open={printSettingsOpen} />
         </div>
     );
 }

@@ -7,6 +7,7 @@ use App\Exceptions\DomainConflictException;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\StockImportResource;
 use App\Models\Product;
+use App\Models\ProductUnit;
 use App\Models\StockImport;
 use App\Models\Warehouse;
 use App\Services\AuditLogger;
@@ -19,6 +20,7 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class StockImportController extends Controller
 {
@@ -41,8 +43,8 @@ class StockImportController extends Controller
         ]);
         $warehouseIds = $this->warehouseIds($request);
         $this->assertWarehouseFilter($data['warehouse_id'] ?? null, $warehouseIds);
-        $query = StockImport::query()->with(['warehouse', 'items.product', 'creator', 'poster', 'voider'])
-            ->withSum('items as total_quantity', 'quantity')
+        $query = StockImport::query()->with(['warehouse', 'items.product', 'items.productUnit', 'creator', 'poster', 'voider'])
+            ->withSum('items as total_quantity', 'base_quantity')
             ->whereIn('warehouse_id', $warehouseIds)
             ->when($data['warehouse_id'] ?? null, fn ($query, $id) => $query->where('warehouse_id', $id))
             ->when($data['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
@@ -62,7 +64,7 @@ class StockImportController extends Controller
         $data = $request->validate($this->rules());
         $this->assertWarehouseAccess($request, (int) $data['warehouse_id']);
         $import = DB::transaction(function () use ($request, $data): StockImport {
-            $items = $this->applyPriceUpdates($request, $data['items']);
+            $items = $this->prepareItems($request, $data['items']);
             $import = StockImport::query()->create([
                 'reference' => $this->references->next('stock_import', 'IMP'),
                 'warehouse_id' => $data['warehouse_id'],
@@ -92,7 +94,7 @@ class StockImportController extends Controller
         $data = $request->validate($this->rules());
         $this->assertWarehouseAccess($request, (int) $data['warehouse_id']);
         DB::transaction(function () use ($request, $stockImport, $data): void {
-            $items = $this->applyPriceUpdates($request, $data['items']);
+            $items = $this->prepareItems($request, $data['items']);
             $stockImport = StockImport::query()->lockForUpdate()->findOrFail($stockImport->id);
             $this->requireDraft($stockImport);
             $old = $stockImport->load('items')->toArray();
@@ -131,6 +133,7 @@ class StockImportController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
             'items' => ['required', 'array', 'min:1', 'max:100'],
             'items.*.product_id' => ['required', 'integer', 'distinct', Rule::exists('products', 'id')->where('is_active', true)],
+            'items.*.product_unit_id' => ['nullable', 'integer', 'exists:product_units,id'],
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:4294967295'],
             'items.*.selling_price' => ['nullable', 'integer', 'min:0', 'max:999999999999999'],
         ];
@@ -139,9 +142,9 @@ class StockImportController extends Controller
     /** @param array<int, array<string, mixed>> $items
      * @return array<int, array<string, mixed>>
      */
-    private function applyPriceUpdates(Request $request, array $items): array
+    private function prepareItems(Request $request, array $items): array
     {
-        foreach ($items as &$item) {
+        foreach ($items as $index => &$item) {
             if (array_key_exists('selling_price', $item) && $item['selling_price'] !== null) {
                 $product = Product::query()->lockForUpdate()->findOrFail($item['product_id']);
                 $newPrice = (int) $item['selling_price'];
@@ -155,6 +158,33 @@ class StockImportController extends Controller
                     ]);
                 }
             }
+
+            $unit = isset($item['product_unit_id'])
+                ? ProductUnit::query()
+                    ->where('product_id', $item['product_id'])
+                    ->where('is_active', true)
+                    ->find($item['product_unit_id'])
+                : ProductUnit::query()
+                    ->where('product_id', $item['product_id'])
+                    ->where('is_active', true)
+                    ->where('is_base', true)
+                    ->first();
+
+            if (! $unit) {
+                throw ValidationException::withMessages([
+                    "items.{$index}.product_unit_id" => ['Select an active unit that belongs to this product.'],
+                ]);
+            }
+
+            $quantity = (int) $item['quantity'];
+            if ($quantity > intdiv(PHP_INT_MAX, $unit->conversion_factor)) {
+                throw ValidationException::withMessages([
+                    "items.{$index}.quantity" => ['The converted base quantity is too large.'],
+                ]);
+            }
+
+            $item['product_unit_id'] = $unit->id;
+            $item['base_quantity'] = $quantity * $unit->conversion_factor;
             unset($item['selling_price']);
         }
         unset($item);
@@ -195,6 +225,6 @@ class StockImportController extends Controller
 
     private function load(StockImport $import): StockImport
     {
-        return $import->fresh(['warehouse', 'items.product', 'creator', 'poster', 'voider']);
+        return $import->fresh(['warehouse', 'items.product', 'items.productUnit', 'creator', 'poster', 'voider']);
     }
 }

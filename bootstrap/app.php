@@ -1,6 +1,7 @@
 <?php
 
 use App\Exceptions\DomainConflictException;
+use App\Http\Middleware\EnsureActiveSalesRepresentative;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\RequestContext;
 use App\Http\Middleware\SecurityHeaders;
@@ -24,6 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->statefulApi();
         $middleware->alias([
             'active' => EnsureUserIsActive::class,
+            'active_representative' => EnsureActiveSalesRepresentative::class,
             'permission' => PermissionMiddleware::class,
             'role' => RoleMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,

@@ -22,10 +22,12 @@ class WarehouseTransferResource extends JsonResource
             'items' => $this->items->map(fn ($item) => [
                 'id' => $item->id,
                 'product' => ['id' => $item->product->id, 'sku' => $item->product->sku, 'name' => $item->product->name, 'unit' => $item->product->unit],
+                'unit' => $item->productUnit ? ['id' => $item->productUnit->id, 'name' => $item->productUnit->name, 'conversion_factor' => $item->productUnit->conversion_factor] : null,
                 'quantity' => $item->quantity,
+                'base_quantity' => $item->base_quantity,
                 'in_transit_quantity' => (int) ($transit->get($item->product_id)?->quantity ?? 0),
             ]),
-            'total_quantity' => (int) ($this->total_quantity ?? $this->items->sum('quantity')),
+            'total_quantity' => (int) ($this->total_quantity ?? $this->items->sum('base_quantity')),
             'created_by' => $this->actor($this->creator),
             'dispatched_by' => $this->actor($this->dispatcher),
             'dispatched_at' => $this->dispatched_at?->toISOString(),

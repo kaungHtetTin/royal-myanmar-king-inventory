@@ -95,6 +95,14 @@ export function TransferDetailPage() {
         () => record?.items.reduce((sum, item) => sum + item.in_transit_quantity, 0) ?? 0,
         [record],
     );
+    const paidBaseTotal = useMemo(
+        () => record?.items.reduce((sum, item) => sum + (item.base_quantity ?? item.quantity), 0) ?? 0,
+        [record],
+    );
+    const focBaseTotal = useMemo(
+        () => record?.items.reduce((sum, item) => sum + (item.foc_base_quantity ?? 0), 0) ?? 0,
+        [record],
+    );
     const destination =
         record && 'destination_warehouse' in record
             ? record.destination_warehouse
@@ -197,6 +205,7 @@ export function TransferDetailPage() {
     const canReverse =
         ['dispatched', 'received'].includes(record.status) &&
         (kind === 'warehouse' ? allowed('warehouse_transfer.reverse') : allowed('representative_stock.issue'));
+    const showFoc = kind !== 'warehouse';
 
     return (
         <div className="admin-page transfer-detail-page">
@@ -279,10 +288,10 @@ export function TransferDetailPage() {
                     value={formatNumber(record.items.length)}
                 />
                 <MetricCard
-                    hint="Total units on document"
+                    hint="Total base stock on document"
                     icon="warehouse"
-                    label="Quantity"
-                    value={formatNumber(record.total_quantity)}
+                    label="Base quantity"
+                    value={formatNumber(paidBaseTotal + focBaseTotal)}
                 />
                 <MetricCard
                     hint={record.status === 'dispatched' ? 'Currently moving' : 'No units currently moving'}
@@ -294,12 +303,14 @@ export function TransferDetailPage() {
             <div className="transfer-detail-grid">
                 <Panel className="transfer-detail-items" eyebrow="Transfer contents" title="Product lines">
                     <div className="ui-table-wrap">
-                        <table className="ui-table">
+                        <table aria-label="Transfer product lines" className={`ui-table${showFoc ? ' has-foc' : ''}`}>
                             <thead>
                                 <tr>
                                     <th>Product</th>
                                     <th>Unit</th>
-                                    <th className="is-numeric">Document quantity</th>
+                                    <th className="is-numeric">Transfer quantity</th>
+                                    {showFoc ? <th className="is-numeric">FOC</th> : null}
+                                    <th className="is-numeric">{showFoc ? 'Paid base' : 'Base stock'}</th>
                                     <th className="is-numeric">In transit</th>
                                 </tr>
                             </thead>
@@ -310,9 +321,29 @@ export function TransferDetailPage() {
                                             <strong>{item.product.name}</strong>
                                             <small>{item.product.sku}</small>
                                         </td>
-                                        <td>{item.product.unit}</td>
+                                        <td>
+                                            <strong>{item.unit?.name ?? item.product.unit}</strong>
+                                            <small>
+                                                {formatNumber(item.unit?.conversion_factor ?? 1)} base units each
+                                            </small>
+                                        </td>
                                         <td className="is-numeric">
                                             <strong>{formatNumber(item.quantity)}</strong>
+                                        </td>
+                                        {showFoc ? (
+                                            <td className="is-numeric">
+                                                <strong>{formatNumber(item.foc_quantity ?? 0)}</strong>
+                                                {(item.foc_quantity ?? 0) > 0 ? (
+                                                    <small>
+                                                        {item.foc_unit?.name ?? item.product.unit},{' '}
+                                                        {formatNumber(item.foc_base_quantity ?? item.foc_quantity ?? 0)}{' '}
+                                                        base
+                                                    </small>
+                                                ) : null}
+                                            </td>
+                                        ) : null}
+                                        <td className="is-numeric">
+                                            <strong>{formatNumber(item.base_quantity ?? item.quantity)}</strong>
                                         </td>
                                         <td className="is-numeric">{formatNumber(item.in_transit_quantity)}</td>
                                     </tr>
@@ -320,9 +351,16 @@ export function TransferDetailPage() {
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <td colSpan={2}>Total</td>
+                                    <td colSpan={3}>{showFoc ? 'Base totals' : 'Total base stock'}</td>
+                                    {showFoc ? (
+                                        <td className="is-numeric">
+                                            <strong>{formatNumber(focBaseTotal)}</strong>
+                                            <small>FOC base</small>
+                                        </td>
+                                    ) : null}
                                     <td className="is-numeric">
-                                        <strong>{formatNumber(record.total_quantity)}</strong>
+                                        <strong>{formatNumber(paidBaseTotal)}</strong>
+                                        {showFoc ? <small>Paid base</small> : null}
                                     </td>
                                     <td className="is-numeric">
                                         <strong>{formatNumber(inTransit)}</strong>
@@ -468,7 +506,7 @@ export function TransferDetailPage() {
                     </label>
                 ) : (
                     <p className="transfer-confirm-summary">
-                        <strong>{formatNumber(record.total_quantity)} units</strong> across {record.items.length}{' '}
+                        <strong>{formatNumber(record.total_quantity)} base units</strong> across {record.items.length}{' '}
                         product lines.
                     </p>
                 )}

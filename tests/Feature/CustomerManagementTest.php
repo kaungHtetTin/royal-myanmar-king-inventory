@@ -63,8 +63,8 @@ class CustomerManagementTest extends TestCase
         $assigned = Warehouse::factory()->create(['code' => 'YGN']);
         $foreign = Warehouse::factory()->create(['code' => 'MDY']);
         $viewer->warehouses()->attach($assigned, ['assigned_by' => $viewer->id]);
-        $matching = Customer::factory()->withCredit()->create(['warehouse_id' => $assigned->id, 'code' => 'CUS-YGN', 'name' => 'Yangon Shop', 'customer_type' => 'Shop']);
-        Customer::factory()->create(['warehouse_id' => $foreign->id, 'code' => 'CUS-MDY', 'name' => 'Mandalay Shop']);
+        $matching = Customer::factory()->withCredit()->create(['warehouse_id' => $assigned->id, 'way_id' => $this->way($assigned)->id, 'code' => 'CUS-YGN', 'name' => 'Yangon Shop', 'customer_type' => 'Shop']);
+        Customer::factory()->create(['warehouse_id' => $foreign->id, 'way_id' => $this->way($foreign)->id, 'code' => 'CUS-MDY', 'name' => 'Mandalay Shop']);
 
         $matching->refresh();
         $this->actingAs($viewer)->getJson('/api/admin/customers?warehouse_id='.$assigned->id.'&region_id='.$matching->way->region_id.'&way_id='.$matching->way_id)
@@ -168,18 +168,27 @@ class CustomerManagementTest extends TestCase
     {
         return array_merge([
             'warehouse_id' => $warehouse->id,
+            'way_id' => $this->way($warehouse)->id,
             'code' => 'CUS-001',
             'name' => 'Corner Shop',
             'customer_type' => 'Shop',
             'phone' => '09-123456789',
-            'region' => 'Yangon',
-            'township' => 'Hlaing',
             'address' => 'No. 12, Main Road',
             'credit_allowed' => false,
             'credit_limit' => 0,
             'notes' => 'Retail customer.',
             'is_active' => true,
         ], $overrides);
+    }
+
+    private function way(Warehouse $warehouse)
+    {
+        $region = $warehouse->regions()->firstOrCreate(['name' => 'Test Region'], ['is_active' => true]);
+
+        return $region->ways()->firstOrCreate(
+            ['name' => 'Test Way'],
+            ['code' => 'WAY-'.$warehouse->id, 'is_active' => true],
+        );
     }
 
     private function superAdmin(): User
@@ -193,6 +202,7 @@ class CustomerManagementTest extends TestCase
     private function officeUser(PermissionName ...$permissions): User
     {
         $user = User::factory()->create();
+        $user->assignRole(RoleName::OfficeAdmin->value);
         $user->givePermissionTo(collect($permissions)->map->value->all());
 
         return $user;

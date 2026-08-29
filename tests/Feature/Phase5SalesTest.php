@@ -35,19 +35,46 @@ class Phase5SalesTest extends TestCase
         [$representative, $user, $customer, $product] = $this->fixture(20, 1250);
         $created = $this->actingAs($user)->withHeader('Idempotency-Key', 'draft-one')->postJson('/api/sales/sales', $this->payload($customer, $product, 3, 'cash'))
             ->assertCreated()->assertJsonPath('data.reference', 'SAL-000001')->assertJsonPath('data.status', 'draft')
-            ->assertJsonPath('data.items.0.unit_price', 1250)->assertJsonPath('data.items.0.line_total', 3750)->assertJsonPath('data.total_amount', 3750);
+            ->assertJsonPath('data.items.0.unit_price', 1250)->assertJsonPath('data.items.0.line_total', 3750)->assertJsonPath('data.total_amount', 3750)
+            ->assertJsonPath('data.creation_location.latitude', 16.8409)->assertJsonPath('data.creation_location.longitude', 96.1735)
+            ->assertJsonPath('data.creation_location.accuracy_meters', 12);
         $saleId = $created->json('data.id');
         $this->assertRepresentativeQuantity($representative, $product, 20);
         $this->assertDatabaseCount('stock_movements', 0);
         $this->assertDatabaseCount('representative_cash_transactions', 0);
 
         $product->update(['selling_price' => 1500]);
-        $this->putJson("/api/sales/sales/{$saleId}", $this->payload($customer, $product, 2, 'cash'))
+        $relocated = $this->payload($customer, $product, 2, 'cash', false) + [
+            'creation_latitude' => 1.3521,
+            'creation_longitude' => 103.8198,
+        ];
+        $this->putJson("/api/sales/sales/{$saleId}", $relocated)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['creation_latitude', 'creation_longitude']);
+        $this->assertDatabaseHas('sales', [
+            'id' => $saleId,
+            'creation_latitude' => 16.8409,
+            'creation_longitude' => 96.1735,
+        ]);
+        $this->putJson("/api/sales/sales/{$saleId}", $this->payload($customer, $product, 2, 'cash', false))
             ->assertOk()->assertJsonPath('data.items.0.unit_price', 1500)->assertJsonPath('data.total_amount', 3000);
         $this->withHeader('Idempotency-Key', 'draft-two')->postJson('/api/sales/sales', $this->payload($customer, $product, 1, 'cash'))->assertCreated()->assertJsonPath('data.reference', 'SAL-000002');
         $product->update(['is_active' => false]);
         $this->withHeader('Idempotency-Key', 'draft-two')->postJson('/api/sales/sales', $this->payload($customer, $product, 1, 'cash'))->assertCreated()->assertJsonPath('data.reference', 'SAL-000002');
         $this->assertDatabaseCount('sales', 2);
+    }
+
+    public function test_new_sale_requires_valid_device_coordinates(): void
+    {
+        [, $user, $customer, $product] = $this->fixture(20, 1250);
+        $payload = $this->payload($customer, $product, 1, 'cash');
+        unset($payload['creation_latitude']);
+        $payload['creation_longitude'] = 181;
+
+        $this->actingAs($user)->withHeader('Idempotency-Key', 'invalid-location')->postJson('/api/sales/sales', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['creation_latitude', 'creation_longitude']);
+        $this->assertDatabaseCount('sales', 0);
     }
 
     public function test_cash_sale_deducts_stock_and_increases_cash_exactly_once(): void
@@ -94,7 +121,7 @@ class Phase5SalesTest extends TestCase
         [$representative, $user, $customer, $product] = $this->fixture(20, 1000);
         $other = Product::factory()->create(['selling_price' => 2000]);
         RepresentativeInventory::query()->create(['sales_representative_id' => $representative->id, 'product_id' => $other->id, 'quantity' => 2]);
-        $saleId = $this->actingAs($user)->withHeader('Idempotency-Key', 'rollback-draft')->postJson('/api/sales/sales', ['customer_id' => $customer->id, 'payment_type' => 'cash', 'items' => [['product_id' => $product->id, 'quantity' => 5], ['product_id' => $other->id, 'quantity' => 3]]])->assertCreated()->json('data.id');
+        $saleId = $this->actingAs($user)->withHeader('Idempotency-Key', 'rollback-draft')->postJson('/api/sales/sales', ['customer_id' => $customer->id, 'payment_type' => 'cash', 'creation_latitude' => 16.8409, 'creation_longitude' => 96.1735, 'location_accuracy_meters' => 12, 'items' => [['product_id' => $product->id, 'quantity' => 5], ['product_id' => $other->id, 'quantity' => 3]]])->assertCreated()->json('data.id');
         $this->command("/api/sales/sales/{$saleId}/post", 'rollback-sale')->assertConflict()->assertJsonPath('code', 'INSUFFICIENT_REPRESENTATIVE_STOCK');
         $this->assertRepresentativeQuantity($representative, $product, 20);
         $this->assertRepresentativeQuantity($representative, $other, 2);
@@ -109,7 +136,7 @@ class Phase5SalesTest extends TestCase
         $sale = $this->createSale($user, $customer, $product, 5, 'cash');
         $this->actingAs($user);
         $this->command("/api/sales/sales/{$sale->id}/post", 'post-before-void')->assertOk();
-        $this->putJson("/api/sales/sales/{$sale->id}", $this->payload($customer, $product, 1, 'cash'))->assertConflict()->assertJsonPath('code', 'INVALID_DOCUMENT_STATE');
+        $this->putJson("/api/sales/sales/{$sale->id}", $this->payload($customer, $product, 1, 'cash', false))->assertConflict()->assertJsonPath('code', 'INVALID_DOCUMENT_STATE');
         $this->deleteJson("/api/sales/sales/{$sale->id}")->assertMethodNotAllowed();
 
         $admin = $this->superAdmin();
@@ -239,6 +266,8 @@ class Phase5SalesTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $response->json('customer.id'))
+            ->assertJsonPath('data.0.way.region.name', 'Sales Region')
+            ->assertJsonPath('data.0.way.region.warehouse.id', $representative->primary_warehouse_id)
             ->assertJsonPath('meta.total', 1);
     }
 
@@ -262,10 +291,13 @@ class Phase5SalesTest extends TestCase
     private function fixture(int $quantity, int $price, bool $creditAllowed = true, int $creditLimit = 100000): array
     {
         $warehouse = Warehouse::factory()->create();
+        $region = $warehouse->regions()->create(['name' => 'Sales Region', 'is_active' => true]);
+        $way = $region->ways()->create(['code' => 'WAY-SALES-'.$warehouse->id, 'name' => 'Sales Route', 'is_active' => true]);
         $user = User::factory()->create();
         $user->assignRole(RoleName::SalesRepresentative->value);
         $representative = SalesRepresentative::factory()->create(['user_id' => $user->id, 'primary_warehouse_id' => $warehouse->id]);
-        $customer = Customer::factory()->create(['warehouse_id' => $warehouse->id, 'credit_allowed' => $creditAllowed, 'credit_limit' => $creditLimit]);
+        $representative->regions()->sync([$region->id]);
+        $customer = Customer::factory()->create(['warehouse_id' => $warehouse->id, 'way_id' => $way->id, 'credit_allowed' => $creditAllowed, 'credit_limit' => $creditLimit]);
         $product = Product::factory()->create(['selling_price' => $price]);
         RepresentativeInventory::query()->create(['sales_representative_id' => $representative->id, 'product_id' => $product->id, 'quantity' => $quantity]);
 
@@ -279,9 +311,9 @@ class Phase5SalesTest extends TestCase
         return Sale::query()->findOrFail($id);
     }
 
-    private function payload(Customer $customer, Product $product, int $quantity, string $paymentType): array
+    private function payload(Customer $customer, Product $product, int $quantity, string $paymentType, bool $withLocation = true): array
     {
-        return ['customer_id' => $customer->id, 'payment_type' => $paymentType, 'notes' => 'Sale test.', 'items' => [['product_id' => $product->id, 'quantity' => $quantity]]];
+        return array_filter(['customer_id' => $customer->id, 'payment_type' => $paymentType, 'notes' => 'Sale test.', 'creation_latitude' => $withLocation ? 16.8409 : null, 'creation_longitude' => $withLocation ? 96.1735 : null, 'location_accuracy_meters' => $withLocation ? 12 : null, 'items' => [['product_id' => $product->id, 'quantity' => $quantity]]], fn ($value) => $value !== null);
     }
 
     private function command(string $uri, string $key, array $payload = [])
@@ -305,6 +337,7 @@ class Phase5SalesTest extends TestCase
     private function officeUser(PermissionName ...$permissions): User
     {
         $user = User::factory()->create();
+        $user->assignRole(RoleName::OfficeAdmin->value);
         $user->givePermissionTo(collect($permissions)->map->value->all());
 
         return $user;

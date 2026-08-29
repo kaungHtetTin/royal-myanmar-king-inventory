@@ -10,8 +10,6 @@ export type Warehouse = {
     name: string;
     notes: string | null;
     phone: string | null;
-    region: string | null;
-    township: string | null;
     updated_at: string | null;
     users_count: number;
     regions: WarehouseRegion[];
@@ -41,8 +39,6 @@ export type WarehouseInput = {
     name: string;
     notes: string;
     phone: string;
-    region: string;
-    township: string;
 };
 
 export type WarehouseFilters = {

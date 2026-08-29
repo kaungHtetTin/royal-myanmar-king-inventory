@@ -64,7 +64,10 @@ class ProductController extends Controller
         return response()->json([
             'categories' => Product::query()->whereNotNull('category')->distinct()->orderBy('category')->pluck('category'),
             'units' => Product::query()->distinct()->orderBy('unit')->pluck('unit'),
-            'regions' => Region::query()->with('warehouse:id,code,name')->where('is_active', true)->orderBy('name')->get()
+            'regions' => Region::query()->select('regions.*')->with('warehouse:id,code,name')
+                ->join('warehouses', 'warehouses.id', '=', 'regions.warehouse_id')
+                ->where('regions.is_active', true)
+                ->orderBy('warehouses.name')->orderBy('warehouses.code')->orderBy('regions.name')->orderBy('regions.id')->get()
                 ->map(fn (Region $region) => ['id' => $region->id, 'name' => $region->name, 'warehouse' => $region->warehouse->only(['id', 'code', 'name'])]),
         ]);
     }

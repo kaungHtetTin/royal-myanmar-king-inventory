@@ -22,7 +22,7 @@ class StockImportPostingService
     public function post(StockImport $import, User $actor, string $key, Request $request): array
     {
         return $this->idempotency->execute($actor, "stock-import:{$import->id}:post", $key, function () use ($import, $actor, $request): array {
-            $import = StockImport::query()->with(['warehouse', 'items.product'])->lockForUpdate()->findOrFail($import->id);
+            $import = StockImport::query()->with(['warehouse', 'items.product', 'items.productUnit'])->lockForUpdate()->findOrFail($import->id);
             $this->requireStatus($import, InventoryDocumentStatus::Draft);
             if ($import->items->isEmpty()) {
                 throw new DomainConflictException('A stock import must contain at least one item.', 'EMPTY_IMPORT');
@@ -34,7 +34,7 @@ class StockImportPostingService
             $balances = $this->inventory->lock($import->warehouse_id, $import->items->pluck('product_id')->all());
             $occurredAt = now();
             foreach ($import->items as $item) {
-                $this->inventory->increase($balances->get($item->product_id), $item->quantity);
+                $this->inventory->increase($balances->get($item->product_id), $item->base_quantity);
                 StockMovement::query()->create([
                     'product_id' => $item->product_id,
                     'movement_type' => StockMovementType::ImportIn,
@@ -43,7 +43,7 @@ class StockImportPostingService
                     'reference' => $import->reference,
                     'to_location_type' => 'warehouse',
                     'to_location_id' => $import->warehouse_id,
-                    'quantity' => $item->quantity,
+                    'quantity' => $item->base_quantity,
                     'created_by' => $actor->id,
                     'notes' => $import->notes,
                     'occurred_at' => $occurredAt,
@@ -57,7 +57,7 @@ class StockImportPostingService
             $this->auditLogger->record($request, 'stock_import.posted', $actor, $import, [
                 'reference' => $import->reference,
                 'warehouse_id' => $import->warehouse_id,
-                'items' => $import->items->map->only(['product_id', 'quantity'])->all(),
+                'items' => $import->items->map->only(['product_id', 'product_unit_id', 'quantity', 'base_quantity'])->all(),
             ]);
 
             return ['id' => $import->id, 'reference' => $import->reference, 'status' => InventoryDocumentStatus::Posted->value];
@@ -73,7 +73,7 @@ class StockImportPostingService
             $balances = $this->inventory->lock($import->warehouse_id, $import->items->pluck('product_id')->all());
             $occurredAt = now();
             foreach ($import->items as $item) {
-                $this->inventory->decrease($balances->get($item->product_id), $item->quantity);
+                $this->inventory->decrease($balances->get($item->product_id), $item->base_quantity);
                 StockMovement::query()->create([
                     'product_id' => $item->product_id,
                     'movement_type' => StockMovementType::ReversalOut,
@@ -82,7 +82,7 @@ class StockImportPostingService
                     'reference' => $import->reference,
                     'from_location_type' => 'warehouse',
                     'from_location_id' => $import->warehouse_id,
-                    'quantity' => $item->quantity,
+                    'quantity' => $item->base_quantity,
                     'created_by' => $actor->id,
                     'notes' => $reason,
                     'occurred_at' => $occurredAt,

@@ -13,7 +13,13 @@ class RepresentativeInventoryResource extends JsonResource
         return [
             'id' => $this->id,
             'representative' => ['id' => $this->representative->id, 'code' => $this->representative->code, 'name' => $this->representative->name],
-            'product' => ['id' => $this->product->id, 'sku' => $this->product->sku, 'name' => $this->product->name, 'unit' => $this->product->unit],
+            'product' => [
+                'id' => $this->product->id,
+                'sku' => $this->product->sku,
+                'name' => $this->product->name,
+                'unit' => $this->product->unit,
+                'base_unit' => $this->product->baseUnit?->name ?? $this->product->unit,
+            ],
             'quantity' => $this->quantity,
             'foc_quantity' => $this->foc_quantity,
             'pending_quantity' => (int) ($this->pending_quantity ?? 0),

@@ -30,8 +30,9 @@ class RegionalSalesArchitectureTest extends TestCase
     {
         $admin = User::factory()->create();
         $admin->assignRole(RoleName::SuperAdmin->value);
-        $warehouse = Warehouse::factory()->create(['code' => 'REG-WH', 'name' => 'Regional Warehouse', 'region' => 'North']);
-        $north = $warehouse->regions()->firstOrFail();
+        $warehouse = Warehouse::factory()->create(['code' => 'REG-WH', 'name' => 'Regional Warehouse']);
+        $north = Region::query()->create(['warehouse_id' => $warehouse->id, 'name' => 'North', 'is_active' => true]);
+        Way::query()->create(['region_id' => $north->id, 'code' => 'WAY-NORTH', 'name' => 'North Route', 'is_active' => true]);
         $south = Region::query()->create(['warehouse_id' => $warehouse->id, 'name' => 'South', 'is_active' => true]);
         $southWay = Way::query()->create(['region_id' => $south->id, 'code' => 'WAY-SOUTH', 'name' => 'South Route', 'is_active' => true]);
 
@@ -56,6 +57,7 @@ class RegionalSalesArchitectureTest extends TestCase
 
         $sale = $this->actingAs($repUser)->withHeader('Idempotency-Key', 'regional-sale-create')->postJson('/api/sales/sales', [
             'customer_id' => $customer->id, 'payment_type' => 'cash',
+            'creation_latitude' => 16.8409, 'creation_longitude' => 96.1735, 'location_accuracy_meters' => 12,
             'items' => [['product_id' => $product->id, 'product_unit_id' => $box->id, 'quantity' => 2, 'foc_product_unit_id' => $bottle->id, 'foc_quantity' => 3]],
         ])->assertCreated()->assertJsonPath('data.total_amount', 24000)->assertJsonPath('data.region.id', $south->id)->assertJsonPath('data.way.id', $southWay->id);
         $saleId = $sale->json('data.id');
@@ -89,6 +91,7 @@ class RegionalSalesArchitectureTest extends TestCase
         $unpricedCustomer = Customer::factory()->create(['warehouse_id' => $warehouse->id, 'way_id' => $unpricedWay->id]);
         $this->actingAs($repUser)->withHeader('Idempotency-Key', 'missing-price')->postJson('/api/sales/sales', [
             'customer_id' => $unpricedCustomer->id, 'payment_type' => 'cash',
+            'creation_latitude' => 16.8409, 'creation_longitude' => 96.1735, 'location_accuracy_meters' => 12,
             'items' => [['product_id' => $product->id, 'product_unit_id' => $bottle->id, 'quantity' => 1]],
         ])->assertUnprocessable()->assertJsonValidationErrors('items');
     }
@@ -98,6 +101,8 @@ class RegionalSalesArchitectureTest extends TestCase
         $admin = User::factory()->create();
         $admin->assignRole(RoleName::SuperAdmin->value);
         $warehouse = Warehouse::factory()->create(['code' => 'ISS-WH']);
+        $region = Region::query()->create(['warehouse_id' => $warehouse->id, 'name' => 'Issue Region', 'is_active' => true]);
+        $way = Way::query()->create(['region_id' => $region->id, 'code' => 'WAY-ISSUE', 'name' => 'Issue Route', 'is_active' => true]);
         $product = Product::factory()->create(['unit' => 'bottle', 'selling_price' => 1000]);
         $bottle = $product->baseUnit()->firstOrFail();
         $box = $product->units()->create(['name' => 'box', 'conversion_factor' => 12, 'is_base' => false, 'is_default_selling' => false, 'is_active' => true]);
@@ -126,8 +131,6 @@ class RegionalSalesArchitectureTest extends TestCase
         $this->withHeader('Idempotency-Key', 'issue-dispatch-second')->postJson("/api/admin/representative-transfers/{$secondId}/dispatch")->assertOk();
         $this->actingAs($repUser)->withHeader('Idempotency-Key', 'issue-receive-second')->postJson("/api/sales/receivings/{$secondId}/receive")->assertOk();
 
-        $region = $warehouse->regions()->firstOrFail();
-        $way = $region->ways()->firstOrFail();
         $query = '?warehouse_id='.$warehouse->id.'&region_id='.$region->id.'&way_id='.$way->id.'&date_from='.today()->toDateString().'&date_to='.today()->toDateString();
         $this->actingAs($admin)->getJson('/api/admin/reports/stock-issues'.$query)->assertOk()
             ->assertJsonPath('summary.total_issued_units', 138)

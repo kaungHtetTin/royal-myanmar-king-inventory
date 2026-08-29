@@ -19,7 +19,7 @@ class TransferOptionController extends Controller
         return response()->json([
             'source_warehouses' => $access->scope(Warehouse::query(), $request->user())->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
             'destination_warehouses' => Warehouse::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
-            'products' => Product::query()->where('is_active', true)->orderBy('name')->get(['id', 'sku', 'name', 'unit']),
+            'products' => Product::query()->with(['units' => fn ($query) => $query->where('is_active', true)->orderByDesc('is_default_selling')->orderByDesc('is_base')->orderBy('name')])->where('is_active', true)->orderBy('name')->get(['id', 'sku', 'name', 'unit']),
         ]);
     }
 

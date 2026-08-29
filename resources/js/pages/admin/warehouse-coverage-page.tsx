@@ -192,10 +192,8 @@ export function WarehouseCoveragePage() {
                     <strong>{warehouse.code}</strong>
                 </div>
                 <div>
-                    <small>Location</small>
-                    <strong>
-                        {[warehouse.township, warehouse.region].filter(Boolean).join(', ') || 'Not specified'}
-                    </strong>
+                    <small>Address</small>
+                    <strong>{warehouse.address || 'Not specified'}</strong>
                 </div>
                 <div>
                     <small>Phone</small>

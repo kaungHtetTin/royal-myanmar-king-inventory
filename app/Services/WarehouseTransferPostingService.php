@@ -32,9 +32,9 @@ class WarehouseTransferPostingService
             $transitBalances = $this->inTransit->lock(self::TRANSIT_TYPE, $transfer->id, $transfer->items->pluck('product_id')->all());
             $occurredAt = now();
             foreach ($transfer->items as $item) {
-                $this->warehouses->decrease($warehouseBalances->get($item->product_id), $item->quantity);
-                $this->inTransit->increase($transitBalances->get($item->product_id), $item->quantity);
-                $this->movement($transfer, $item->product_id, $item->quantity, StockMovementType::WarehouseTransferDispatch, 'warehouse', $transfer->source_warehouse_id, 'in_transit', $transfer->id, $actor, $occurredAt);
+                $this->warehouses->decrease($warehouseBalances->get($item->product_id), $item->base_quantity);
+                $this->inTransit->increase($transitBalances->get($item->product_id), $item->base_quantity);
+                $this->movement($transfer, $item->product_id, $item->base_quantity, StockMovementType::WarehouseTransferDispatch, 'warehouse', $transfer->source_warehouse_id, 'in_transit', $transfer->id, $actor, $occurredAt);
             }
             $transfer->update(['status' => TransferStatus::Dispatched, 'dispatched_by' => $actor->id, 'dispatched_at' => $occurredAt]);
             $this->auditLogger->record($request, 'warehouse_transfer.dispatched', $actor, $transfer, $this->metadata($transfer));
@@ -56,9 +56,9 @@ class WarehouseTransferPostingService
             $transitBalances = $this->inTransit->lock(self::TRANSIT_TYPE, $transfer->id, $transfer->items->pluck('product_id')->all());
             $occurredAt = now();
             foreach ($transfer->items as $item) {
-                $this->inTransit->decrease($transitBalances->get($item->product_id), $item->quantity);
-                $this->warehouses->increase($warehouseBalances->get($item->product_id), $item->quantity);
-                $this->movement($transfer, $item->product_id, $item->quantity, StockMovementType::WarehouseTransferReceive, 'in_transit', $transfer->id, 'warehouse', $transfer->destination_warehouse_id, $actor, $occurredAt);
+                $this->inTransit->decrease($transitBalances->get($item->product_id), $item->base_quantity);
+                $this->warehouses->increase($warehouseBalances->get($item->product_id), $item->base_quantity);
+                $this->movement($transfer, $item->product_id, $item->base_quantity, StockMovementType::WarehouseTransferReceive, 'in_transit', $transfer->id, 'warehouse', $transfer->destination_warehouse_id, $actor, $occurredAt);
             }
             $transfer->update(['status' => TransferStatus::Received, 'received_by' => $actor->id, 'received_at' => $occurredAt]);
             $this->auditLogger->record($request, 'warehouse_transfer.received', $actor, $transfer, $this->metadata($transfer));
@@ -93,9 +93,9 @@ class WarehouseTransferPostingService
                 $sourceBalances = $this->warehouses->lock($transfer->source_warehouse_id, $transfer->items->pluck('product_id')->all());
                 $transitBalances = $this->inTransit->lock(self::TRANSIT_TYPE, $transfer->id, $transfer->items->pluck('product_id')->all());
                 foreach ($transfer->items as $item) {
-                    $this->inTransit->decrease($transitBalances->get($item->product_id), $item->quantity);
-                    $this->warehouses->increase($sourceBalances->get($item->product_id), $item->quantity);
-                    $this->movement($transfer, $item->product_id, $item->quantity, StockMovementType::ReversalIn, 'in_transit', $transfer->id, 'warehouse', $transfer->source_warehouse_id, $actor, $occurredAt, $reason);
+                    $this->inTransit->decrease($transitBalances->get($item->product_id), $item->base_quantity);
+                    $this->warehouses->increase($sourceBalances->get($item->product_id), $item->base_quantity);
+                    $this->movement($transfer, $item->product_id, $item->base_quantity, StockMovementType::ReversalIn, 'in_transit', $transfer->id, 'warehouse', $transfer->source_warehouse_id, $actor, $occurredAt, $reason);
                 }
             } else {
                 $locations = [];
@@ -105,9 +105,9 @@ class WarehouseTransferPostingService
                 }
                 $balances = $this->warehouses->lockMany($locations);
                 foreach ($transfer->items as $item) {
-                    $this->warehouses->decrease($balances->get($transfer->destination_warehouse_id.':'.$item->product_id), $item->quantity);
-                    $this->warehouses->increase($balances->get($transfer->source_warehouse_id.':'.$item->product_id), $item->quantity);
-                    $this->movement($transfer, $item->product_id, $item->quantity, StockMovementType::ReversalIn, 'warehouse', $transfer->destination_warehouse_id, 'warehouse', $transfer->source_warehouse_id, $actor, $occurredAt, $reason);
+                    $this->warehouses->decrease($balances->get($transfer->destination_warehouse_id.':'.$item->product_id), $item->base_quantity);
+                    $this->warehouses->increase($balances->get($transfer->source_warehouse_id.':'.$item->product_id), $item->base_quantity);
+                    $this->movement($transfer, $item->product_id, $item->base_quantity, StockMovementType::ReversalIn, 'warehouse', $transfer->destination_warehouse_id, 'warehouse', $transfer->source_warehouse_id, $actor, $occurredAt, $reason);
                 }
             }
             $transfer->update(['status' => TransferStatus::Reversed, 'reversed_by' => $actor->id, 'reversed_at' => $occurredAt, 'reversal_reason' => $reason]);
@@ -119,7 +119,7 @@ class WarehouseTransferPostingService
 
     private function locked(WarehouseTransfer $transfer): WarehouseTransfer
     {
-        return WarehouseTransfer::query()->with(['sourceWarehouse', 'destinationWarehouse', 'items.product'])->lockForUpdate()->findOrFail($transfer->id);
+        return WarehouseTransfer::query()->with(['sourceWarehouse', 'destinationWarehouse', 'items.product', 'items.productUnit'])->lockForUpdate()->findOrFail($transfer->id);
     }
 
     private function requireStatus(WarehouseTransfer $transfer, TransferStatus $status): void
@@ -147,7 +147,7 @@ class WarehouseTransferPostingService
     /** @return array<string, mixed> */
     private function metadata(WarehouseTransfer $transfer): array
     {
-        return ['reference' => $transfer->reference, 'source_warehouse_id' => $transfer->source_warehouse_id, 'destination_warehouse_id' => $transfer->destination_warehouse_id, 'items' => $transfer->items->map->only(['product_id', 'quantity'])->all()];
+        return ['reference' => $transfer->reference, 'source_warehouse_id' => $transfer->source_warehouse_id, 'destination_warehouse_id' => $transfer->destination_warehouse_id, 'items' => $transfer->items->map->only(['product_id', 'product_unit_id', 'quantity', 'base_quantity'])->all()];
     }
 
     /** @return array<string, mixed> */

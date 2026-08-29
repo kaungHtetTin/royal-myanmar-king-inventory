@@ -27,15 +27,16 @@ class WarehouseManagementTest extends TestCase
         $response = $this->actingAs($admin)->postJson('/api/admin/warehouses', $this->payload([
             'code' => 'ygn-main',
             'name' => 'Yangon Main Warehouse',
-            'region' => 'Yangon',
-            'township' => 'Hlaing',
         ]));
 
         $response->assertCreated()
             ->assertJsonPath('data.code', 'YGN-MAIN')
-            ->assertJsonPath('data.region', 'Yangon')
+            ->assertJsonMissingPath('data.region')
+            ->assertJsonMissingPath('data.township')
             ->assertJsonPath('data.users_count', 0);
         $this->assertDatabaseHas('warehouses', ['code' => 'YGN-MAIN', 'name' => 'Yangon Main Warehouse']);
+        $this->assertDatabaseCount('regions', 0);
+        $this->assertDatabaseCount('ways', 0);
         $this->assertDatabaseHas('audit_logs', [
             'actor_id' => $admin->id,
             'event' => 'warehouse.created',
@@ -47,8 +48,8 @@ class WarehouseManagementTest extends TestCase
     public function test_office_admin_only_lists_assigned_warehouses_with_server_filters(): void
     {
         $admin = $this->officeAdmin();
-        $assigned = Warehouse::factory()->create(['code' => 'YGN', 'name' => 'Yangon Main', 'region' => 'Yangon']);
-        Warehouse::factory()->create(['code' => 'MDY', 'name' => 'Mandalay Main', 'region' => 'Mandalay']);
+        $assigned = Warehouse::factory()->create(['code' => 'YGN', 'name' => 'Yangon Main']);
+        Warehouse::factory()->create(['code' => 'MDY', 'name' => 'Mandalay Main']);
         $admin->warehouses()->attach($assigned, ['assigned_by' => $admin->id]);
 
         $response = $this->actingAs($admin)->getJson('/api/admin/warehouses?search=Yangon&status=active&sort=code&direction=desc');
@@ -64,13 +65,14 @@ class WarehouseManagementTest extends TestCase
         $admin = $this->officeAdmin();
         $warehouse = Warehouse::factory()->create(['code' => 'YGN']);
         $admin->warehouses()->attach($warehouse, ['assigned_by' => $admin->id]);
-        $region = $warehouse->regions()->firstOrFail();
+        $region = $warehouse->regions()->create(['name' => 'Yangon', 'is_active' => true]);
+        $way = $region->ways()->create(['code' => 'WAY-YGN', 'name' => 'Hlaing', 'is_active' => true]);
 
         $this->actingAs($admin)->getJson('/api/admin/warehouses/'.$warehouse->id)
             ->assertOk()
             ->assertJsonPath('data.id', $warehouse->id)
             ->assertJsonPath('data.regions.0.id', $region->id)
-            ->assertJsonPath('data.regions.0.ways.0.region_id', $region->id);
+            ->assertJsonPath('data.regions.0.ways.0.id', $way->id);
 
         $foreign = Warehouse::factory()->create();
         $this->getJson('/api/admin/warehouses/'.$foreign->id)->assertForbidden();
@@ -129,8 +131,6 @@ class WarehouseManagementTest extends TestCase
         return array_merge([
             'code' => 'BGO-01',
             'name' => 'Bago Warehouse',
-            'region' => 'Bago',
-            'township' => 'Bago',
             'address' => 'No. 12, Main Road',
             'phone' => '09-123456789',
             'notes' => 'Regional distribution point.',

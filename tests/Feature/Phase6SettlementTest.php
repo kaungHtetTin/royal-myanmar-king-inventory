@@ -174,6 +174,7 @@ class Phase6SettlementTest extends TestCase
     private function officeUser(Warehouse $warehouse, PermissionName ...$permissions): User
     {
         $user = User::factory()->create();
+        $user->assignRole(RoleName::OfficeAdmin->value);
         $user->givePermissionTo(collect($permissions)->map->value->all());
         $user->warehouses()->attach($warehouse, ['assigned_by' => $user->id]);
 

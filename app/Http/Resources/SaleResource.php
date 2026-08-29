@@ -22,6 +22,12 @@ class SaleResource extends JsonResource
             'total_amount' => $this->total_amount,
             'status' => $this->status->value,
             'notes' => $this->notes,
+            'creation_location' => $this->creation_latitude !== null && $this->creation_longitude !== null ? [
+                'latitude' => $this->creation_latitude,
+                'longitude' => $this->creation_longitude,
+                'accuracy_meters' => $this->location_accuracy_meters,
+                'captured_at' => $this->location_captured_at?->toISOString(),
+            ] : null,
             'items' => $this->items->map(fn ($item) => [
                 'id' => $item->id,
                 'product' => ['id' => $item->product->id, 'sku' => $item->product->sku, 'name' => $item->product->name, 'unit' => $item->product->unit],

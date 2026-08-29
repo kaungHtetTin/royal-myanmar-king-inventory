@@ -14,8 +14,6 @@ class WarehouseFactory extends Factory
         return [
             'code' => strtoupper(fake()->unique()->bothify('WH-###')),
             'name' => fake()->city().' Warehouse',
-            'region' => fake()->state(),
-            'township' => fake()->city(),
             'address' => fake()->streetAddress(),
             'phone' => fake()->phoneNumber(),
             'notes' => null,

@@ -45,7 +45,9 @@ class TransferSeeder extends Seeder
                 $quantity = [5, 3, 6][$index];
                 $transfer->items()->create([
                     'product_id' => $product->id,
-                    'quantity' => $quantity * $unit->conversion_factor,
+                    'product_unit_id' => $unit->id,
+                    'quantity' => $quantity,
+                    'base_quantity' => $quantity * $unit->conversion_factor,
                 ]);
             }
 

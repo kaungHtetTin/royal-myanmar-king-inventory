@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon, type IconName } from './icons';
 import { OFFLINE_TRANSACTION_MESSAGE } from './offline-banner';
 import { useOnlineStatus } from './preferences';
@@ -189,13 +190,17 @@ type DialogProps = {
 
 export function Dialog({ children, description, footer, onClose, open, title, width = 'standard' }: DialogProps) {
     const dialogRef = useRef<HTMLElement>(null);
+    const onCloseRef = useRef(onClose);
     const titleId = useId();
     const descriptionId = useId();
+    useEffect(() => {
+        onCloseRef.current = onClose;
+    }, [onClose]);
     useEffect(() => {
         if (!open) return;
         const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
         const closeOnEscape = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') onClose();
+            if (event.key === 'Escape') onCloseRef.current();
             if (event.key !== 'Tab' || !dialogRef.current) return;
             const focusable = Array.from(
                 dialogRef.current.querySelectorAll<HTMLElement>(
@@ -231,11 +236,13 @@ export function Dialog({ children, description, footer, onClose, open, title, wi
             window.removeEventListener('keydown', closeOnEscape);
             previousFocus?.focus();
         };
-    }, [onClose, open]);
+    }, [open]);
 
     if (!open) return null;
 
-    return (
+    const portalRoot = document.querySelector<HTMLElement>('.admin-root, .sales-root') ?? document.body;
+
+    return createPortal(
         <div
             className="ui-dialog-backdrop"
             onMouseDown={(event) => {
@@ -261,7 +268,8 @@ export function Dialog({ children, description, footer, onClose, open, title, wi
                 <div className="ui-dialog__body">{children}</div>
                 <footer className="ui-dialog__footer">{footer}</footer>
             </section>
-        </div>
+        </div>,
+        portalRoot,
     );
 }
 
@@ -276,15 +284,19 @@ type DrawerProps = {
 
 export function Drawer({ children, description, footer, onClose, open, title }: DrawerProps) {
     const drawerRef = useRef<HTMLElement>(null);
+    const onCloseRef = useRef(onClose);
     const titleId = useId();
     const descriptionId = useId();
+    useEffect(() => {
+        onCloseRef.current = onClose;
+    }, [onClose]);
 
     useEffect(() => {
         if (!open) return;
         const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
-                onClose();
+                onCloseRef.current();
                 return;
             }
             if (event.key !== 'Tab' || !drawerRef.current) return;
@@ -322,7 +334,7 @@ export function Drawer({ children, description, footer, onClose, open, title }: 
             window.removeEventListener('keydown', handleKeyDown);
             previousFocus?.focus();
         };
-    }, [onClose, open]);
+    }, [open]);
 
     if (!open) return null;
 

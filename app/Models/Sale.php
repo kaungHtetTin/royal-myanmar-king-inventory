@@ -10,11 +10,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Sale extends Model
 {
-    protected $fillable = ['reference', 'sales_representative_id', 'warehouse_id', 'region_id', 'way_id', 'customer_id', 'payment_type', 'total_amount', 'status', 'notes', 'created_by', 'posted_by', 'posted_at', 'voided_by', 'voided_at', 'void_reason'];
+    protected $fillable = ['reference', 'sales_representative_id', 'warehouse_id', 'region_id', 'way_id', 'customer_id', 'payment_type', 'total_amount', 'status', 'notes', 'creation_latitude', 'creation_longitude', 'location_accuracy_meters', 'location_captured_at', 'created_by', 'posted_by', 'posted_at', 'voided_by', 'voided_at', 'void_reason'];
 
     protected function casts(): array
     {
-        return ['payment_type' => PaymentType::class, 'status' => SaleStatus::class, 'total_amount' => 'integer', 'posted_at' => 'datetime', 'voided_at' => 'datetime'];
+        return ['payment_type' => PaymentType::class, 'status' => SaleStatus::class, 'total_amount' => 'integer', 'creation_latitude' => 'float', 'creation_longitude' => 'float', 'location_accuracy_meters' => 'integer', 'location_captured_at' => 'datetime', 'posted_at' => 'datetime', 'voided_at' => 'datetime'];
     }
 
     public function representative(): BelongsTo

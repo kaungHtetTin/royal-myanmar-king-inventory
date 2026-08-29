@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useSession } from '../../auth/session-context';
-import { useBranding } from '../../branding/branding-context';
 import { Link } from 'react-router-dom';
 import type { PaginationMeta } from '../../services/administration';
-import { printInvoice } from '../../services/invoice-print';
 import { saleApi, type Sale, type SaleFilters, type SaleSummary } from '../../services/sales';
 import { Icon } from '../../ui/icons';
+import { InvoicePrintButton } from '../../ui/invoice-print-dialog';
 import { Button, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
 
 const emptyMeta: PaginationMeta = {
@@ -36,7 +35,6 @@ function tone(status: string) {
 }
 
 export function SalesManagementPage() {
-    const { branding } = useBranding();
     const { user } = useSession();
     const canVoid = Boolean(user?.roles.includes('super-admin') || user?.permissions.includes('sale.void'));
     const [rows, setRows] = useState<Sale[]>([]);
@@ -325,14 +323,12 @@ export function SalesManagementPage() {
                                         <td className="ui-table__actions">
                                             <div className="row-actions">
                                                 {sale.status !== 'draft' ? (
-                                                    <IconButton
-                                                        icon="print"
-                                                        label={`Print invoice ${sale.reference}`}
-                                                        onClick={() => {
-                                                            if (!printInvoice(sale, branding)) {
-                                                                setError('Allow pop-ups to print the invoice.');
-                                                            }
-                                                        }}
+                                                    <InvoicePrintButton
+                                                        iconOnly
+                                                        onBlocked={() =>
+                                                            setError('Allow pop-ups to print the invoice.')
+                                                        }
+                                                        sale={sale}
                                                     />
                                                 ) : null}
                                                 {sale.status === 'posted' && canVoid ? (

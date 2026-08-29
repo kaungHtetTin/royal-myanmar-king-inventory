@@ -9,6 +9,7 @@ const dateTime = (value: string | null) =>
         ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
         : '—';
 const message = (error: unknown) => (error instanceof Error ? error.message : 'Unable to load this receiving.');
+const number = (value: number) => new Intl.NumberFormat('en-US').format(value);
 
 export function ReceivingDetailPage() {
     const { transferId } = useParams();
@@ -85,6 +86,9 @@ export function ReceivingDetailPage() {
     const isPending = transfer.status === 'dispatched';
     const backPath = isPending ? '/sales/my-stock' : '/sales/stock-issue-history';
     const statusTone = transfer.status === 'received' ? 'success' : transfer.status === 'reversed' ? 'danger' : 'info';
+    const paidBaseTotal = transfer.items.reduce((sum, item) => sum + (item.base_quantity ?? item.quantity), 0);
+    const focBaseTotal = transfer.items.reduce((sum, item) => sum + (item.foc_base_quantity ?? 0), 0);
+    const physicalBaseTotal = paidBaseTotal + focBaseTotal;
     return (
         <div className="receiving-detail-page">
             <header className="sales-page-heading sale-detail-heading">
@@ -118,22 +122,65 @@ export function ReceivingDetailPage() {
                     <div>
                         <p className="ui-eyebrow">Shipment contents</p>
                         <h2>
-                            {transfer.items.length} products · {transfer.total_quantity} units
+                            {transfer.items.length} products · {number(physicalBaseTotal)} base units
                         </h2>
                     </div>
                 </header>
                 <div className="receiving-detail-items">
-                    {transfer.items.map((item) => (
-                        <div key={item.id ?? item.product.id}>
-                            <span>
-                                <strong>{item.product.name}</strong>
-                                <small>
-                                    {item.product.sku} · {item.product.unit}
-                                </small>
-                            </span>
-                            <strong>{item.quantity}</strong>
-                        </div>
-                    ))}
+                    <table aria-label="Receiving product lines" className="receiving-detail-table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th className="is-numeric">Paid</th>
+                                <th className="is-numeric">FOC</th>
+                                <th className="is-numeric">Total base</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {transfer.items.map((item) => {
+                                const paidBase = item.base_quantity ?? item.quantity;
+                                const focBase = item.foc_base_quantity ?? 0;
+
+                                return (
+                                    <tr key={item.id ?? item.product.id}>
+                                        <td>
+                                            <strong>{item.product.name}</strong>
+                                            <small>{item.product.sku}</small>
+                                        </td>
+                                        <td className="is-numeric">
+                                            <strong>{number(item.quantity)}</strong>
+                                            <small>
+                                                {item.unit?.name ?? item.product.unit}, {number(paidBase)} base
+                                            </small>
+                                        </td>
+                                        <td className="is-numeric">
+                                            <strong>{number(item.foc_quantity ?? 0)}</strong>
+                                            <small>
+                                                {item.foc_unit?.name ?? item.product.unit}, {number(focBase)} base
+                                            </small>
+                                        </td>
+                                        <td className="is-numeric">
+                                            <strong>{number(paidBase + focBase)}</strong>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td>Total base</td>
+                                <td className="is-numeric">
+                                    <strong>{number(paidBaseTotal)}</strong>
+                                </td>
+                                <td className="is-numeric">
+                                    <strong>{number(focBaseTotal)}</strong>
+                                </td>
+                                <td className="is-numeric">
+                                    <strong>{number(physicalBaseTotal)}</strong>
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
                 </div>
             </section>
             {isPending ? (
@@ -161,7 +208,7 @@ export function ReceivingDetailPage() {
                 width="compact"
             >
                 <p>
-                    Approve {transfer.total_quantity} units from {transfer.source_warehouse.name}.
+                    Approve {number(physicalBaseTotal)} base units from {transfer.source_warehouse.name}.
                 </p>
             </Dialog>
         </div>

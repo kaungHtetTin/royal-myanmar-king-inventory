@@ -96,10 +96,10 @@ class SaleController extends Controller
     public function store(Request $request): JsonResponse
     {
         $representative = $this->representative($request);
-        $data = $request->validate($this->rules());
+        $data = $request->validate($this->rules(true));
         $result = $this->idempotency->execute($request->user(), 'sale:create', $this->idempotencyKey($request), function () use ($request, $representative, $data): array {
             [$customer, $items, $total] = $this->preparedDraft($representative, $data);
-            $sale = Sale::query()->create(['reference' => $this->references->next('sale', 'SAL'), 'sales_representative_id' => $representative->id, 'warehouse_id' => $customer->way->region->warehouse_id, 'region_id' => $customer->way->region_id, 'way_id' => $customer->way_id, 'customer_id' => $customer->id, 'payment_type' => $data['payment_type'], 'total_amount' => $total, 'status' => SaleStatus::Draft, 'notes' => $data['notes'] ?? null, 'created_by' => $request->user()->id]);
+            $sale = Sale::query()->create(['reference' => $this->references->next('sale', 'SAL'), 'sales_representative_id' => $representative->id, 'warehouse_id' => $customer->way->region->warehouse_id, 'region_id' => $customer->way->region_id, 'way_id' => $customer->way_id, 'customer_id' => $customer->id, 'payment_type' => $data['payment_type'], 'total_amount' => $total, 'status' => SaleStatus::Draft, 'notes' => $data['notes'] ?? null, 'creation_latitude' => $data['creation_latitude'], 'creation_longitude' => $data['creation_longitude'], 'location_accuracy_meters' => isset($data['location_accuracy_meters']) ? (int) round($data['location_accuracy_meters']) : null, 'location_captured_at' => now(), 'created_by' => $request->user()->id]);
             $sale->items()->createMany($items);
             $this->auditLogger->record($request, 'sale.created', $request->user(), $sale, ['new' => $data, 'server_total' => $total]);
 
@@ -114,7 +114,7 @@ class SaleController extends Controller
     {
         $representative = $this->representative($request);
         $this->assertOwn($sale, $representative);
-        $data = $request->validate($this->rules());
+        $data = $request->validate($this->rules(false));
         [$customer, $items, $total] = $this->preparedDraft($representative, $data);
         DB::transaction(function () use ($request, $sale, $customer, $data, $items, $total): void {
             $sale = Sale::query()->lockForUpdate()->findOrFail($sale->id);
@@ -141,9 +141,9 @@ class SaleController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function rules(): array
+    private function rules(bool $creating): array
     {
-        return ['customer_id' => ['required', 'integer', 'exists:customers,id'], 'payment_type' => ['required', Rule::enum(PaymentType::class)], 'notes' => ['nullable', 'string', 'max:2000'], 'items' => ['required', 'array', 'min:1', 'max:100'], 'items.*.product_id' => ['required', 'integer', 'distinct', 'exists:products,id'], 'items.*.product_unit_id' => ['nullable', 'integer', 'exists:product_units,id'], 'items.*.quantity' => ['required', 'integer', 'min:1', 'max:4294967295'], 'items.*.foc_product_unit_id' => ['nullable', 'integer', 'exists:product_units,id'], 'items.*.foc_quantity' => ['nullable', 'integer', 'min:0', 'max:4294967295']];
+        return ['customer_id' => ['required', 'integer', 'exists:customers,id'], 'payment_type' => ['required', Rule::enum(PaymentType::class)], 'notes' => ['nullable', 'string', 'max:2000'], 'creation_latitude' => [$creating ? 'required' : 'prohibited', 'numeric', 'between:-90,90'], 'creation_longitude' => [$creating ? 'required' : 'prohibited', 'numeric', 'between:-180,180'], 'location_accuracy_meters' => [$creating ? 'nullable' : 'prohibited', 'numeric', 'min:0', 'max:1000000'], 'items' => ['required', 'array', 'min:1', 'max:100'], 'items.*.product_id' => ['required', 'integer', 'distinct', 'exists:products,id'], 'items.*.product_unit_id' => ['nullable', 'integer', 'exists:product_units,id'], 'items.*.quantity' => ['required', 'integer', 'min:1', 'max:4294967295'], 'items.*.foc_product_unit_id' => ['nullable', 'integer', 'exists:product_units,id'], 'items.*.foc_quantity' => ['nullable', 'integer', 'min:0', 'max:4294967295']];
     }
 
     /** @param array<string, mixed> $data

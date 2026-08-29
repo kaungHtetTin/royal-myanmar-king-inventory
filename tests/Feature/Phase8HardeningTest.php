@@ -52,7 +52,7 @@ class Phase8HardeningTest extends TestCase
             ->assertHeader('Referrer-Policy', 'same-origin');
 
         $this->get('/admin/login')->assertOk()
-            ->assertHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+            ->assertHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self), payment=(), usb=()');
 
         $this->assertContains('throttle:api', app('router')->getMiddlewareGroups()['api']);
     }

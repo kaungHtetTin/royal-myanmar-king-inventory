@@ -28,7 +28,7 @@ class RepresentativeInventoryController extends Controller
         ]);
         $warehouseIds = $this->warehouseAccess->scope(Warehouse::query(), $request->user())->pluck('id');
         $query = $this->withPending(RepresentativeInventory::query())
-            ->with(['representative', 'product'])
+            ->with(['representative', 'product.baseUnit'])
             ->whereHas('representative', fn ($representative) => $representative->whereIn('primary_warehouse_id', $warehouseIds))
             ->when($data['representative_id'] ?? null, fn ($query, $id) => $query->where('sales_representative_id', $id))
             ->when($data['product_id'] ?? null, fn ($query, $id) => $query->where('product_id', $id))

@@ -135,6 +135,7 @@ class VehicleManagementTest extends TestCase
     private function viewer(): User
     {
         $user = User::factory()->create();
+        $user->assignRole(RoleName::OfficeAdmin->value);
         $user->givePermissionTo(PermissionName::VehicleView->value);
 
         return $user;

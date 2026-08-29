@@ -2,12 +2,22 @@ import axios, { AxiosError } from 'axios';
 import type { PaginationMeta } from './administration';
 
 export type WarehouseOption = { id: number; code: string; name: string };
+export type ProductUnitOption = {
+    id: number;
+    name: string;
+    conversion_factor: number;
+    is_base: boolean;
+    is_default_selling: boolean;
+};
 export type ProductOption = {
     id: number;
     sku: string;
     name: string;
     unit: string;
     selling_price: number;
+    base_unit?: Pick<ProductUnitOption, 'id' | 'name' | 'conversion_factor'> | null;
+    default_selling_unit?: Pick<ProductUnitOption, 'id' | 'name' | 'conversion_factor'> | null;
+    units?: ProductUnitOption[];
 };
 export type InventoryOptions = {
     warehouses: WarehouseOption[];
@@ -37,6 +47,8 @@ export type ImportItem = {
     id?: number;
     product: ProductOption;
     quantity: number;
+    base_quantity: number;
+    product_unit: ProductUnitOption | null;
 };
 export type StockImport = {
     id: number;
@@ -72,7 +84,7 @@ export type StockAdjustment = {
 export type ImportInput = {
     warehouse_id: number;
     notes: string;
-    items: { product_id: number; quantity: number; selling_price?: number }[];
+    items: { product_id: number; product_unit_id: number; quantity: number }[];
 };
 export type AdjustmentInput = {
     warehouse_id: number;
@@ -144,7 +156,8 @@ export const inventoryApi = {
         ),
     exportBalances: async (filters: ListFilters) => {
         try {
-            const { page: _page, ...params } = filters;
+            const params = { ...filters };
+            delete params.page;
             const response = await window.axios.get<Blob>('api/admin/inventory/export', {
                 params,
                 responseType: 'blob',

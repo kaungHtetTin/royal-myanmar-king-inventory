@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SessionContext, type SessionContextValue } from '../../auth/session-context';
 import { BrandingProvider } from '../../branding/branding-provider';
+import { invoicePaperPreferenceKey } from '../../services/invoice-print-preferences';
 import '../../bootstrap';
 import { SettingsPage } from './settings-page';
 
@@ -27,7 +28,10 @@ const session: SessionContextValue = {
     user,
 };
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+    window.localStorage.clear();
+    vi.restoreAllMocks();
+});
 
 describe('application settings page', () => {
     it('loads the profile and exposes the inner settings navigation', async () => {
@@ -81,5 +85,13 @@ describe('application settings page', () => {
         fireEvent.click(screen.getByRole('button', { name: /Business branding/ }));
         expect(screen.getByRole('heading', { name: 'Business branding' })).toBeInTheDocument();
         expect(screen.getByDisplayValue('Valley Distribution')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /Printing/ }));
+        expect(screen.getByRole('heading', { name: 'Printing' })).toBeInTheDocument();
+        expect(screen.getAllByRole('radio')).toHaveLength(5);
+        fireEvent.click(screen.getByRole('radio', { name: '58 mm, Narrow thermal receipt' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save printing default' }));
+        expect(window.localStorage.getItem(invoicePaperPreferenceKey(user.id))).toBe('58mm');
+        expect(screen.getByText('Default paper size saved on this device.')).toBeInTheDocument();
     });
 });

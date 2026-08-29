@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useSession } from '../../auth/session-context';
 import { inventoryApi, type StockImport } from '../../services/inventory';
@@ -7,10 +7,6 @@ import { Button, Dialog, MetricCard, Panel, StatusBadge } from '../../ui/primiti
 
 function number(value: number) {
     return new Intl.NumberFormat('en-US').format(value);
-}
-
-function money(value: number) {
-    return `${number(value)} MMK`;
 }
 
 function dateTime(value: string | null) {
@@ -89,11 +85,6 @@ export function StockImportDetailPage() {
             active = false;
         };
     }, [id]);
-
-    const totalValue = useMemo(
-        () => record?.items.reduce((sum, item) => sum + item.quantity * item.product.selling_price, 0) ?? 0,
-        [record],
-    );
 
     const runCommand = async (operation: () => Promise<{ data: StockImport }>, success: string) => {
         setWorking(true);
@@ -196,16 +187,10 @@ export function StockImportDetailPage() {
                     value={number(record.items.length)}
                 />
                 <MetricCard
-                    hint="Units received"
+                    hint="Base stock received"
                     icon="warehouse"
-                    label="Total quantity"
+                    label="Total base quantity"
                     value={number(record.total_quantity)}
-                />
-                <MetricCard
-                    hint="At current selling prices"
-                    icon="cash"
-                    label="Retail value"
-                    value={money(totalValue)}
                 />
             </section>
 
@@ -217,9 +202,8 @@ export function StockImportDetailPage() {
                                 <tr>
                                     <th>Product</th>
                                     <th>Unit</th>
-                                    <th className="is-numeric">Quantity</th>
-                                    <th className="is-numeric">Selling price</th>
-                                    <th className="is-numeric">Line value</th>
+                                    <th className="is-numeric">Import quantity</th>
+                                    <th className="is-numeric">Base stock</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -229,26 +213,26 @@ export function StockImportDetailPage() {
                                             <strong>{item.product.name}</strong>
                                             <small>{item.product.sku}</small>
                                         </td>
-                                        <td>{item.product.unit}</td>
+                                        <td>
+                                            <strong>{item.product_unit?.name ?? item.product.unit}</strong>
+                                            <small>
+                                                {number(item.product_unit?.conversion_factor ?? 1)} base units each
+                                            </small>
+                                        </td>
                                         <td className="is-numeric">
                                             <strong>{number(item.quantity)}</strong>
                                         </td>
-                                        <td className="is-numeric">{money(item.product.selling_price)}</td>
                                         <td className="is-numeric">
-                                            <strong>{money(item.quantity * item.product.selling_price)}</strong>
+                                            <strong>{number(item.base_quantity)}</strong>
                                         </td>
                                     </tr>
                                 ))}
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <td colSpan={2}>Total</td>
+                                    <td colSpan={3}>Total base stock</td>
                                     <td className="is-numeric">
                                         <strong>{number(record.total_quantity)}</strong>
-                                    </td>
-                                    <td />
-                                    <td className="is-numeric">
-                                        <strong>{money(totalValue)}</strong>
                                     </td>
                                 </tr>
                             </tfoot>
@@ -330,8 +314,8 @@ export function StockImportDetailPage() {
                 width="compact"
             >
                 <p className="stock-import-confirm-summary">
-                    <strong>{number(record.total_quantity)} units</strong> across {record.items.length} product lines
-                    will be added to {record.warehouse.name}.
+                    <strong>{number(record.total_quantity)} base units</strong> across {record.items.length} product
+                    lines will be added to {record.warehouse.name}.
                 </p>
             </Dialog>
 

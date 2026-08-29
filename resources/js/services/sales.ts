@@ -41,6 +41,12 @@ export type Sale = {
     total_amount: number;
     status: SaleStatus;
     notes: string | null;
+    creation_location: {
+        latitude: number;
+        longitude: number;
+        accuracy_meters: number | null;
+        captured_at: string | null;
+    } | null;
     items: SaleItem[];
     total_quantity: number;
     total_foc_quantity?: number;
@@ -79,6 +85,17 @@ export type SalesCustomer = SalesCustomerInput & {
     credit_limit: number;
     id: number;
     is_active: boolean;
+    way: {
+        code: string;
+        id: number;
+        name: string;
+        region: {
+            id: number;
+            name: string;
+            warehouse: { code: string; id: number; name: string } | null;
+            warehouse_id: number;
+        } | null;
+    } | null;
 };
 export type SaleProductOption = SaleProduct & {
     selling_price: number;
@@ -101,6 +118,9 @@ export type SaleInput = {
     customer_id: number;
     payment_type: PaymentType;
     notes: string;
+    creation_latitude?: number;
+    creation_longitude?: number;
+    location_accuracy_meters?: number;
     items: {
         product_id: number;
         product_unit_id?: number;
@@ -173,8 +193,13 @@ export const saleApi = {
             window.axios.get('api/sales/sales', { params: { ...filters, per_page: 10 } }),
         ),
     ownSale: (id: number) => request<{ data: Sale }>(() => window.axios.get(`api/sales/sales/${id}`)),
-    create: (input: SaleInput) =>
-        request<{ data: Sale }>(() => window.axios.post('api/sales/sales', input, { headers: headers() })),
+    create: (
+        input: SaleInput & {
+            creation_latitude: number;
+            creation_longitude: number;
+            location_accuracy_meters?: number;
+        },
+    ) => request<{ data: Sale }>(() => window.axios.post('api/sales/sales', input, { headers: headers() })),
     update: (id: number, input: SaleInput) =>
         request<{ data: Sale }>(() => window.axios.put(`api/sales/sales/${id}`, input)),
     post: (id: number) =>

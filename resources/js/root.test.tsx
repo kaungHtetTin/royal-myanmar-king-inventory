@@ -31,6 +31,27 @@ describe('application portals', () => {
         window.localStorage.clear();
         window.axios = axios;
         vi.restoreAllMocks();
+        Object.defineProperty(navigator, 'geolocation', {
+            configurable: true,
+            value: {
+                getCurrentPosition: vi.fn((success: PositionCallback) =>
+                    success({
+                        coords: {
+                            accuracy: 12,
+                            altitude: null,
+                            altitudeAccuracy: null,
+                            heading: null,
+                            latitude: 16.8409,
+                            longitude: 96.1735,
+                            speed: null,
+                            toJSON: () => ({}),
+                        },
+                        timestamp: Date.now(),
+                        toJSON: () => ({}),
+                    } as GeolocationPosition),
+                ),
+            },
+        });
     });
 
     it('renders the admin shell on an admin route', () => {
@@ -87,6 +108,29 @@ describe('application portals', () => {
                         visibility: { cash: true, sales: true, stock: true },
                     },
                 });
+            if (url === 'api/admin/representative-inventory')
+                return Promise.resolve({
+                    data: {
+                        data: [
+                            {
+                                foc_quantity: 4,
+                                id: 1,
+                                pending_quantity: 3,
+                                product: {
+                                    base_unit: 'bottle',
+                                    id: 1,
+                                    name: 'Drinking Water',
+                                    sku: 'DW-1L',
+                                    unit: 'box',
+                                },
+                                quantity: 12,
+                                representative: { code: 'SR-001', id: 7, name: 'Ko Aung' },
+                                updated_at: '2026-08-26T10:00:00Z',
+                            },
+                        ],
+                        meta: { ...meta, from: 1, to: 1, total: 1 },
+                    },
+                });
             return Promise.resolve({ data: { data: [], meta } });
         });
 
@@ -100,8 +144,246 @@ describe('application portals', () => {
         expect(screen.getByText('12,500 MMK')).toBeInTheDocument();
         expect(screen.getByRole('img', { name: 'Daily posted sales for the last 30 days' })).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: 'Holding stock' })).toBeInTheDocument();
+        expect(screen.getByRole('searchbox', { name: 'Search holding stock products' })).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: 'Sale history' })).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: 'Cash submission history' })).toBeInTheDocument();
+        const operationsRow = document.querySelector('.representative-operations-grid');
+        expect(operationsRow).not.toBeNull();
+        expect(
+            within(operationsRow as HTMLElement).getByRole('heading', { name: 'Holding stock' }),
+        ).toBeInTheDocument();
+        expect(
+            within(operationsRow as HTMLElement).getByRole('heading', { name: 'Cash submission history' }),
+        ).toBeInTheDocument();
+        expect(within(operationsRow as HTMLElement).queryByRole('heading', { name: 'Sale history' })).toBeNull();
+        expect(operationsRow?.children[0]).toHaveClass('representative-stock-panel');
+        expect(operationsRow?.children[1]).toHaveClass('representative-cash-panel');
+        expect(operationsRow?.nextElementSibling).toHaveClass('representative-sales-panel');
+        const stockTable = within(operationsRow as HTMLElement).getByRole('table');
+        expect(
+            within(stockTable)
+                .getAllByRole('columnheader')
+                .map((header) => header.textContent),
+        ).toEqual(['Product', 'Paid base', 'FOC base', 'Incoming base', 'Updated']);
+        expect(within(stockTable).getAllByText('bottle')).toHaveLength(3);
+        expect(within(stockTable).getByText('DW-1L · box')).toBeInTheDocument();
+
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search holding stock products' }), {
+            target: { value: 'DW-1L' },
+        });
+        fireEvent.click(within(operationsRow as HTMLElement).getByRole('button', { name: 'Search' }));
+        await waitFor(() =>
+            expect(axios.get).toHaveBeenCalledWith(
+                'api/admin/representative-inventory',
+                expect.objectContaining({
+                    params: expect.objectContaining({ page: 1, representative_id: 7, search: 'DW-1L' }),
+                }),
+            ),
+        );
+    });
+
+    it('shows representative transfer paid and FOC quantities in the detail table', async () => {
+        vi.spyOn(axios, 'get').mockImplementation((url) => {
+            if (url !== 'api/admin/representative-returns/2') return Promise.reject(new Error(`Unexpected GET ${url}`));
+
+            return Promise.resolve({
+                data: {
+                    data: {
+                        cancel_reason: null,
+                        cancelled_at: null,
+                        cancelled_by: null,
+                        created_at: '2026-08-26T10:59:00Z',
+                        created_by: { id: 1, name: 'Super Admin' },
+                        direction: 'return',
+                        dispatched_at: '2026-08-26T11:00:00Z',
+                        dispatched_by: { id: 1, name: 'Super Admin' },
+                        id: 2,
+                        items: [
+                            {
+                                base_quantity: 24,
+                                foc_base_quantity: 6,
+                                foc_quantity: 6,
+                                foc_unit: { conversion_factor: 1, id: 21, name: 'bottle' },
+                                id: 1,
+                                in_transit_quantity: 0,
+                                product: {
+                                    id: 1,
+                                    name: 'Drinking Water 1 Litre',
+                                    sku: 'DW-1L',
+                                    unit: 'bottle',
+                                },
+                                quantity: 2,
+                                unit: { conversion_factor: 12, id: 22, name: 'box' },
+                            },
+                        ],
+                        notes: null,
+                        received_at: '2026-08-26T11:01:00Z',
+                        received_by: { id: 1, name: 'Super Admin' },
+                        reference: 'RRT-000002',
+                        representative: { code: 'SR-000001', id: 7, name: 'Kaung Htet Tin' },
+                        reversal_reason: null,
+                        reversed_at: null,
+                        reversed_by: null,
+                        source_warehouse: { code: 'YGN-MAIN', id: 1, name: 'Yangon Warehouse' },
+                        status: 'received',
+                        total_quantity: 2,
+                    },
+                },
+            });
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/admin/transfers/representative-return/2']}>
+                <Root initialUser={baseUser} />
+            </MemoryRouter>,
+        );
+
+        expect(await screen.findByRole('heading', { name: 'RRT-000002' })).toBeInTheDocument();
+        const table = screen.getByRole('table', { name: 'Transfer product lines' });
+        expect(
+            within(table)
+                .getAllByRole('columnheader')
+                .map((header) => header.textContent),
+        ).toEqual(['Product', 'Unit', 'Transfer quantity', 'FOC', 'Paid base', 'In transit']);
+        expect(within(table).getByText('bottle, 6 base')).toBeInTheDocument();
+        expect(within(table).getByText('FOC base').parentElement).toHaveTextContent('6FOC base');
+        expect(within(screen.getByRole('region', { name: 'Transfer summary' })).getByText('30')).toBeInTheDocument();
+    });
+
+    it('returns representative paid and FOC stock using selected units', async () => {
+        vi.spyOn(axios, 'get').mockImplementation((url) => {
+            if (url === 'api/admin/representative-return-options')
+                return Promise.resolve({
+                    data: {
+                        products: [
+                            {
+                                id: 1,
+                                name: 'Drinking Water',
+                                representative_foc_stock: { 7: 5 },
+                                representative_stock: { 7: 24 },
+                                sku: 'DW-1L',
+                                unit: 'box',
+                                units: [
+                                    {
+                                        conversion_factor: 1,
+                                        id: 11,
+                                        is_base: true,
+                                        is_default_selling: false,
+                                        name: 'bottle',
+                                    },
+                                    {
+                                        conversion_factor: 12,
+                                        id: 12,
+                                        is_base: false,
+                                        is_default_selling: true,
+                                        name: 'box',
+                                    },
+                                ],
+                            },
+                        ],
+                        representatives: [{ code: 'SR-001', id: 7, name: 'Ko Aung', primary_warehouse_id: 1 }],
+                        source_warehouses: [{ code: 'YGN-MAIN', id: 1, name: 'Yangon Main' }],
+                    },
+                });
+            return Promise.resolve({ data: {} });
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/admin/transfers/representative-return/new']}>
+                <Root initialUser={baseUser} />
+            </MemoryRouter>,
+        );
+
+        expect(await screen.findByRole('heading', { name: 'Create representative return' })).toBeInTheDocument();
+        fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Select Drinking Water' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+        expect(screen.getByText('Set return units and quantities')).toBeInTheDocument();
+        expect(screen.getByText('Paid: 24 · FOC: 5 base available')).toBeInTheDocument();
+        const returnUnit = screen.getByRole('combobox', { name: 'Return unit' });
+        expect(returnUnit).toHaveValue('12');
+        const returnQuantityLine = returnUnit.closest('.transfer-quantity-line');
+        expect(returnQuantityLine).not.toBeNull();
+        expect(within(returnQuantityLine as HTMLElement).getAllByRole('combobox')).toHaveLength(2);
+        expect(within(returnQuantityLine as HTMLElement).getAllByRole('spinbutton')).toHaveLength(2);
+        expect(returnQuantityLine?.querySelectorAll(':scope > label')).toHaveLength(4);
+        fireEvent.change(screen.getByRole('combobox', { name: 'FOC unit' }), { target: { value: '11' } });
+        fireEvent.change(screen.getByRole('spinbutton', { name: 'Paid quantity' }), { target: { value: '2' } });
+        fireEvent.change(screen.getByRole('spinbutton', { name: 'FOC quantity' }), { target: { value: '6' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        expect(screen.getByText('Enter a whole FOC quantity within 5 available base units.')).toBeInTheDocument();
+
+        fireEvent.change(screen.getByRole('spinbutton', { name: 'FOC quantity' }), { target: { value: '3' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        expect(screen.getByText('Paid / FOC base').parentElement).toHaveTextContent('24 / 3');
+        expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
+            'Product',
+            'Paid',
+            'FOC',
+        ]);
+        expect(screen.getByText('box · 24 base')).toBeInTheDocument();
+        expect(screen.getByText('bottle · 3 base')).toBeInTheDocument();
+    });
+
+    it('keeps representative issue units and quantities in one compact item row', async () => {
+        vi.spyOn(axios, 'get').mockImplementation((url) => {
+            if (url !== 'api/admin/representative-transfer-options')
+                return Promise.reject(new Error(`Unexpected GET ${url}`));
+
+            return Promise.resolve({
+                data: {
+                    products: [
+                        {
+                            id: 1,
+                            name: 'Drinking Water',
+                            sku: 'DW-1L',
+                            unit: 'box',
+                            units: [
+                                {
+                                    conversion_factor: 1,
+                                    id: 11,
+                                    is_base: true,
+                                    is_default_selling: false,
+                                    name: 'bottle',
+                                },
+                                {
+                                    conversion_factor: 10,
+                                    id: 12,
+                                    is_base: false,
+                                    is_default_selling: true,
+                                    name: 'box',
+                                },
+                            ],
+                            warehouse_stock: { 1: 909 },
+                        },
+                    ],
+                    representatives: [{ code: 'SR-001', id: 7, name: 'Ko Aung', primary_warehouse_id: 1 }],
+                    source_warehouses: [{ code: 'YGN-MAIN', id: 1, name: 'Yangon Main' }],
+                },
+            });
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/admin/transfers/representative/new']}>
+                <Root initialUser={baseUser} />
+            </MemoryRouter>,
+        );
+
+        expect(await screen.findByRole('heading', { name: 'Create representative issue' })).toBeInTheDocument();
+        fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+        fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Drinking Water' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+        expect(screen.getByText('Set issue quantities')).toBeInTheDocument();
+        const issueUnit = screen.getByRole('combobox', { name: 'Issue unit' });
+        const issueQuantityLine = issueUnit.closest('.transfer-quantity-line');
+        expect(issueQuantityLine).not.toBeNull();
+        expect(within(issueQuantityLine as HTMLElement).getAllByRole('combobox')).toHaveLength(2);
+        expect(within(issueQuantityLine as HTMLElement).getAllByRole('spinbutton')).toHaveLength(2);
+        expect(issueQuantityLine?.querySelectorAll(':scope > label')).toHaveLength(4);
+        expect(screen.getByRole('spinbutton', { name: 'Paid stock quantity' })).toHaveValue(1);
+        expect(screen.getByRole('spinbutton', { name: 'FOC quantity' })).toHaveValue(0);
     });
 
     it('filters customer detail sales and summary by an applied date range', async () => {
@@ -248,8 +530,6 @@ describe('application portals', () => {
                         name: 'Yangon Main Warehouse',
                         notes: null,
                         phone: '09-123456789',
-                        region: 'Yangon',
-                        township: 'Hlaing',
                         updated_at: '2026-08-17T00:00:00Z',
                         users_count: 2,
                     },
@@ -273,12 +553,18 @@ describe('application portals', () => {
 
         expect(await screen.findByRole('heading', { name: 'Warehouses' })).toBeInTheDocument();
         expect(await screen.findByText('Yangon Main Warehouse')).toBeInTheDocument();
+        expect(screen.getByRole('table')).toHaveClass('warehouse-table');
+        expect(screen.getByRole('table').parentElement).toHaveClass('warehouse-table-wrap');
         expect(screen.getByRole('link', { name: 'Open settings for Yangon Main Warehouse' })).toHaveAttribute(
             'href',
             '/admin/warehouses/1/settings',
         );
         fireEvent.click(screen.getByRole('button', { name: 'New warehouse' }));
-        expect(screen.getByRole('dialog', { name: 'Create warehouse' })).toBeInTheDocument();
+        const warehouseDialog = screen.getByRole('dialog', { name: 'Create warehouse' });
+        expect(warehouseDialog).toBeInTheDocument();
+        expect(within(warehouseDialog).getByRole('textbox', { name: 'Address' })).toBeInTheDocument();
+        expect(within(warehouseDialog).queryByRole('textbox', { name: 'Region' })).not.toBeInTheDocument();
+        expect(within(warehouseDialog).queryByRole('textbox', { name: 'Township' })).not.toBeInTheDocument();
     });
 
     it('loads Region and Way management on a separate warehouse settings page', async () => {
@@ -293,8 +579,6 @@ describe('application portals', () => {
                     name: 'Yangon Main Warehouse',
                     notes: null,
                     phone: '09-123456789',
-                    region: 'Yangon',
-                    township: 'Hlaing',
                     updated_at: '2026-08-17T00:00:00Z',
                     users_count: 2,
                     regions: [
@@ -358,7 +642,15 @@ describe('application portals', () => {
         expect(screen.queryByLabelText('New Region')).not.toBeInTheDocument();
         expect(screen.queryByLabelText('New Way name')).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Add Region' }));
-        expect(screen.getByRole('dialog', { name: 'Create Region' })).toBeInTheDocument();
+        const regionDialog = screen.getByRole('dialog', { name: 'Create Region' });
+        expect(regionDialog).toBeInTheDocument();
+        const regionNameInput = within(regionDialog).getByRole('textbox', { name: 'Region name' });
+        regionNameInput.focus();
+        fireEvent.change(regionNameInput, { target: { value: 'M' } });
+        expect(regionNameInput).toHaveFocus();
+        fireEvent.change(regionNameInput, { target: { value: 'Mingalar Taung Nyunt' } });
+        expect(regionNameInput).toHaveValue('Mingalar Taung Nyunt');
+        expect(regionNameInput).toHaveFocus();
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
         fireEvent.click(screen.getByRole('button', { name: 'Add Way' }));
         expect(screen.getByRole('dialog', { name: 'Create Way' })).toBeInTheDocument();
@@ -374,7 +666,32 @@ describe('application portals', () => {
         vi.spyOn(axios, 'get').mockImplementation((url) => {
             if (url === 'api/admin/product-options')
                 return Promise.resolve({
-                    data: { categories: ['Drinking Water'], units: ['bottle'] },
+                    data: {
+                        categories: ['Drinking Water'],
+                        units: ['bottle'],
+                        regions: [
+                            {
+                                id: 4,
+                                name: 'Yangon',
+                                warehouse: { code: 'YGN-MAIN', id: 2, name: 'Yangon Main' },
+                            },
+                            {
+                                id: 2,
+                                name: 'Mandalay',
+                                warehouse: { code: 'MDY-MAIN', id: 1, name: 'Mandalay Main' },
+                            },
+                            {
+                                id: 3,
+                                name: 'Mingaladon',
+                                warehouse: { code: 'YGN-MAIN', id: 2, name: 'Yangon Main' },
+                            },
+                            {
+                                id: 1,
+                                name: 'Pyin Oo Lwin',
+                                warehouse: { code: 'MDY-MAIN', id: 1, name: 'Mandalay Main' },
+                            },
+                        ],
+                    },
                 });
             return Promise.resolve({
                 data: {
@@ -416,6 +733,22 @@ describe('application portals', () => {
         fireEvent.click(screen.getByRole('button', { name: 'New product' }));
         expect(await screen.findByRole('heading', { name: 'Create product' })).toBeInTheDocument();
         expect(await screen.findByRole('heading', { name: 'Catalogue and pricing setup' })).toBeInTheDocument();
+        const unitTable = screen.getByRole('table', { name: 'Product units and prices by warehouse Region' });
+        expect(
+            Array.from(unitTable.querySelectorAll<HTMLTableCellElement>('th[data-region-id]')).map(
+                (header) => header.firstChild?.textContent,
+            ),
+        ).toEqual(['Mandalay', 'Pyin Oo Lwin', 'Mingaladon', 'Yangon']);
+        expect(await within(unitTable).findByRole('textbox', { name: 'Unit name for row 1' })).toHaveValue('piece');
+        const regionalPrice = within(unitTable).getByRole('textbox', {
+            name: 'Mandalay price for piece in MMK',
+        });
+        expect(regionalPrice).toHaveAttribute('inputmode', 'numeric');
+        expect(regionalPrice).toHaveValue('0');
+        fireEvent.change(regionalPrice, { target: { value: '12,500' } });
+        expect(regionalPrice).toHaveValue('12,500');
+        expect(within(unitTable).getAllByText('MMK')).toHaveLength(4);
+        expect(unitTable.querySelector('.product-price-input__currency')).not.toBeInTheDocument();
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
@@ -432,6 +765,22 @@ describe('application portals', () => {
                                 selling_price: 1000,
                                 sku: 'DW-1L',
                                 unit: 'bottle',
+                                units: [
+                                    {
+                                        conversion_factor: 1,
+                                        id: 11,
+                                        is_base: true,
+                                        is_default_selling: false,
+                                        name: 'bottle',
+                                    },
+                                    {
+                                        conversion_factor: 12,
+                                        id: 12,
+                                        is_base: false,
+                                        is_default_selling: true,
+                                        name: 'box',
+                                    },
+                                ],
                             },
                         ],
                         warehouses: [
@@ -449,6 +798,7 @@ describe('application portals', () => {
                         {
                             id: 1,
                             product: {
+                                base_unit: 'bottle',
                                 id: 1,
                                 name: 'Drinking Water 1 Litre',
                                 sku: 'DW-1L',
@@ -497,15 +847,17 @@ describe('application portals', () => {
         fireEvent.click(importForm.getByRole('checkbox', { name: 'Select Drinking Water 1 Litre' }));
         expect(importForm.getByText('1 selected')).toBeInTheDocument();
         fireEvent.click(importForm.getByRole('button', { name: 'Next' }));
-        expect(importForm.getByText('Quantity and selling price')).toBeInTheDocument();
+        expect(importForm.getByText('Units and quantities')).toBeInTheDocument();
         expect(importForm.getByRole('button', { name: 'Save draft' })).toBeInTheDocument();
-        fireEvent.change(importForm.getByRole('spinbutton', { name: 'Quantity' }), { target: { value: '12' } });
-        fireEvent.change(importForm.getByRole('spinbutton', { name: /^Selling price \(MMK\)/ }), {
-            target: { value: '1250' },
+        const unitSelect = importForm.getByRole('combobox', { name: 'Unit' });
+        expect(unitSelect).toHaveValue('12');
+        fireEvent.change(unitSelect, { target: { value: '11' } });
+        fireEvent.change(importForm.getByRole('spinbutton', { name: 'Import quantity' }), {
+            target: { value: '12' },
         });
         fireEvent.click(importForm.getByRole('button', { name: 'Review' }));
-        expect(importForm.getByText('12 total units')).toBeInTheDocument();
-        expect(importForm.getByText('Price will be updated')).toBeInTheDocument();
+        expect(importForm.getByText('12 total base units')).toBeInTheDocument();
+        expect(importForm.queryByRole('columnheader', { name: 'Selling price' })).not.toBeInTheDocument();
         expect(importForm.getByRole('button', { name: 'Post import' })).toBeInTheDocument();
         expect(importForm.queryByRole('button', { name: 'Save draft' })).not.toBeInTheDocument();
         fireEvent.click(importForm.getByRole('button', { name: 'Cancel' }));
@@ -538,6 +890,22 @@ describe('application portals', () => {
                                 name: 'Drinking Water 1 Litre',
                                 sku: 'DW-1L',
                                 unit: 'bottle',
+                                units: [
+                                    {
+                                        conversion_factor: 1,
+                                        id: 21,
+                                        is_base: true,
+                                        is_default_selling: false,
+                                        name: 'bottle',
+                                    },
+                                    {
+                                        conversion_factor: 12,
+                                        id: 22,
+                                        is_base: false,
+                                        is_default_selling: true,
+                                        name: 'box',
+                                    },
+                                ],
                             },
                         ],
                         source_warehouses: [
@@ -637,8 +1005,13 @@ describe('application portals', () => {
         fireEvent.click(transferForm.getByRole('button', { name: 'Continue' }));
         fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Drinking Water 1 Litre' }));
         fireEvent.click(transferForm.getByRole('button', { name: 'Continue' }));
-        expect(transferForm.getByLabelText('Quantity')).toHaveValue(1);
+        expect(transferForm.getByRole('combobox', { name: 'Unit' })).toHaveValue('22');
+        fireEvent.change(transferForm.getByRole('spinbutton', { name: 'Transfer quantity' }), {
+            target: { value: '3' },
+        });
         fireEvent.click(transferForm.getByRole('button', { name: 'Continue' }));
+        expect(transferForm.getByText('Total base units').parentElement).toHaveTextContent('36');
+        expect(transferForm.getByRole('columnheader', { name: 'Unit' })).toBeInTheDocument();
         expect(transferForm.getByRole('button', { name: 'Submit transfer' })).toBeInTheDocument();
         expect(post).not.toHaveBeenCalled();
     });
@@ -716,6 +1089,7 @@ describe('application portals', () => {
                                 unit: 'bottle',
                             },
                             quantity: 70,
+                            foc_quantity: 5,
                             representative: {
                                 code: 'SR-001',
                                 id: 1,
@@ -748,6 +1122,18 @@ describe('application portals', () => {
             'href',
             '/sales/receivings/1',
         );
+        const stockTable = screen.getByRole('table', { name: 'Available product stock' });
+        expect(within(stockTable).getByRole('columnheader', { name: 'Paid base' })).toBeInTheDocument();
+        expect(within(stockTable).getByRole('columnheader', { name: 'FOC base' })).toBeInTheDocument();
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search available products' }), {
+            target: { value: 'DW-1L' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+        await waitFor(() =>
+            expect(get).toHaveBeenCalledWith('api/sales/stock', {
+                params: { page: 1, per_page: 10, search: 'DW-1L' },
+            }),
+        );
         fireEvent.click(within(screen.getByRole('navigation', { name: 'Pending stock pagination' })).getByText('Next'));
         await waitFor(() =>
             expect(get).toHaveBeenCalledWith('api/sales/receivings', { params: { page: 2, per_page: 10 } }),
@@ -755,7 +1141,80 @@ describe('application portals', () => {
         fireEvent.click(
             within(screen.getByRole('navigation', { name: 'Available products pagination' })).getByText('Next'),
         );
-        await waitFor(() => expect(get).toHaveBeenCalledWith('api/sales/stock', { params: { page: 2, per_page: 10 } }));
+        await waitFor(() =>
+            expect(get).toHaveBeenCalledWith('api/sales/stock', {
+                params: { page: 2, per_page: 10, search: 'DW-1L' },
+            }),
+        );
+    });
+
+    it('shows paid and FOC units in the representative receiving detail table', async () => {
+        vi.spyOn(axios, 'get').mockImplementation((url) => {
+            if (url !== 'api/sales/receivings/1') return Promise.reject(new Error(`Unexpected GET ${url}`));
+
+            return Promise.resolve({
+                data: {
+                    data: {
+                        cancel_reason: null,
+                        cancelled_at: null,
+                        cancelled_by: null,
+                        created_at: '2026-08-26T10:40:00Z',
+                        created_by: { id: 1, name: 'Super Admin' },
+                        direction: 'issue',
+                        dispatched_at: '2026-08-26T10:46:00Z',
+                        dispatched_by: { id: 1, name: 'Super Admin' },
+                        id: 1,
+                        items: [
+                            {
+                                base_quantity: 24,
+                                foc_base_quantity: 6,
+                                foc_quantity: 6,
+                                foc_unit: { conversion_factor: 1, id: 21, name: 'bottle' },
+                                id: 1,
+                                in_transit_quantity: 0,
+                                product: {
+                                    id: 1,
+                                    name: 'Drinking Water 1 Litre',
+                                    sku: 'DW-1L',
+                                    unit: 'bottle',
+                                },
+                                quantity: 2,
+                                unit: { conversion_factor: 12, id: 22, name: 'box' },
+                            },
+                        ],
+                        notes: null,
+                        received_at: '2026-08-26T10:50:00Z',
+                        received_by: { id: 2, name: 'Ko Aung' },
+                        reference: 'RTR-000001',
+                        representative: { code: 'SR-001', id: 1, name: 'Ko Aung' },
+                        reversal_reason: null,
+                        reversed_at: null,
+                        reversed_by: null,
+                        source_warehouse: { code: 'YGN-MAIN', id: 1, name: 'Yangon Warehouse' },
+                        status: 'received',
+                        total_quantity: 2,
+                    },
+                },
+            });
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/sales/receivings/1']}>
+                <Root initialUser={representativeUser} />
+            </MemoryRouter>,
+        );
+
+        expect(await screen.findByRole('heading', { name: 'RTR-000001' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: '1 products · 30 base units' })).toBeInTheDocument();
+        const table = screen.getByRole('table', { name: 'Receiving product lines' });
+        expect(
+            within(table)
+                .getAllByRole('columnheader')
+                .map((header) => header.textContent),
+        ).toEqual(['Product', 'Paid', 'FOC', 'Total base']);
+        expect(within(table).getByText('box, 24 base')).toBeInTheDocument();
+        expect(within(table).getByText('bottle, 6 base')).toBeInTheDocument();
+        expect(within(table).getAllByRole('row')).toHaveLength(3);
     });
 
     it('loads the representative sale-entry workflow with stock and credit previews', async () => {
@@ -773,6 +1232,12 @@ describe('application portals', () => {
                             name: 'New Route Shop',
                             outstanding_amount: 0,
                         },
+                    },
+                });
+            if (url === 'api/sales/sales')
+                return Promise.resolve({
+                    data: {
+                        data: { id: 9, reference: 'SAL-000009', total_amount: 2000 },
                     },
                 });
             return Promise.resolve({ data: {} });
@@ -812,6 +1277,7 @@ describe('application portals', () => {
                                 id: 1,
                                 name: 'Drinking Water 1 Litre',
                                 quantity: 20,
+                                foc_quantity: 5,
                                 selling_price: 1000,
                                 sku: 'DW-1L',
                                 unit: 'bottle',
@@ -876,6 +1342,7 @@ describe('application portals', () => {
         fireEvent.click(screen.getByRole('option', { name: /ABC Shop/ }));
         fireEvent.click(screen.getByRole('radio', { name: 'Credit' }));
         expect(screen.getByRole('radio', { name: 'Credit' })).toBeChecked();
+        expect(screen.getByText('Device location captured')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Continue to products' }));
 
         expect(screen.getByRole('heading', { name: 'Products' })).toBeInTheDocument();
@@ -892,16 +1359,44 @@ describe('application portals', () => {
         expect(await screen.findByText('Only 20 units are currently available.')).toBeInTheDocument();
 
         fireEvent.change(quantity, { target: { value: '2' } });
+        const focQuantity = screen.getByLabelText('FOC quantity');
+        fireEvent.change(focQuantity, { target: { value: '6' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Review sale' }));
+        expect(await screen.findByText('Only 5 FOC base units are available.')).toBeInTheDocument();
+
+        fireEvent.change(focQuantity, { target: { value: '2' } });
         fireEvent.click(screen.getByRole('button', { name: 'Review sale' }));
         expect(screen.getByRole('heading', { name: 'Review & submit' })).toBeInTheDocument();
         expect(screen.queryByText('Server preview')).not.toBeInTheDocument();
         expect(screen.queryByRole('heading', { name: 'Sale summary' })).not.toBeInTheDocument();
         expect(screen.queryByText(/7,500 MMK available/)).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Edit information' })).toBeInTheDocument();
+        expect(screen.getByText('FOC: 2 bottle · 2 base')).toBeInTheDocument();
+        expect(screen.getByRole('region', { name: 'Stock movement summary' })).toHaveTextContent(
+            'Paid base units2FOC base units2',
+        );
         expect(screen.getByRole('button', { name: 'Save draft' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Post sale' })).toBeInTheDocument();
         expect(post).toHaveBeenCalledTimes(1);
         expect(post).not.toHaveBeenCalledWith('api/sales/sales', expect.anything(), expect.anything());
+        fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+        await waitFor(() =>
+            expect(post).toHaveBeenCalledWith(
+                'api/sales/sales',
+                expect.objectContaining({
+                    creation_latitude: 16.8409,
+                    creation_longitude: 96.1735,
+                    location_accuracy_meters: 12,
+                    items: [
+                        expect.objectContaining({
+                            foc_quantity: 2,
+                            quantity: 2,
+                        }),
+                    ],
+                }),
+                expect.any(Object),
+            ),
+        );
     });
 
     it('links the profile menu to the sales customer list and new customer page', async () => {
@@ -924,6 +1419,17 @@ describe('application portals', () => {
                                 phone: '09-111222333',
                                 region: 'Yangon',
                                 township: 'Hlaing',
+                                way: {
+                                    code: 'WAY-01',
+                                    id: 1,
+                                    name: 'Route 1',
+                                    region: {
+                                        id: 1,
+                                        name: 'Yangon North',
+                                        warehouse: { code: 'YGN', id: 1, name: 'Yangon Warehouse' },
+                                        warehouse_id: 1,
+                                    },
+                                },
                             },
                         ],
                         meta: {
@@ -946,6 +1452,7 @@ describe('application portals', () => {
         );
         expect(await screen.findByRole('heading', { name: 'Customers' })).toBeInTheDocument();
         expect(await screen.findByText('Route Shop')).toBeInTheDocument();
+        expect(screen.getByText('Yangon Warehouse · Yangon North')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Profile menu' }));
         expect(screen.getByRole('menuitem', { name: 'Customers' })).toHaveAttribute('href', '/sales/customers');
         fireEvent.click(screen.getByRole('link', { name: 'New customer' }));
@@ -1804,6 +2311,13 @@ describe('application portals', () => {
         );
         expect(await screen.findByText('8,100 MMK')).toBeInTheDocument();
         expect(await screen.findByText('IMP-000001')).toBeInTheDocument();
+        const movementsTable = screen.getByRole('table', { name: 'Recent stock movements' });
+        expect(movementsTable).toHaveClass('dashboard-stock-movements-table');
+        expect(
+            within(movementsTable)
+                .getAllByRole('columnheader')
+                .map((header) => header.textContent),
+        ).toEqual(['Reference', 'Product', 'Movement', 'Qty', 'Actor / time']);
         expect(screen.getByRole('combobox', { name: 'Warehouse scope' })).toBeInTheDocument();
         expect(await screen.findByRole('link', { name: 'Transfers, 2 actions need attention' })).toBeInTheDocument();
         expect(

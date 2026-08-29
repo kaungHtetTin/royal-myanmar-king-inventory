@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\PermissionName;
 use App\Enums\RoleName;
+use App\Models\SalesRepresentative;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Services\WarehouseAccess;
@@ -38,6 +39,14 @@ class AccessControlTest extends TestCase
     {
         $user = User::factory()->create();
         $user->assignRole(RoleName::SalesRepresentative->value);
+        $warehouse = Warehouse::query()->create(['code' => 'YGN', 'name' => 'Yangon']);
+        SalesRepresentative::query()->create([
+            'code' => 'SR-001',
+            'user_id' => $user->id,
+            'primary_warehouse_id' => $warehouse->id,
+            'name' => $user->name,
+            'is_active' => true,
+        ]);
 
         $this->actingAs($user)->getJson('/api/sales/me')->assertOk();
         $this->getJson('/api/admin/me')->assertForbidden();

@@ -10,10 +10,11 @@ import {
 } from '../../services/settings';
 import { Icon, type IconName } from '../../ui/icons';
 import { editableNumber } from '../../ui/form-values';
+import { PrintSettingsForm } from '../../ui/invoice-print-dialog';
 import { Button } from '../../ui/primitives';
 import { RoleManagementSection } from './access-management-page';
 
-type Section = 'profile' | 'branding' | 'operations' | 'roles';
+type Section = 'profile' | 'branding' | 'operations' | 'printing' | 'roles';
 
 const emptyProfile: ProfileInput = {
     current_password: '',
@@ -48,6 +49,7 @@ const sections: Array<{ description: string; icon: IconName; id: Section; label:
         id: 'operations',
         label: 'Operational defaults',
     },
+    { description: 'Default invoice paper for this device', icon: 'print', id: 'printing', label: 'Printing' },
     { description: 'Access profiles and permissions', icon: 'users', id: 'roles', label: 'Roles & permissions' },
 ];
 
@@ -233,7 +235,7 @@ export function SettingsPage() {
                 <div>
                     <p className="ui-eyebrow">Office configuration</p>
                     <h1>Application settings</h1>
-                    <p>Manage your account, visual identity, contact details, and operational defaults.</p>
+                    <p>Manage your account, visual identity, printing, contact details, and operational defaults.</p>
                 </div>
             </header>
 
@@ -658,6 +660,16 @@ export function SettingsPage() {
                             </section>
                             <SaveBar label="Save defaults" saving={saving} />
                         </form>
+                    ) : null}
+                    {!loading && section === 'printing' ? (
+                        <div>
+                            <SettingsHeading
+                                eyebrow="Device preference"
+                                title="Printing"
+                                description="Choose the invoice paper size used by default for your account on this device."
+                            />
+                            <PrintSettingsForm />
+                        </div>
                     ) : null}
                     {!loading && section === 'roles' ? <RoleManagementSection /> : null}
                 </main>

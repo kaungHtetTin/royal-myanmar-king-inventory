@@ -6,6 +6,7 @@ use App\Enums\PermissionName;
 use App\Enums\RoleName;
 use App\Models\AuditLog;
 use App\Models\Product;
+use App\Models\ProductUnit;
 use App\Models\StockAdjustment;
 use App\Models\StockImport;
 use App\Models\StockMovement;
@@ -31,6 +32,14 @@ class Phase3InventoryTest extends TestCase
         $admin = $this->superAdmin();
         [$yangon, $mandalay] = Warehouse::factory()->count(2)->create();
         [$water, $juice] = Product::factory()->count(2)->create();
+        $water->defaultSellingUnit()->update(['is_default_selling' => false]);
+        $water->units()->create([
+            'name' => 'box',
+            'conversion_factor' => 12,
+            'is_base' => false,
+            'is_default_selling' => true,
+            'is_active' => true,
+        ]);
         WarehouseInventory::query()->create(['warehouse_id' => $yangon->id, 'product_id' => $water->id, 'quantity' => 10]);
         WarehouseInventory::query()->create(['warehouse_id' => $mandalay->id, 'product_id' => $water->id, 'quantity' => 15]);
         WarehouseInventory::query()->create(['warehouse_id' => $yangon->id, 'product_id' => $juice->id, 'quantity' => 4]);
@@ -38,6 +47,9 @@ class Phase3InventoryTest extends TestCase
         $this->actingAs($admin)->getJson('/api/admin/inventory?stock=all')->assertOk()
             ->assertJsonPath('meta.total', 2)->assertJsonPath('summary.products', 2)->assertJsonPath('summary.units', 29)
             ->assertJsonPath('data.0.product.id', $water->id)->assertJsonPath('data.0.quantity', 25)
+            ->assertJsonPath('data.0.product.base_unit.name', $water->baseUnit()->value('name'))
+            ->assertJsonPath('data.0.product.default_selling_unit.name', 'box')
+            ->assertJsonPath('data.0.product.default_selling_unit.conversion_factor', 12)
             ->assertJsonMissingPath('data.0.warehouse');
 
         $this->getJson('/api/admin/inventory?warehouse_id='.$yangon->id.'&stock=all')->assertOk()
@@ -166,6 +178,51 @@ class Phase3InventoryTest extends TestCase
             ->assertConflict()->assertJsonPath('code', 'INVALID_DOCUMENT_STATE');
         $this->putJson("/api/admin/stock-imports/{$import->id}", $this->importPayload($warehouse, [['product_id' => $first->id, 'quantity' => 99]]))
             ->assertConflict()->assertJsonPath('code', 'INVALID_DOCUMENT_STATE');
+    }
+
+    public function test_import_uses_the_selected_product_unit_and_posts_its_base_quantity(): void
+    {
+        $admin = $this->superAdmin();
+        $warehouse = Warehouse::factory()->create();
+        $product = Product::factory()->create(['unit' => 'bottle']);
+        $box = ProductUnit::query()->create([
+            'product_id' => $product->id,
+            'name' => 'box',
+            'conversion_factor' => 12,
+            'is_base' => false,
+            'is_default_selling' => false,
+            'is_active' => true,
+        ]);
+
+        $created = $this->actingAs($admin)->postJson('/api/admin/stock-imports', $this->importPayload($warehouse, [
+            ['product_id' => $product->id, 'product_unit_id' => $box->id, 'quantity' => 3],
+        ]))->assertCreated()
+            ->assertJsonPath('data.items.0.product_unit.id', $box->id)
+            ->assertJsonPath('data.items.0.quantity', 3)
+            ->assertJsonPath('data.items.0.base_quantity', 36);
+
+        $importId = $created->json('data.id');
+        $this->assertDatabaseHas('stock_import_items', [
+            'stock_import_id' => $importId,
+            'product_unit_id' => $box->id,
+            'quantity' => 3,
+            'base_quantity' => 36,
+        ]);
+
+        $this->withHeader('Idempotency-Key', 'post-unit-import')
+            ->postJson("/api/admin/stock-imports/{$importId}/post")
+            ->assertOk();
+
+        $this->assertDatabaseHas('warehouse_inventories', [
+            'warehouse_id' => $warehouse->id,
+            'product_id' => $product->id,
+            'quantity' => 36,
+        ]);
+        $this->assertDatabaseHas('stock_movements', [
+            'source_type' => 'stock_import',
+            'source_id' => $importId,
+            'quantity' => 36,
+        ]);
     }
 
     public function test_void_import_restores_balance_and_preserves_both_ledger_entries(): void
@@ -335,6 +392,7 @@ class Phase3InventoryTest extends TestCase
     private function officeUser(PermissionName ...$permissions): User
     {
         $user = User::factory()->create();
+        $user->assignRole(RoleName::OfficeAdmin->value);
         $user->givePermissionTo(collect($permissions)->map->value->all());
 
         return $user;

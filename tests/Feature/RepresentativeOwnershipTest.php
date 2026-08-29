@@ -115,7 +115,11 @@ class RepresentativeOwnershipTest extends TestCase
 
     private function warehouse(string $code, string $name): Warehouse
     {
-        return Warehouse::query()->create(compact('code', 'name'));
+        $warehouse = Warehouse::query()->create(compact('code', 'name'));
+        $region = $warehouse->regions()->create(['name' => $name.' Region', 'is_active' => true]);
+        $region->ways()->create(['code' => 'WAY-'.$code, 'name' => $name.' Way', 'is_active' => true]);
+
+        return $warehouse;
     }
 
     /** @return array{User, SalesRepresentative} */
@@ -131,6 +135,7 @@ class RepresentativeOwnershipTest extends TestCase
             'email' => $user->email,
             'is_active' => true,
         ]);
+        $representative->regions()->sync([$warehouse->regions()->firstOrFail()->id]);
 
         return [$user, $representative];
     }

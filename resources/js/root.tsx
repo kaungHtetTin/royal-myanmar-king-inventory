@@ -1,5 +1,5 @@
-import { lazy, Suspense } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { lazy, Suspense, type ReactNode } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { ProtectedPortal } from './auth/protected-portal';
 import { SessionProvider } from './auth/session';
 import { BrandingProvider } from './branding/branding-provider';
@@ -183,6 +183,16 @@ function RouteLoading() {
     );
 }
 
+function RouteSuspense({ children }: { children: ReactNode }) {
+    const location = useLocation();
+
+    return (
+        <Suspense key={location.pathname} fallback={<RouteLoading />}>
+            {children}
+        </Suspense>
+    );
+}
+
 export default function Root({ initialUser }: { initialUser?: SessionUser | null }) {
     return (
         <BrandingProvider>
@@ -195,7 +205,7 @@ export default function Root({ initialUser }: { initialUser?: SessionUser | null
                         element={
                             <ProtectedPortal portal="admin">
                                 <AdminShell>
-                                    <Suspense fallback={<RouteLoading />}>
+                                    <RouteSuspense>
                                         <Routes>
                                             <Route path="dashboard" element={<AdminDashboardPage />} />
                                             <Route path="reports" element={<ReportsPage />} />
@@ -262,7 +272,7 @@ export default function Root({ initialUser }: { initialUser?: SessionUser | null
                                             <Route path="settings" element={<SettingsPage />} />
                                             <Route path="*" element={<AdminFoundationPage />} />
                                         </Routes>
-                                    </Suspense>
+                                    </RouteSuspense>
                                 </AdminShell>
                             </ProtectedPortal>
                         }

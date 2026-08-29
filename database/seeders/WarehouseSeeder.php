@@ -19,12 +19,11 @@ class WarehouseSeeder extends Seeder
 
         $wayNumber = 1;
         foreach ($warehouses as $warehouse) {
-            $firstRegion = array_key_first($warehouse['regions']);
-            $model = Warehouse::withoutEvents(fn () => Warehouse::query()->updateOrCreate(['code' => $warehouse['code']], [
-                'name' => $warehouse['name'], 'region' => $firstRegion, 'township' => $warehouse['regions'][$firstRegion][0],
+            $model = Warehouse::query()->updateOrCreate(['code' => $warehouse['code']], [
+                'name' => $warehouse['name'],
                 'address' => $warehouse['address'], 'phone' => null,
                 'notes' => 'Demonstration warehouse with regional sales coverage.', 'is_active' => true,
-            ]));
+            ]);
 
             foreach ($warehouse['regions'] as $regionName => $ways) {
                 $region = Region::query()->updateOrCreate(

@@ -4,6 +4,7 @@ import { useSession, type SessionUser } from '../auth/session-context';
 import { useBranding } from '../branding/branding-context';
 import { reportingApi } from '../services/reporting';
 import { Icon, type IconName } from '../ui/icons';
+import { PrintSettingsDialog } from '../ui/invoice-print-dialog';
 import { IconButton } from '../ui/primitives';
 import { OfflineBanner } from '../ui/offline-banner';
 import { useOnlineStatus, useUiPreferences } from '../ui/preferences';
@@ -159,10 +160,10 @@ type AdminShellProps = {
 export function AdminShell({ children }: AdminShellProps) {
     const location = useLocation();
     const profileMenuRef = useRef<HTMLDivElement>(null);
-    const searchRef = useRef<HTMLInputElement>(null);
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const [navAlerts, setNavAlerts] = useState<NavAlertCounts>({ cash: 0, transfers: 0 });
     const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+    const [printSettingsOpen, setPrintSettingsOpen] = useState(false);
     const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('inventory.sidebar') === 'collapsed');
     const { density, theme, toggleDensity, toggleTheme } = useUiPreferences();
     const online = useOnlineStatus();
@@ -180,17 +181,9 @@ export function AdminShell({ children }: AdminShellProps) {
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
-            const target = event.target as HTMLElement | null;
-            const isTyping = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
-
             if (event.key === 'Escape') {
                 setMobileNavOpen(false);
                 setProfileMenuOpen(false);
-            }
-
-            if (event.key === '/' && !isTyping) {
-                event.preventDefault();
-                searchRef.current?.focus();
             }
         };
 
@@ -362,13 +355,6 @@ export function AdminShell({ children }: AdminShellProps) {
                         </div>
                     </div>
 
-                    <label className="admin-search">
-                        <Icon name="search" size={15} />
-                        <span className="sr-only">Search the application</span>
-                        <input ref={searchRef} placeholder="Search anything…" type="search" />
-                        <kbd>/</kbd>
-                    </label>
-
                     <div className="admin-topbar__actions">
                         <div className="admin-topbar__utilities">
                             <span className={`connection-state ${online ? 'is-online' : 'is-offline'}`}>
@@ -432,6 +418,17 @@ export function AdminShell({ children }: AdminShellProps) {
                                             <Icon name="density" size={16} />
                                             <span>Use {density === 'compact' ? 'comfortable' : 'compact'} density</span>
                                         </button>
+                                        <button
+                                            onClick={() => {
+                                                setProfileMenuOpen(false);
+                                                setPrintSettingsOpen(true);
+                                            }}
+                                            role="menuitem"
+                                            type="button"
+                                        >
+                                            <Icon name="print" size={16} />
+                                            <span>Print settings</span>
+                                        </button>
                                         {canAccess('role.manage', user) ? (
                                             <Link
                                                 onClick={() => setProfileMenuOpen(false)}
@@ -468,6 +465,7 @@ export function AdminShell({ children }: AdminShellProps) {
                     {children}
                 </main>
             </div>
+            <PrintSettingsDialog onClose={() => setPrintSettingsOpen(false)} open={printSettingsOpen} />
         </div>
     );
 }

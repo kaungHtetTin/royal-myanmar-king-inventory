@@ -105,6 +105,7 @@ class RepresentativeManagementTest extends TestCase
         $foreign = Warehouse::factory()->create();
         $editor->warehouses()->attach($warehouse, ['assigned_by' => $editor->id]);
         $representative = $this->representative('SR-001', 'Ko Aung', $warehouse);
+        $representative->user->assignRole(RoleName::OfficeAdmin->value);
         $vehicle = Vehicle::factory()->create(['sales_representative_id' => $representative->id]);
 
         $this->actingAs($editor)->putJson('/api/admin/representatives/'.$representative->id, $this->payload($warehouse, [
@@ -120,6 +121,10 @@ class RepresentativeManagementTest extends TestCase
         $this->assertDatabaseHas('users', ['id' => $representative->user_id, 'is_active' => false]);
         $this->assertDatabaseHas('vehicles', ['id' => $vehicle->id, 'sales_representative_id' => $representative->id]);
         $this->assertDatabaseHas('audit_logs', ['actor_id' => $editor->id, 'event' => 'representative.updated', 'subject_id' => $representative->id]);
+        $this->assertTrue($representative->user->fresh()->hasAllRoles([
+            RoleName::OfficeAdmin->value,
+            RoleName::SalesRepresentative->value,
+        ]));
 
         $this->putJson('/api/admin/representatives/'.$representative->id, $this->payload($foreign, [
             'code' => 'SR-001', 'username' => 'aung.updated', 'email' => null, 'password' => '', 'password_confirmation' => '',
@@ -158,7 +163,7 @@ class RepresentativeManagementTest extends TestCase
         return array_merge([
             'code' => 'SR-NEW', 'name' => 'New Representative', 'phone' => '09-123456789', 'email' => 'new.rep@example.com',
             'username' => 'new.rep', 'password' => 'secret', 'password_confirmation' => 'secret',
-            'primary_warehouse_id' => $warehouse->id, 'region' => 'Yangon', 'vehicle_id' => null,
+            'primary_warehouse_id' => $warehouse->id, 'region_ids' => [$this->region($warehouse)->id], 'vehicle_id' => null,
             'notes' => 'Distribution representative.', 'is_active' => true,
         ], $overrides);
     }
@@ -169,10 +174,18 @@ class RepresentativeManagementTest extends TestCase
         $user->assignRole(RoleName::SalesRepresentative->value);
         $user->warehouses()->attach($warehouse, ['assigned_by' => $user->id]);
 
-        return SalesRepresentative::query()->create([
+        $representative = SalesRepresentative::query()->create([
             'code' => $code, 'user_id' => $user->id, 'primary_warehouse_id' => $warehouse->id,
             'name' => $name, 'email' => $email, 'is_active' => true,
         ]);
+        $representative->regions()->sync([$this->region($warehouse)->id]);
+
+        return $representative;
+    }
+
+    private function region(Warehouse $warehouse)
+    {
+        return $warehouse->regions()->firstOrCreate(['name' => 'Test Region'], ['is_active' => true]);
     }
 
     private function superAdmin(): User
@@ -186,6 +199,7 @@ class RepresentativeManagementTest extends TestCase
     private function officeUser(PermissionName ...$permissions): User
     {
         $user = User::factory()->create();
+        $user->assignRole(RoleName::OfficeAdmin->value);
         $user->givePermissionTo(collect($permissions)->map->value->all());
 
         return $user;

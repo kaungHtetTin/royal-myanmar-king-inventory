@@ -151,7 +151,7 @@ class RepresentativeReturnController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
             'items' => ['required', 'array', 'min:1', 'max:100'],
             'items.*.product_id' => ['required', 'integer', 'distinct', Rule::exists('products', 'id')->where('is_active', true)],
-            'items.*.quantity' => ['required', 'integer', 'min:1', 'max:4294967295'],
+            'items.*.quantity' => ['required', 'integer', 'min:0', 'max:4294967295'],
             'items.*.product_unit_id' => ['nullable', 'integer', 'exists:product_units,id'],
             'items.*.foc_quantity' => ['nullable', 'integer', 'min:0', 'max:4294967295'],
             'items.*.foc_product_unit_id' => ['nullable', 'integer', 'exists:product_units,id'],
@@ -187,16 +187,20 @@ class RepresentativeReturnController extends Controller
 
     private function preparedItems(array $items): array
     {
-        return collect($items)->map(function (array $item): array {
+        return collect($items)->map(function (array $item, int $index): array {
             $product = Product::query()->with('defaultSellingUnit')->findOrFail($item['product_id']);
             $unit = ProductUnit::query()->where('product_id', $product->id)->where('is_active', true)->find($item['product_unit_id'] ?? $product->defaultSellingUnit?->id);
+            $paidQuantity = (int) $item['quantity'];
             $focQuantity = (int) ($item['foc_quantity'] ?? 0);
             $focUnit = $focQuantity > 0 ? ProductUnit::query()->where('product_id', $product->id)->where('is_active', true)->find($item['foc_product_unit_id'] ?? $unit?->id) : null;
             if (! $unit || ($focQuantity > 0 && ! $focUnit)) {
                 throw ValidationException::withMessages(['items' => ['Select valid active units of the same product.']]);
             }
+            if (($paidQuantity * $unit->conversion_factor) + ($focQuantity * ($focUnit?->conversion_factor ?? 0)) < 1) {
+                throw ValidationException::withMessages(["items.{$index}.quantity" => ['Return at least one paid or FOC base unit.']]);
+            }
 
-            return ['product_id' => $product->id, 'product_unit_id' => $unit->id, 'quantity' => (int) $item['quantity'], 'base_quantity' => (int) $item['quantity'] * $unit->conversion_factor, 'foc_product_unit_id' => $focUnit?->id, 'foc_quantity' => $focQuantity, 'foc_base_quantity' => $focQuantity * ($focUnit?->conversion_factor ?? 0)];
+            return ['product_id' => $product->id, 'product_unit_id' => $unit->id, 'quantity' => $paidQuantity, 'base_quantity' => $paidQuantity * $unit->conversion_factor, 'foc_product_unit_id' => $focUnit?->id, 'foc_quantity' => $focQuantity, 'foc_base_quantity' => $focQuantity * ($focUnit?->conversion_factor ?? 0)];
         })->all();
     }
 }

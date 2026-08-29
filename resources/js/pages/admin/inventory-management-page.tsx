@@ -64,6 +64,29 @@ function dateTime(value: string | null) {
           }).format(new Date(value))
         : '—';
 }
+
+function stockUnits(row: InventoryBalance) {
+    const baseName = row.product.base_unit?.name ?? row.product.unit;
+    const sellingUnit = row.product.default_selling_unit;
+    const conversion = sellingUnit?.conversion_factor ?? 1;
+
+    if (!sellingUnit || conversion <= 1 || sellingUnit.name === baseName) {
+        return {
+            baseName,
+            equivalent: `${number(row.quantity)} ${baseName}`,
+            conversion: `${sellingUnit?.name ?? baseName} is the base unit`,
+        };
+    }
+
+    const sellingQuantity = Math.floor(row.quantity / conversion);
+    const remainder = row.quantity % conversion;
+
+    return {
+        baseName,
+        equivalent: `${number(sellingQuantity)} ${sellingUnit.name}${remainder ? ` + ${number(remainder)} ${baseName}` : ''}`,
+        conversion: `1 ${sellingUnit.name} = ${number(conversion)} ${baseName}`,
+    };
+}
 function badge(status: string) {
     return status === 'posted' ? 'success' : status === 'voided' ? 'danger' : 'warning';
 }
@@ -226,7 +249,7 @@ export function InventoryManagementPage() {
                 <MetricCard
                     hint="Matching current filters"
                     icon="warehouse"
-                    label="Units"
+                    label="Base units"
                     value={number(summary.units)}
                 />
                 <MetricCard
@@ -526,30 +549,36 @@ function InventoryTable({
     if (tab === 'stock')
         return (
             <div className="ui-table-wrap">
-                <table className="ui-table">
+                <table className="ui-table inventory-on-hand-table">
                     <thead>
                         <tr>
                             <th>Product</th>
-                            <th className="is-numeric">On hand</th>
+                            <th className="is-numeric">Base-unit stock</th>
+                            <th>Selling-unit equivalent</th>
                             <th>Last changed</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {(rows as InventoryBalance[]).map((row) => (
-                            <tr key={row.id}>
-                                <td>
-                                    <strong>{row.product.name}</strong>
-                                    <small>
-                                        {row.product.sku} · {row.product.unit}
-                                    </small>
-                                </td>
-                                <td className="is-numeric">
-                                    <strong className="stock-number">{number(row.quantity)}</strong>
-                                    <small>{row.product.unit}</small>
-                                </td>
-                                <td>{dateTime(row.updated_at)}</td>
-                            </tr>
-                        ))}
+                        {(rows as InventoryBalance[]).map((row) => {
+                            const units = stockUnits(row);
+                            return (
+                                <tr key={row.id}>
+                                    <td>
+                                        <strong>{row.product.name}</strong>
+                                        <small>{row.product.sku}</small>
+                                    </td>
+                                    <td className="is-numeric">
+                                        <strong className="stock-number">{number(row.quantity)}</strong>
+                                        <small>{units.baseName} · stored quantity</small>
+                                    </td>
+                                    <td>
+                                        <strong>{units.equivalent}</strong>
+                                        <small>{units.conversion}</small>
+                                    </td>
+                                    <td>{dateTime(row.updated_at)}</td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>
@@ -781,7 +810,6 @@ function FieldError({ errors, name }: { errors: Record<string, string[]>; name: 
 }
 
 export function StockImportFormPage() {
-    const { user } = useSession();
     const navigate = useNavigate();
     const { importId } = useParams();
     const [options, setOptions] = useState(emptyOptions);
@@ -789,7 +817,6 @@ export function StockImportFormPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
-    const canUpdatePrice = Boolean(user?.roles.includes('super-admin') || user?.permissions.includes('product.edit'));
 
     useEffect(() => {
         let active = true;
@@ -834,7 +861,6 @@ export function StockImportFormPage() {
                 </div>
             ) : (
                 <StockImportForm
-                    canUpdatePrice={canUpdatePrice}
                     importRecord={importRecord}
                     onCancel={() => navigate('/admin/inventory')}
                     onPosted={() => navigate('/admin/inventory')}
@@ -850,14 +876,12 @@ export function StockImportFormPage() {
 }
 
 function StockImportForm({
-    canUpdatePrice,
     importRecord,
     onCancel,
     onPosted,
     onSaved,
     options,
 }: {
-    canUpdatePrice: boolean;
     importRecord: StockImport | null;
     onCancel: () => void;
     onPosted: () => void;
@@ -871,8 +895,13 @@ function StockImportForm({
                   notes: importRecord.notes ?? '',
                   items: importRecord.items.map((item) => ({
                       product_id: item.product.id,
+                      product_unit_id:
+                          item.product_unit?.id ??
+                          options.products
+                              .find((product) => product.id === item.product.id)
+                              ?.units?.find((unit) => unit.is_default_selling)?.id ??
+                          0,
                       quantity: item.quantity,
-                      selling_price: item.product.selling_price,
                   })),
               }
             : {
@@ -902,10 +931,9 @@ function StockImportForm({
         }
         if (step === 3) {
             form.items.forEach((item, index) => {
+                if (!item.product_unit_id) nextErrors[`items.${index}.product_unit_id`] = ['Select a product unit.'];
                 if (!Number.isInteger(item.quantity) || item.quantity < 1)
                     nextErrors[`items.${index}.quantity`] = ['Enter a whole quantity of at least 1.'];
-                if (canUpdatePrice && (item.selling_price ?? 0) < 0)
-                    nextErrors[`items.${index}.selling_price`] = ['Price cannot be negative.'];
             });
         }
         setErrors(nextErrors);
@@ -916,10 +944,9 @@ function StockImportForm({
         if (!form.warehouse_id) nextErrors.warehouse_id = ['Select a destination warehouse.'];
         if (!form.items.length) nextErrors.items = ['Select at least one product.'];
         form.items.forEach((item, index) => {
+            if (!item.product_unit_id) nextErrors[`items.${index}.product_unit_id`] = ['Select a product unit.'];
             if (!Number.isInteger(item.quantity) || item.quantity < 1)
                 nextErrors[`items.${index}.quantity`] = ['Enter a whole quantity of at least 1.'];
-            if (canUpdatePrice && (item.selling_price ?? 0) < 0)
-                nextErrors[`items.${index}.selling_price`] = ['Price cannot be negative.'];
         });
         if (Object.keys(nextErrors).length) {
             setErrors(nextErrors);
@@ -928,12 +955,9 @@ function StockImportForm({
         setSaving(true);
         setErrors({});
         try {
-            const payload: ImportInput = canUpdatePrice
-                ? form
-                : { ...form, items: form.items.map(({ product_id, quantity }) => ({ product_id, quantity })) };
             const response = importRecord
-                ? await inventoryApi.updateImport(importRecord.id, payload)
-                : await inventoryApi.createImport(payload);
+                ? await inventoryApi.updateImport(importRecord.id, form)
+                : await inventoryApi.createImport(form);
             onSaved(response.data, importRecord ? 'Import draft updated.' : 'Import draft created.');
             return response.data;
         } catch (requestError) {
@@ -970,7 +994,7 @@ function StockImportForm({
         <section className="stock-import-form-page__panel">
             <form className="management-form" id="stock-import-form" onSubmit={submit}>
                 <ol aria-label="Import progress" className="form-stepper">
-                    {['Basic information', 'Product selection', 'Quantity & price', 'Review & submit'].map(
+                    {['Basic information', 'Product selection', 'Unit & quantity', 'Review & submit'].map(
                         (label, index) => (
                             <li
                                 aria-current={step === index + 1 ? 'step' : undefined}
@@ -1072,8 +1096,14 @@ function StockImportForm({
                                                               ...value.items,
                                                               {
                                                                   product_id: product.id,
+                                                                  product_unit_id:
+                                                                      product.units?.find(
+                                                                          (unit) => unit.is_default_selling,
+                                                                      )?.id ??
+                                                                      product.units?.find((unit) => unit.is_base)?.id ??
+                                                                      product.units?.[0]?.id ??
+                                                                      0,
                                                                   quantity: 1,
-                                                                  selling_price: product.selling_price,
                                                               },
                                                           ],
                                                 }));
@@ -1101,21 +1131,53 @@ function StockImportForm({
                 {step === 3 ? (
                     <div className="import-lines">
                         <div className="import-lines__heading">
-                            <strong>Quantity and selling price</strong>
-                            <small>Price changes are optional and audited.</small>
+                            <strong>Units and quantities</strong>
+                            <small>Select how each product is packaged in this delivery.</small>
                         </div>
                         {form.items.map((item, index) => {
                             const selectedProduct = options.products.find((product) => product.id === item.product_id);
+                            const baseUnit = selectedProduct?.units?.find((unit) => unit.is_base);
                             return (
                                 <div className="import-line import-line--quantity" key={item.product_id}>
                                     <div>
                                         <strong>{selectedProduct?.name}</strong>
-                                        <small>
-                                            {selectedProduct?.sku} · {selectedProduct?.unit}
-                                        </small>
+                                        <small>{selectedProduct?.sku}</small>
                                     </div>
                                     <label className="ui-field">
-                                        <span>Quantity</span>
+                                        <span>Unit</span>
+                                        <select
+                                            onChange={(event) =>
+                                                setForm((value) => ({
+                                                    ...value,
+                                                    items: value.items.map((line, lineIndex) =>
+                                                        lineIndex === index
+                                                            ? {
+                                                                  ...line,
+                                                                  product_unit_id: Number(event.target.value),
+                                                              }
+                                                            : line,
+                                                    ),
+                                                }))
+                                            }
+                                            required
+                                            value={item.product_unit_id || ''}
+                                        >
+                                            <option disabled value="">
+                                                Select unit
+                                            </option>
+                                            {(selectedProduct?.units ?? []).map((unit) => (
+                                                <option key={unit.id} value={unit.id}>
+                                                    {unit.name}
+                                                    {unit.is_base
+                                                        ? ' (base unit)'
+                                                        : ` (${number(unit.conversion_factor)} ${baseUnit?.name ?? 'base units'})`}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <FieldError errors={errors} name={`items.${index}.product_unit_id`} />
+                                    </label>
+                                    <label className="ui-field">
+                                        <span>Import quantity</span>
                                         <input
                                             min={1}
                                             onChange={(event) =>
@@ -1135,39 +1197,6 @@ function StockImportForm({
                                         />
                                         <FieldError errors={errors} name={`items.${index}.quantity`} />
                                     </label>
-                                    {canUpdatePrice ? (
-                                        <label className="ui-field">
-                                            <span className="stock-import-price-label">
-                                                <strong>Selling price (MMK)</strong>
-                                                <small>Current: {money(selectedProduct?.selling_price ?? 0)}</small>
-                                            </span>
-                                            <input
-                                                min={0}
-                                                onChange={(event) =>
-                                                    setForm((value) => ({
-                                                        ...value,
-                                                        items: value.items.map((line, lineIndex) =>
-                                                            lineIndex === index
-                                                                ? {
-                                                                      ...line,
-                                                                      selling_price: editableNumber(event.target.value),
-                                                                  }
-                                                                : line,
-                                                        ),
-                                                    }))
-                                                }
-                                                step={1}
-                                                type="number"
-                                                value={item.selling_price ?? selectedProduct?.selling_price ?? 0}
-                                            />
-                                            <FieldError errors={errors} name={`items.${index}.selling_price`} />
-                                        </label>
-                                    ) : (
-                                        <div>
-                                            <small>Selling price</small>
-                                            <strong>{money(selectedProduct?.selling_price ?? 0)}</strong>
-                                        </div>
-                                    )}
                                 </div>
                             );
                         })}
@@ -1187,8 +1216,8 @@ function StockImportForm({
                                 <thead>
                                     <tr>
                                         <th>Product</th>
+                                        <th>Unit</th>
                                         <th className="is-numeric">Quantity</th>
-                                        <th className="is-numeric">Selling price</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1196,28 +1225,31 @@ function StockImportForm({
                                         const selectedProduct = options.products.find(
                                             (product) => product.id === item.product_id,
                                         );
+                                        const selectedUnit = selectedProduct?.units?.find(
+                                            (unit) => unit.id === item.product_unit_id,
+                                        );
                                         return (
                                             <tr key={item.product_id}>
                                                 <td>
                                                     <strong>{selectedProduct?.name}</strong>
                                                     <small>
-                                                        {selectedProduct?.sku} · {selectedProduct?.unit}
+                                                        {selectedProduct?.sku} · Base unit:{' '}
+                                                        {selectedProduct?.units?.find((unit) => unit.is_base)?.name ??
+                                                            selectedProduct?.unit}
+                                                    </small>
+                                                </td>
+                                                <td>
+                                                    <strong>{selectedUnit?.name ?? 'Not selected'}</strong>
+                                                    <small>
+                                                        {number(selectedUnit?.conversion_factor ?? 0)} base units each
                                                     </small>
                                                 </td>
                                                 <td className="is-numeric">
                                                     <strong>{number(item.quantity)}</strong>
-                                                </td>
-                                                <td className="is-numeric">
-                                                    <strong>
-                                                        {money(
-                                                            item.selling_price ?? selectedProduct?.selling_price ?? 0,
-                                                        )}
-                                                    </strong>
-                                                    {item.selling_price !== selectedProduct?.selling_price ? (
-                                                        <small>Price will be updated</small>
-                                                    ) : (
-                                                        <small>Unchanged</small>
-                                                    )}
+                                                    <small>
+                                                        {number(item.quantity * (selectedUnit?.conversion_factor ?? 0))}{' '}
+                                                        base units
+                                                    </small>
                                                 </td>
                                             </tr>
                                         );
@@ -1228,7 +1260,18 @@ function StockImportForm({
                         <div className="import-review__total">
                             <span>{form.items.length} products</span>
                             <strong>
-                                {number(form.items.reduce((sum, item) => sum + item.quantity, 0))} total units
+                                {number(
+                                    form.items.reduce((sum, item) => {
+                                        const product = options.products.find(
+                                            (option) => option.id === item.product_id,
+                                        );
+                                        const unit = product?.units?.find(
+                                            (option) => option.id === item.product_unit_id,
+                                        );
+                                        return sum + item.quantity * (unit?.conversion_factor ?? 0);
+                                    }, 0),
+                                )}{' '}
+                                total base units
                             </strong>
                         </div>
                     </div>

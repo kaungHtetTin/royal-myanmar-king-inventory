@@ -6,6 +6,7 @@ use App\Enums\StockMovementType;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\StockMovementResource;
 use App\Models\Product;
+use App\Models\ProductUnit;
 use App\Models\StockMovement;
 use App\Models\Warehouse;
 use App\Models\WarehouseInventory;
@@ -35,7 +36,7 @@ class InventoryController extends Controller
 
         $query = WarehouseInventory::query()
             ->selectRaw('product_id, SUM(quantity) as quantity, MAX(updated_at) as updated_at')
-            ->with('product')
+            ->with(['product.baseUnit', 'product.defaultSellingUnit'])
             ->whereIn('warehouse_id', $warehouseIds)
             ->when($data['warehouse_id'] ?? null, fn ($query, $id) => $query->where('warehouse_id', $id))
             ->when($data['search'] ?? null, fn ($query, $search) => $query->whereHas('product', fn ($product) => $product
@@ -50,7 +51,14 @@ class InventoryController extends Controller
         $paginator = $query->paginate($data['per_page'] ?? 20)->withQueryString();
         $paginator->setCollection($paginator->getCollection()->map(fn ($row) => [
             'id' => $row->product_id,
-            'product' => ['id' => $row->product->id, 'sku' => $row->product->sku, 'name' => $row->product->name, 'unit' => $row->product->unit],
+            'product' => [
+                'id' => $row->product->id,
+                'sku' => $row->product->sku,
+                'name' => $row->product->name,
+                'unit' => $row->product->unit,
+                'base_unit' => $this->unitData($row->product->baseUnit),
+                'default_selling_unit' => $this->unitData($row->product->defaultSellingUnit),
+            ],
             'quantity' => (int) $row->quantity,
             'updated_at' => $row->updated_at?->toISOString(),
         ]));
@@ -75,7 +83,7 @@ class InventoryController extends Controller
 
         $query = WarehouseInventory::query()
             ->selectRaw('product_id, SUM(quantity) as quantity, MAX(updated_at) as updated_at')
-            ->with('product:id,sku,name,unit')
+            ->with(['product.baseUnit', 'product.defaultSellingUnit'])
             ->whereIn('warehouse_id', $warehouseIds)
             ->when($data['warehouse_id'] ?? null, fn ($query, $id) => $query->where('warehouse_id', $id))
             ->when($data['search'] ?? null, fn ($query, $search) => $query->whereHas('product', fn ($product) => $product
@@ -95,7 +103,7 @@ class InventoryController extends Controller
                 fputcsv($output, [
                     $this->csvValue($row->product->sku),
                     $this->csvValue($row->product->name),
-                    $this->csvValue($row->product->unit),
+                    $this->csvValue($row->product->baseUnit?->name ?? $row->product->unit),
                     (int) $row->quantity,
                     $row->updated_at?->toISOString(),
                 ]);
@@ -109,6 +117,15 @@ class InventoryController extends Controller
         $value ??= '';
 
         return preg_match('/^[=+\-@]/', $value) ? "'{$value}" : $value;
+    }
+
+    private function unitData(?ProductUnit $unit): ?array
+    {
+        return $unit ? [
+            'id' => $unit->id,
+            'name' => $unit->name,
+            'conversion_factor' => (int) $unit->conversion_factor,
+        ] : null;
     }
 
     public function movements(Request $request): AnonymousResourceCollection
@@ -152,7 +169,11 @@ class InventoryController extends Controller
     {
         return response()->json([
             'warehouses' => $this->warehouseAccess->scope(Warehouse::query(), $request->user())->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
-            'products' => Product::query()->where('is_active', true)->orderBy('name')->get(['id', 'sku', 'name', 'unit', 'selling_price']),
+            'products' => Product::query()
+                ->with(['units' => fn ($query) => $query->where('is_active', true)->orderByDesc('is_default_selling')->orderByDesc('is_base')->orderBy('name')])
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'sku', 'name', 'unit', 'selling_price']),
             'movement_types' => collect(StockMovementType::cases())->pluck('value'),
         ]);
     }

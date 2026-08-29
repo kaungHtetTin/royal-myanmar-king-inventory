@@ -1,13 +1,13 @@
 {
-  "_customers-izCZU39H.js": {
-    "file": "assets/customers-izCZU39H.js",
+  "_customers-BQ8FQz02.js": {
+    "file": "assets/customers-BQ8FQz02.js",
     "name": "customers",
     "imports": [
       "resources/js/app.tsx"
     ]
   },
-  "_finance-kOhhtX9M.js": {
-    "file": "assets/finance-kOhhtX9M.js",
+  "_finance-DTImDY2u.js": {
+    "file": "assets/finance-DTImDY2u.js",
     "name": "finance",
     "imports": [
       "resources/js/app.tsx"
@@ -17,47 +17,43 @@
     "file": "assets/form-values-BxQYnJPh.js",
     "name": "form-values"
   },
-  "_inventory-C31XJoO7.js": {
-    "file": "assets/inventory-C31XJoO7.js",
+  "_inventory-aTYICB_i.js": {
+    "file": "assets/inventory-aTYICB_i.js",
     "name": "inventory",
     "imports": [
       "resources/js/app.tsx"
     ]
   },
-  "_invoice-print-BdK7RjN7.js": {
-    "file": "assets/invoice-print-BdK7RjN7.js",
-    "name": "invoice-print"
-  },
-  "_representatives-CN0oZW-8.js": {
-    "file": "assets/representatives-CN0oZW-8.js",
+  "_representatives-flq_L5vY.js": {
+    "file": "assets/representatives-flq_L5vY.js",
     "name": "representatives",
     "imports": [
       "resources/js/app.tsx"
     ]
   },
-  "_sales-OkHkoNns.js": {
-    "file": "assets/sales-OkHkoNns.js",
+  "_sales-CVyFJFyF.js": {
+    "file": "assets/sales-CVyFJFyF.js",
     "name": "sales",
     "imports": [
       "resources/js/app.tsx"
     ]
   },
-  "_transfers-BFgZJa7q.js": {
-    "file": "assets/transfers-BFgZJa7q.js",
+  "_transfers-D_dw_H4C.js": {
+    "file": "assets/transfers-D_dw_H4C.js",
     "name": "transfers",
     "imports": [
       "resources/js/app.tsx"
     ]
   },
-  "_warehouses-Gu_weUfQ.js": {
-    "file": "assets/warehouses-Gu_weUfQ.js",
+  "_warehouses-Ddoed_NZ.js": {
+    "file": "assets/warehouses-Ddoed_NZ.js",
     "name": "warehouses",
     "imports": [
       "resources/js/app.tsx"
     ]
   },
   "resources/css/app.css": {
-    "file": "assets/app-BnmR-Zff.css",
+    "file": "assets/app-Bn_Gg96j.css",
     "src": "resources/css/app.css",
     "isEntry": true,
     "name": "app",
@@ -66,7 +62,7 @@
     ]
   },
   "resources/js/app.tsx": {
-    "file": "assets/app-Dk9SNTgy.js",
+    "file": "assets/app-DfmiiMQM.js",
     "name": "app",
     "src": "resources/js/app.tsx",
     "isEntry": true,
@@ -109,7 +105,7 @@
     ]
   },
   "resources/js/pages/admin/access-management-page.tsx": {
-    "file": "assets/access-management-page-PhYeGDWP.js",
+    "file": "assets/access-management-page-BQ35ROgG.js",
     "name": "access-management-page",
     "src": "resources/js/pages/admin/access-management-page.tsx",
     "isDynamicEntry": true,
@@ -118,7 +114,7 @@
     ]
   },
   "resources/js/pages/admin/audit-log-page.tsx": {
-    "file": "assets/audit-log-page-BMjV3f27.js",
+    "file": "assets/audit-log-page-Cbwo1BRI.js",
     "name": "audit-log-page",
     "src": "resources/js/pages/admin/audit-log-page.tsx",
     "isDynamicEntry": true,
@@ -127,51 +123,51 @@
     ]
   },
   "resources/js/pages/admin/customer-detail-page.tsx": {
-    "file": "assets/customer-detail-page-Br3I8T2a.js",
+    "file": "assets/customer-detail-page-CCJr32QO.js",
     "name": "customer-detail-page",
     "src": "resources/js/pages/admin/customer-detail-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_customers-izCZU39H.js",
-      "_sales-OkHkoNns.js"
+      "_customers-BQ8FQz02.js",
+      "_sales-CVyFJFyF.js"
     ]
   },
   "resources/js/pages/admin/customer-management-page.tsx": {
-    "file": "assets/customer-management-page-Dd2Tm7UR.js",
+    "file": "assets/customer-management-page-BmgMw1p5.js",
     "name": "customer-management-page",
     "src": "resources/js/pages/admin/customer-management-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_customers-izCZU39H.js",
+      "_customers-BQ8FQz02.js",
       "_form-values-BxQYnJPh.js"
     ]
   },
   "resources/js/pages/admin/finance-management-page.tsx": {
-    "file": "assets/finance-management-page-C9KCrNpf.js",
+    "file": "assets/finance-management-page-DmPeV7IX.js",
     "name": "finance-management-page",
     "src": "resources/js/pages/admin/finance-management-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_finance-kOhhtX9M.js",
+      "_finance-DTImDY2u.js",
       "_form-values-BxQYnJPh.js"
     ]
   },
   "resources/js/pages/admin/inventory-management-page.tsx": {
-    "file": "assets/inventory-management-page-CMY75BET.js",
+    "file": "assets/inventory-management-page-BMltofT8.js",
     "name": "inventory-management-page",
     "src": "resources/js/pages/admin/inventory-management-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_inventory-C31XJoO7.js",
+      "_inventory-aTYICB_i.js",
       "_form-values-BxQYnJPh.js"
     ]
   },
   "resources/js/pages/admin/product-management-page.tsx": {
-    "file": "assets/product-management-page-DxaIH27b.js",
+    "file": "assets/product-management-page-D5OoSOFj.js",
     "name": "product-management-page",
     "src": "resources/js/pages/admin/product-management-page.tsx",
     "isDynamicEntry": true,
@@ -181,7 +177,7 @@
     ]
   },
   "resources/js/pages/admin/reports-page.tsx": {
-    "file": "assets/reports-page-UzKxUsp3.js",
+    "file": "assets/reports-page-BYVSFSCW.js",
     "name": "reports-page",
     "src": "resources/js/pages/admin/reports-page.tsx",
     "isDynamicEntry": true,
@@ -190,63 +186,61 @@
     ]
   },
   "resources/js/pages/admin/representative-detail-page.tsx": {
-    "file": "assets/representative-detail-page-C2EHhUUv.js",
+    "file": "assets/representative-detail-page-CxbnokvP.js",
     "name": "representative-detail-page",
     "src": "resources/js/pages/admin/representative-detail-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_finance-kOhhtX9M.js",
-      "_representatives-CN0oZW-8.js",
-      "_sales-OkHkoNns.js",
-      "_transfers-BFgZJa7q.js"
+      "_finance-DTImDY2u.js",
+      "_representatives-flq_L5vY.js",
+      "_sales-CVyFJFyF.js",
+      "_transfers-D_dw_H4C.js"
     ]
   },
   "resources/js/pages/admin/representative-management-page.tsx": {
-    "file": "assets/representative-management-page-C00fxi-B.js",
+    "file": "assets/representative-management-page-Dn8UN4qG.js",
     "name": "representative-management-page",
     "src": "resources/js/pages/admin/representative-management-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_representatives-CN0oZW-8.js"
+      "_representatives-flq_L5vY.js"
     ]
   },
   "resources/js/pages/admin/representative-return-form-page.tsx": {
-    "file": "assets/representative-return-form-page-YjHBx0GL.js",
+    "file": "assets/representative-return-form-page-XA9_mntB.js",
     "name": "representative-return-form-page",
     "src": "resources/js/pages/admin/representative-return-form-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_transfers-BFgZJa7q.js",
+      "_transfers-D_dw_H4C.js",
       "_form-values-BxQYnJPh.js"
     ]
   },
   "resources/js/pages/admin/sale-detail-page.tsx": {
-    "file": "assets/sale-detail-page-D1M5zZjN.js",
+    "file": "assets/sale-detail-page-Cja5zg6p.js",
     "name": "sale-detail-page",
     "src": "resources/js/pages/admin/sale-detail-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_invoice-print-BdK7RjN7.js",
-      "_sales-OkHkoNns.js"
+      "_sales-CVyFJFyF.js"
     ]
   },
   "resources/js/pages/admin/sales-management-page.tsx": {
-    "file": "assets/sales-management-page-DJaqGRHG.js",
+    "file": "assets/sales-management-page-6WrKctjD.js",
     "name": "sales-management-page",
     "src": "resources/js/pages/admin/sales-management-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_invoice-print-BdK7RjN7.js",
-      "_sales-OkHkoNns.js"
+      "_sales-CVyFJFyF.js"
     ]
   },
   "resources/js/pages/admin/settings-page.tsx": {
-    "file": "assets/settings-page-CGgY1DlQ.js",
+    "file": "assets/settings-page-BkzsWoiv.js",
     "name": "settings-page",
     "src": "resources/js/pages/admin/settings-page.tsx",
     "isDynamicEntry": true,
@@ -257,38 +251,38 @@
     ]
   },
   "resources/js/pages/admin/stock-import-detail-page.tsx": {
-    "file": "assets/stock-import-detail-page-D5d08-LG.js",
+    "file": "assets/stock-import-detail-page-D19_40dO.js",
     "name": "stock-import-detail-page",
     "src": "resources/js/pages/admin/stock-import-detail-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_inventory-C31XJoO7.js"
+      "_inventory-aTYICB_i.js"
     ]
   },
   "resources/js/pages/admin/transfer-detail-page.tsx": {
-    "file": "assets/transfer-detail-page-BjGoxzC4.js",
+    "file": "assets/transfer-detail-page-DOKraHG6.js",
     "name": "transfer-detail-page",
     "src": "resources/js/pages/admin/transfer-detail-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_transfers-BFgZJa7q.js"
+      "_transfers-D_dw_H4C.js"
     ]
   },
   "resources/js/pages/admin/transfer-management-page.tsx": {
-    "file": "assets/transfer-management-page-BeM7u66W.js",
+    "file": "assets/transfer-management-page-BJHrDAXi.js",
     "name": "transfer-management-page",
     "src": "resources/js/pages/admin/transfer-management-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_transfers-BFgZJa7q.js",
+      "_transfers-D_dw_H4C.js",
       "_form-values-BxQYnJPh.js"
     ]
   },
   "resources/js/pages/admin/vehicle-management-page.tsx": {
-    "file": "assets/vehicle-management-page-DxjumYj8.js",
+    "file": "assets/vehicle-management-page-JblumzBg.js",
     "name": "vehicle-management-page",
     "src": "resources/js/pages/admin/vehicle-management-page.tsx",
     "isDynamicEntry": true,
@@ -297,48 +291,48 @@
     ]
   },
   "resources/js/pages/admin/warehouse-coverage-page.tsx": {
-    "file": "assets/warehouse-coverage-page-BtivDfV0.js",
+    "file": "assets/warehouse-coverage-page-CkOyCB_I.js",
     "name": "warehouse-coverage-page",
     "src": "resources/js/pages/admin/warehouse-coverage-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_warehouses-Gu_weUfQ.js"
+      "_warehouses-Ddoed_NZ.js"
     ]
   },
   "resources/js/pages/admin/warehouse-management-page.tsx": {
-    "file": "assets/warehouse-management-page-DCX0tEXt.js",
+    "file": "assets/warehouse-management-page-5UCEKvzv.js",
     "name": "warehouse-management-page",
     "src": "resources/js/pages/admin/warehouse-management-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_warehouses-Gu_weUfQ.js"
+      "_warehouses-Ddoed_NZ.js"
     ]
   },
   "resources/js/pages/sales/cash-workspace-page.tsx": {
-    "file": "assets/cash-workspace-page-CIZIwUHy.js",
+    "file": "assets/cash-workspace-page-dWIMUvFr.js",
     "name": "cash-workspace-page",
     "src": "resources/js/pages/sales/cash-workspace-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_finance-kOhhtX9M.js",
+      "_finance-DTImDY2u.js",
       "_form-values-BxQYnJPh.js"
     ]
   },
   "resources/js/pages/sales/customer-page.tsx": {
-    "file": "assets/customer-page-BgYa_vPZ.js",
+    "file": "assets/customer-page-LW7O1Olz.js",
     "name": "customer-page",
     "src": "resources/js/pages/sales/customer-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_sales-OkHkoNns.js"
+      "_sales-CVyFJFyF.js"
     ]
   },
   "resources/js/pages/sales/profile-settings-page.tsx": {
-    "file": "assets/profile-settings-page-DrNIk7GA.js",
+    "file": "assets/profile-settings-page-BipTCUFE.js",
     "name": "profile-settings-page",
     "src": "resources/js/pages/sales/profile-settings-page.tsx",
     "isDynamicEntry": true,
@@ -347,38 +341,37 @@
     ]
   },
   "resources/js/pages/sales/receiving-detail-page.tsx": {
-    "file": "assets/receiving-detail-page-WhVMMdQl.js",
+    "file": "assets/receiving-detail-page-BftUyGUU.js",
     "name": "receiving-detail-page",
     "src": "resources/js/pages/sales/receiving-detail-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_transfers-BFgZJa7q.js"
+      "_transfers-D_dw_H4C.js"
     ]
   },
   "resources/js/pages/sales/representative-stock-page.tsx": {
-    "file": "assets/representative-stock-page-DzNfzgE-.js",
+    "file": "assets/representative-stock-page-NMAKSGZU.js",
     "name": "representative-stock-page",
     "src": "resources/js/pages/sales/representative-stock-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_transfers-BFgZJa7q.js"
+      "_transfers-D_dw_H4C.js"
     ]
   },
   "resources/js/pages/sales/sale-history-detail-page.tsx": {
-    "file": "assets/sale-history-detail-page-CAcdZM9v.js",
+    "file": "assets/sale-history-detail-page-C3Y0JceS.js",
     "name": "sale-history-detail-page",
     "src": "resources/js/pages/sales/sale-history-detail-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_invoice-print-BdK7RjN7.js",
-      "_sales-OkHkoNns.js"
+      "_sales-CVyFJFyF.js"
     ]
   },
   "resources/js/pages/sales/sales-report-page.tsx": {
-    "file": "assets/sales-report-page-DfMr1HVB.js",
+    "file": "assets/sales-report-page-DhgZQUzl.js",
     "name": "sales-report-page",
     "src": "resources/js/pages/sales/sales-report-page.tsx",
     "isDynamicEntry": true,
@@ -387,25 +380,24 @@
     ]
   },
   "resources/js/pages/sales/sales-workspace-page.tsx": {
-    "file": "assets/sales-workspace-page-D5vxPt2-.js",
+    "file": "assets/sales-workspace-page-CEQu9ej1.js",
     "name": "sales-workspace-page",
     "src": "resources/js/pages/sales/sales-workspace-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_invoice-print-BdK7RjN7.js",
-      "_sales-OkHkoNns.js",
+      "_sales-CVyFJFyF.js",
       "_form-values-BxQYnJPh.js"
     ]
   },
   "resources/js/pages/sales/stock-issue-history-page.tsx": {
-    "file": "assets/stock-issue-history-page-CLF76xPo.js",
+    "file": "assets/stock-issue-history-page-DX1v77Mb.js",
     "name": "stock-issue-history-page",
     "src": "resources/js/pages/sales/stock-issue-history-page.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
-      "_transfers-BFgZJa7q.js"
+      "_transfers-D_dw_H4C.js"
     ]
   }
 }

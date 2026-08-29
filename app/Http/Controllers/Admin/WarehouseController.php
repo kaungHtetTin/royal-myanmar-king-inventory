@@ -26,7 +26,7 @@ class WarehouseController extends Controller
         $data = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
             'status' => ['nullable', Rule::in(['active', 'inactive'])],
-            'sort' => ['nullable', Rule::in(['code', 'name', 'region', 'township', 'created_at'])],
+            'sort' => ['nullable', Rule::in(['code', 'name', 'created_at'])],
             'direction' => ['nullable', Rule::in(['asc', 'desc'])],
             'per_page' => ['nullable', 'integer', 'min:10', 'max:100'],
         ]);
@@ -38,8 +38,7 @@ class WarehouseController extends Controller
                 $query->where(fn ($builder) => $builder
                     ->where('code', 'like', "%{$search}%")
                     ->orWhere('name', 'like', "%{$search}%")
-                    ->orWhere('region', 'like', "%{$search}%")
-                    ->orWhere('township', 'like', "%{$search}%"));
+                    ->orWhere('address', 'like', "%{$search}%"));
             })
             ->when($data['status'] ?? null, fn ($query, string $status) => $query->where('is_active', $status === 'active'))
             ->orderBy($data['sort'] ?? 'name', $data['direction'] ?? 'asc');
@@ -98,8 +97,6 @@ class WarehouseController extends Controller
         return [
             'code' => ['required', 'string', 'max:30', 'regex:/^[a-zA-Z0-9_-]+$/', Rule::unique('warehouses', 'code')->ignore($warehouse)],
             'name' => ['required', 'string', 'max:255'],
-            'region' => ['nullable', 'string', 'max:100'],
-            'township' => ['nullable', 'string', 'max:100'],
             'address' => ['nullable', 'string', 'max:500'],
             'phone' => ['nullable', 'string', 'max:30'],
             'notes' => ['nullable', 'string', 'max:1000'],

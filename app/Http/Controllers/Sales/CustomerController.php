@@ -26,7 +26,7 @@ class CustomerController extends Controller
             'search' => ['nullable', 'string', 'max:100'],
             'page' => ['nullable', 'integer', 'min:1'],
         ]);
-        $customers = Customer::query()->with('way.region:id,warehouse_id,name')
+        $customers = Customer::query()->with('way.region.warehouse:id,code,name')
             ->whereHas('way', fn ($way) => $way->whereIn('region_id', $representative->regions()->select('regions.id')))
             ->when($data['search'] ?? null, fn ($query, string $search) => $query->where(
                 fn ($scope) => $scope->where('code', 'like', "%{$search}%")
@@ -115,6 +115,14 @@ class CustomerController extends Controller
         return $customer->only([
             'id', 'code', 'name', 'customer_type', 'phone', 'region', 'township', 'way_id', 'address', 'notes', 'is_active',
             'credit_allowed', 'credit_limit', 'created_at',
-        ]) + ['way' => $customer->way ? ['id' => $customer->way->id, 'code' => $customer->way->code, 'name' => $customer->way->name, 'region' => $customer->way->region?->only(['id', 'name', 'warehouse_id'])] : null];
+        ]) + ['way' => $customer->way ? [
+            'id' => $customer->way->id,
+            'code' => $customer->way->code,
+            'name' => $customer->way->name,
+            'region' => $customer->way->region ? [
+                ...$customer->way->region->only(['id', 'name', 'warehouse_id']),
+                'warehouse' => $customer->way->region->warehouse?->only(['id', 'code', 'name']),
+            ] : null,
+        ] : null];
     }
 }

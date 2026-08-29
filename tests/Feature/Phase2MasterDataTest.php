@@ -20,8 +20,14 @@ class Phase2MasterDataTest extends TestCase
         $this->actingAs($admin);
 
         $warehouse = $this->postJson('/api/admin/warehouses', [
-            'code' => 'YGN-P2', 'name' => 'Phase 2 Warehouse', 'region' => 'Yangon', 'township' => 'Hlaing',
+            'code' => 'YGN-P2', 'name' => 'Phase 2 Warehouse',
             'address' => '', 'phone' => '', 'notes' => '', 'is_active' => true,
+        ])->assertCreated()->json('data');
+        $region = $this->postJson('/api/admin/warehouses/'.$warehouse['id'].'/regions', [
+            'name' => 'Yangon', 'notes' => '', 'is_active' => true,
+        ])->assertCreated()->json('data');
+        $way = $this->postJson('/api/admin/regions/'.$region['id'].'/ways', [
+            'name' => 'Hlaing', 'notes' => '', 'is_active' => true,
         ])->assertCreated()->json('data');
         $product = $this->postJson('/api/admin/products', [
             'sku' => 'P2-WATER', 'name' => 'Phase 2 Water', 'category' => 'Drinking Water', 'unit' => 'bottle',
@@ -33,13 +39,13 @@ class Phase2MasterDataTest extends TestCase
         ])->assertCreated()->json('data');
         $customer = $this->postJson('/api/admin/customers', [
             'warehouse_id' => $warehouse['id'], 'code' => 'CUS-P2', 'name' => 'Phase 2 Shop', 'customer_type' => 'Shop',
-            'phone' => '09-100000001', 'region' => 'Yangon', 'township' => 'Hlaing', 'address' => '',
+            'phone' => '09-100000001', 'way_id' => $way['id'], 'address' => '',
             'credit_allowed' => true, 'credit_limit' => 1000000, 'notes' => '', 'is_active' => true,
         ])->assertCreated()->json('data');
         $representative = $this->postJson('/api/admin/representatives', [
             'code' => 'SR-P2', 'name' => 'Phase Two Representative', 'phone' => '09-100000002', 'email' => null,
             'username' => 'phase.two', 'password' => 'password', 'password_confirmation' => 'password',
-            'primary_warehouse_id' => $warehouse['id'], 'region' => 'Yangon', 'vehicle_id' => $vehicle['id'],
+            'primary_warehouse_id' => $warehouse['id'], 'region_ids' => [$region['id']], 'vehicle_id' => $vehicle['id'],
             'notes' => '', 'is_active' => true,
         ])->assertCreated()->json('data');
 

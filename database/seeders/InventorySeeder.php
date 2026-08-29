@@ -34,7 +34,14 @@ class InventorySeeder extends Seeder
             ]);
             $quantities = [240, 180, 60];
             foreach ($products as $index => $product) {
-                $import->items()->create(['product_id' => $product->id, 'quantity' => $quantities[$index] ?? 50]);
+                $quantity = $quantities[$index] ?? 50;
+                $baseUnit = $product->baseUnit()->firstOrFail();
+                $import->items()->create([
+                    'product_id' => $product->id,
+                    'product_unit_id' => $baseUnit->id,
+                    'quantity' => $quantity,
+                    'base_quantity' => $quantity,
+                ]);
             }
 
             return $import;

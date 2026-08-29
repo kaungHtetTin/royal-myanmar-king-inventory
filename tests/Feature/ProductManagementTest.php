@@ -6,6 +6,7 @@ use App\Enums\PermissionName;
 use App\Enums\RoleName;
 use App\Models\Product;
 use App\Models\User;
+use App\Models\Warehouse;
 use Database\Seeders\AccessControlSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -46,6 +47,12 @@ class ProductManagementTest extends TestCase
     public function test_viewer_can_list_products_with_server_filters_and_options(): void
     {
         $viewer = $this->viewer();
+        $mandalay = Warehouse::factory()->create(['code' => 'MDY-MAIN', 'name' => 'Mandalay Main']);
+        $mandalay->regions()->create(['name' => 'Mandalay', 'is_active' => true]);
+        $mandalay->regions()->create(['name' => 'Pyin Oo Lwin', 'is_active' => true]);
+        $yangon = Warehouse::factory()->create(['code' => 'YGN-MAIN', 'name' => 'Yangon Main']);
+        $yangon->regions()->create(['name' => 'Mingaladon', 'is_active' => true]);
+        $yangon->regions()->create(['name' => 'Yangon', 'is_active' => true]);
         $matching = Product::factory()->create(['sku' => 'DW-1L', 'name' => 'Drinking Water', 'category' => 'Water', 'unit' => 'bottle']);
         Product::factory()->inactive()->create(['sku' => 'CUP-01', 'name' => 'Paper Cup', 'category' => 'Accessories', 'unit' => 'piece']);
 
@@ -63,7 +70,15 @@ class ProductManagementTest extends TestCase
         $this->getJson('/api/admin/product-options')->assertOk()
             ->assertJsonPath('categories.0', 'Accessories')
             ->assertJsonPath('categories.1', 'Water')
-            ->assertJsonPath('units.0', 'bottle');
+            ->assertJsonPath('units.0', 'bottle')
+            ->assertJsonPath('regions.0.name', 'Mandalay')
+            ->assertJsonPath('regions.0.warehouse.code', 'MDY-MAIN')
+            ->assertJsonPath('regions.1.name', 'Pyin Oo Lwin')
+            ->assertJsonPath('regions.1.warehouse.code', 'MDY-MAIN')
+            ->assertJsonPath('regions.2.name', 'Mingaladon')
+            ->assertJsonPath('regions.2.warehouse.code', 'YGN-MAIN')
+            ->assertJsonPath('regions.3.name', 'Yangon')
+            ->assertJsonPath('regions.3.warehouse.code', 'YGN-MAIN');
     }
 
     public function test_viewer_without_mutation_permissions_cannot_create_or_edit(): void
@@ -136,6 +151,7 @@ class ProductManagementTest extends TestCase
     private function viewer(): User
     {
         $user = User::factory()->create();
+        $user->assignRole(RoleName::OfficeAdmin->value);
         $user->givePermissionTo(PermissionName::ProductView->value);
 
         return $user;

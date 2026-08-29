@@ -7,6 +7,7 @@ export type ProductOption = {
     sku: string;
     name: string;
     unit: string;
+    base_unit?: string;
     warehouse_stock?: Record<string, number>;
     representative_stock?: Record<string, number>;
     representative_foc_stock?: Record<string, number>;
@@ -107,7 +108,7 @@ export type WarehouseTransferInput = {
     notes: string;
     items: {
         product_id: number;
-        product_unit_id?: number;
+        product_unit_id: number;
         quantity: number;
         foc_product_unit_id?: number;
         foc_quantity?: number;
@@ -263,12 +264,16 @@ export const transferApi = {
         request<{ data: RepresentativeTransfer }>(() =>
             window.axios.post(`api/admin/representative-returns/${id}/${command}`, { reason }, { headers: headers() }),
         ),
-    ownStock: (page = 1) =>
+    ownStock: (page = 1, search = '') =>
         request<{
             data: RepresentativeInventory[];
             meta: PaginationMeta;
             summary: { incoming: number; on_hand: number };
-        }>(() => window.axios.get('api/sales/stock', { params: { page, per_page: 10 } })),
+        }>(() =>
+            window.axios.get('api/sales/stock', {
+                params: { page, per_page: 10, ...(search ? { search } : {}) },
+            }),
+        ),
     ownReceivings: (page = 1) =>
         request<{ data: RepresentativeTransfer[]; meta: PaginationMeta }>(() =>
             window.axios.get('api/sales/receivings', { params: { page, per_page: 10 } }),

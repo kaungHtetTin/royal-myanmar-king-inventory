@@ -28,6 +28,8 @@ export function RepresentativeStockPage() {
     const [pendingMeta, setPendingMeta] = useState(emptyMeta);
     const [summary, setSummary] = useState({ incoming: 0, on_hand: 0 });
     const [stockPage, setStockPage] = useState(1);
+    const [stockSearch, setStockSearch] = useState('');
+    const [stockSearchDraft, setStockSearchDraft] = useState('');
     const [receivingPage, setReceivingPage] = useState(1);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -36,7 +38,7 @@ export function RepresentativeStockPage() {
         setError('');
         try {
             const [inventory, receivings] = await Promise.all([
-                transferApi.ownStock(stockPage),
+                transferApi.ownStock(stockPage, stockSearch),
                 transferApi.ownReceivings(receivingPage),
             ]);
             setStock(inventory.data);
@@ -49,10 +51,10 @@ export function RepresentativeStockPage() {
         } finally {
             setLoading(false);
         }
-    }, [receivingPage, stockPage]);
+    }, [receivingPage, stockPage, stockSearch]);
     useEffect(() => {
         let active = true;
-        void Promise.all([transferApi.ownStock(stockPage), transferApi.ownReceivings(receivingPage)])
+        void Promise.all([transferApi.ownStock(stockPage, stockSearch), transferApi.ownReceivings(receivingPage)])
             .then(([inventory, receivings]) => {
                 if (!active) return;
                 setStock(inventory.data);
@@ -70,7 +72,7 @@ export function RepresentativeStockPage() {
         return () => {
             active = false;
         };
-    }, [receivingPage, stockPage]);
+    }, [receivingPage, stockPage, stockSearch]);
     return (
         <div className="sales-stock-page">
             <header className="sales-page-heading">
@@ -170,44 +172,75 @@ export function RepresentativeStockPage() {
                     </div>
                     <small>Read only · paid and FOC balances in base units</small>
                 </header>
+                <form
+                    className="sales-stock-search"
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        setStockPage(1);
+                        setStockSearch(stockSearchDraft.trim());
+                    }}
+                    role="search"
+                >
+                    <label htmlFor="representative-stock-search">Search available products</label>
+                    <div>
+                        <Icon name="search" size={16} />
+                        <input
+                            id="representative-stock-search"
+                            onChange={(event) => setStockSearchDraft(event.target.value)}
+                            placeholder="Product name or SKU"
+                            type="search"
+                            value={stockSearchDraft}
+                        />
+                    </div>
+                    <button type="submit">Search</button>
+                </form>
                 {loading ? (
                     <div className="ui-loading">
                         <span />
                         Loading stock…
                     </div>
                 ) : stock.length === 0 ? (
-                    <EmptyState description="Received products will be listed here." title="No stock on hand" />
+                    <EmptyState
+                        description={
+                            stockSearch ? 'Try another product name or SKU.' : 'Received products will be listed here.'
+                        }
+                        title={stockSearch ? 'No matching products' : 'No stock on hand'}
+                    />
                 ) : (
-                    <div className="sales-stock-list sales-available-stock-list">
-                        {stock.map((row) => (
-                            <article key={row.id}>
-                                <span className="sales-stock-list__icon">
-                                    <Icon name="box" size={17} />
-                                </span>
-                                <div className="sales-available-stock__identity">
-                                    <strong>{row.product.name}</strong>
-                                    <small>{row.product.sku}</small>
-                                    {row.pending_quantity > 0 ? (
-                                        <span className="sales-available-stock__incoming">
-                                            <Icon name="truck" size={12} />
-                                            {number(row.pending_quantity)} incoming
-                                        </span>
-                                    ) : null}
-                                </div>
-                                <div className="sales-available-stock__metrics">
-                                    <span className="sales-stock-list__quantity">
-                                        <small>On hand</small>
-                                        <strong>{number(row.quantity)}</strong>
-                                        <small>{row.product.unit}</small>
-                                    </span>
-                                    <span className="sales-capacity">
-                                        <small>FOC stock</small>
-                                        <strong>{number(row.foc_quantity)}</strong>
-                                        <small>{row.product.unit}</small>
-                                    </span>
-                                </div>
-                            </article>
-                        ))}
+                    <div className="sales-stock-table-wrap">
+                        <table aria-label="Available product stock" className="sales-stock-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Product</th>
+                                    <th scope="col">Paid base</th>
+                                    <th scope="col">FOC base</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {stock.map((row) => (
+                                    <tr key={row.id}>
+                                        <td>
+                                            <strong>{row.product.name}</strong>
+                                            <small>{row.product.sku}</small>
+                                            {row.pending_quantity > 0 ? (
+                                                <span className="sales-available-stock__incoming">
+                                                    <Icon name="truck" size={12} />
+                                                    {number(row.pending_quantity)} incoming
+                                                </span>
+                                            ) : null}
+                                        </td>
+                                        <td>
+                                            <strong>{number(row.quantity)}</strong>
+                                            <small>{row.product.base_unit ?? row.product.unit}</small>
+                                        </td>
+                                        <td>
+                                            <strong>{number(row.foc_quantity)}</strong>
+                                            <small>{row.product.base_unit ?? row.product.unit}</small>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 )}
                 <Pagination label="Available products" loading={loading} meta={stockMeta} onPageChange={setStockPage} />

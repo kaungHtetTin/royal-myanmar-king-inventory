@@ -106,6 +106,10 @@ export function SalesCustomerPage() {
                                     <small>
                                         {customer.code} · {customer.customer_type || 'Customer'}
                                     </small>
+                                    <small className="sales-customer-list__coverage">
+                                        {customer.way?.region?.warehouse?.name ?? 'Warehouse unavailable'} ·{' '}
+                                        {customer.way?.region?.name || customer.region || 'Region unavailable'}
+                                    </small>
                                 </div>
                                 <div className="sales-stock-list__quantity sales-customer-list__meta">
                                     <strong>{customer.phone || 'No phone'}</strong>

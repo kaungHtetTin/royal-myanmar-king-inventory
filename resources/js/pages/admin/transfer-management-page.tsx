@@ -1138,7 +1138,7 @@ function WarehouseTransferForm({
     const [draftRecord, setDraftRecord] = useState<WarehouseTransfer | null>(transfer);
     const [form, setForm] = useState<WarehouseTransferInput>({
         destination_warehouse_id: 0,
-        items: [{ product_id: 0, quantity: 1 }],
+        items: [{ product_id: 0, product_unit_id: 0, quantity: 1 }],
         notes: '',
         source_warehouse_id: 0,
     });
@@ -1156,6 +1156,12 @@ function WarehouseTransferForm({
                       notes: transfer.notes ?? '',
                       items: transfer.items.map((item) => ({
                           product_id: item.product.id,
+                          product_unit_id:
+                              item.unit?.id ??
+                              options.products
+                                  .find((product) => product.id === item.product.id)
+                                  ?.units?.find((unit) => unit.is_base)?.id ??
+                              0,
                           quantity: item.quantity,
                       })),
                   }
@@ -1169,7 +1175,7 @@ function WarehouseTransferForm({
                       items: [],
                   },
         );
-    }, [options.destination_warehouses, options.source_warehouses, transfer]);
+    }, [options.destination_warehouses, options.products, options.source_warehouses, transfer]);
     const destinationWarehouses = options.destination_warehouses.filter(
         (warehouse) => warehouse.id !== form.source_warehouse_id,
     );
@@ -1194,8 +1200,13 @@ function WarehouseTransferForm({
             }
         }
         if (step === 2 && form.items.length === 0) nextErrors.items = ['Select at least one product.'];
-        if (step === 3 && form.items.some((item) => item.quantity < 1))
-            nextErrors.items = ['Every selected product needs a quantity of at least one.'];
+        if (step === 3) {
+            form.items.forEach((item, index) => {
+                if (!item.product_unit_id) nextErrors[`items.${index}.product_unit_id`] = ['Select a product unit.'];
+                if (!Number.isInteger(item.quantity) || item.quantity < 1)
+                    nextErrors[`items.${index}.quantity`] = ['Enter a whole quantity of at least one.'];
+            });
+        }
         if (Object.keys(nextErrors).length) {
             setErrors(nextErrors);
             return;
@@ -1241,16 +1252,18 @@ function WarehouseTransferForm({
         <section className="stock-import-form-page__panel warehouse-transfer-form-page__panel">
             <form className="management-form" id="warehouse-transfer-form" onSubmit={(event) => event.preventDefault()}>
                 <ol aria-label="Warehouse transfer progress" className="form-stepper transfer-form-stepper">
-                    {['Transfer information', 'Product selection', 'Quantity', 'Review & save'].map((label, index) => (
-                        <li
-                            aria-current={step === index + 1 ? 'step' : undefined}
-                            className={step >= index + 1 ? 'is-active' : ''}
-                            key={label}
-                        >
-                            <span>{index + 1}</span>
-                            <strong>{label}</strong>
-                        </li>
-                    ))}
+                    {['Transfer information', 'Product selection', 'Unit & quantity', 'Review & save'].map(
+                        (label, index) => (
+                            <li
+                                aria-current={step === index + 1 ? 'step' : undefined}
+                                className={step >= index + 1 ? 'is-active' : ''}
+                                key={label}
+                            >
+                                <span>{index + 1}</span>
+                                <strong>{label}</strong>
+                            </li>
+                        ),
+                    )}
                 </ol>
                 {errors.form?.[0] ? <div className="ui-form-error">{errors.form[0]}</div> : null}
                 {step === 1 ? (
@@ -1352,11 +1365,14 @@ function WarehouseTransferForm({
                                                               ...value.items,
                                                               {
                                                                   product_id: product.id,
-                                                                  product_unit_id: product.units?.find(
-                                                                      (unit) => unit.is_default_selling,
-                                                                  )?.id,
+                                                                  product_unit_id:
+                                                                      product.units?.find(
+                                                                          (unit) => unit.is_default_selling,
+                                                                      )?.id ??
+                                                                      product.units?.find((unit) => unit.is_base)?.id ??
+                                                                      product.units?.[0]?.id ??
+                                                                      0,
                                                                   quantity: 1,
-                                                                  foc_quantity: 0,
                                                               },
                                                           ],
                                                 }))
@@ -1380,22 +1396,54 @@ function WarehouseTransferForm({
                 {step === 3 ? (
                     <div className="transfer-wizard-section">
                         <div className="import-lines__heading">
-                            <strong>Set quantities</strong>
-                            <small>Enter the units to transfer.</small>
+                            <strong>Set units and quantities</strong>
+                            <small>Choose the package unit used for each transfer line.</small>
                         </div>
                         <div className="transfer-wizard-quantities">
                             {form.items.map((item, index) => {
                                 const product = options.products.find((option) => option.id === item.product_id);
+                                const baseUnit = product?.units?.find((unit) => unit.is_base);
                                 return (
                                     <div className="import-line import-line--quantity" key={item.product_id}>
                                         <div>
                                             <strong>{product?.name}</strong>
-                                            <small>
-                                                {product?.sku} · {product?.unit}
-                                            </small>
+                                            <small>{product?.sku}</small>
                                         </div>
                                         <label className="ui-field">
-                                            <span>Quantity</span>
+                                            <span>Unit</span>
+                                            <select
+                                                onChange={(event) =>
+                                                    setForm((value) => ({
+                                                        ...value,
+                                                        items: value.items.map((line, lineIndex) =>
+                                                            lineIndex === index
+                                                                ? {
+                                                                      ...line,
+                                                                      product_unit_id: Number(event.target.value),
+                                                                  }
+                                                                : line,
+                                                        ),
+                                                    }))
+                                                }
+                                                required
+                                                value={item.product_unit_id || ''}
+                                            >
+                                                <option disabled value="">
+                                                    Select unit
+                                                </option>
+                                                {(product?.units ?? []).map((unit) => (
+                                                    <option key={unit.id} value={unit.id}>
+                                                        {unit.name}
+                                                        {unit.is_base
+                                                            ? ' (base unit)'
+                                                            : ` (${unit.conversion_factor} ${baseUnit?.name ?? 'base units'})`}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <FieldError errors={errors} name={`items.${index}.product_unit_id`} />
+                                        </label>
+                                        <label className="ui-field">
+                                            <span>Transfer quantity</span>
                                             <input
                                                 min={1}
                                                 onChange={(event) =>
@@ -1415,6 +1463,7 @@ function WarehouseTransferForm({
                                                 type="number"
                                                 value={item.quantity}
                                             />
+                                            <FieldError errors={errors} name={`items.${index}.quantity`} />
                                         </label>
                                     </div>
                                 );
@@ -1451,15 +1500,23 @@ function WarehouseTransferForm({
                             <strong>{form.items.length}</strong>
                         </section>
                         <section>
-                            <span>Total units</span>
-                            <strong>{form.items.reduce((total, item) => total + item.quantity, 0)}</strong>
+                            <span>Total base units</span>
+                            <strong>
+                                {form.items.reduce((total, item) => {
+                                    const product = options.products.find((option) => option.id === item.product_id);
+                                    const unit = product?.units?.find((option) => option.id === item.product_unit_id);
+                                    return total + item.quantity * (unit?.conversion_factor ?? 0);
+                                }, 0)}
+                            </strong>
                         </section>
                         <div className="ui-table-wrap">
                             <table className="ui-table transfer-wizard-review__table">
                                 <thead>
                                     <tr>
                                         <th>Product</th>
+                                        <th>Unit</th>
                                         <th className="is-numeric">Quantity</th>
+                                        <th className="is-numeric">Base stock</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1467,16 +1524,28 @@ function WarehouseTransferForm({
                                         const product = options.products.find(
                                             (option) => option.id === item.product_id,
                                         );
+                                        const unit = product?.units?.find(
+                                            (option) => option.id === item.product_unit_id,
+                                        );
                                         return (
                                             <tr key={item.product_id}>
                                                 <td>
                                                     <strong>{product?.name}</strong>
                                                     <small>
-                                                        {product?.sku} · {product?.unit}
+                                                        {product?.sku} · Base unit:{' '}
+                                                        {product?.units?.find((option) => option.is_base)?.name ??
+                                                            product?.unit}
                                                     </small>
+                                                </td>
+                                                <td>
+                                                    <strong>{unit?.name ?? 'Not selected'}</strong>
+                                                    <small>{unit?.conversion_factor ?? 0} base units each</small>
                                                 </td>
                                                 <td className="is-numeric">
                                                     <strong>{item.quantity}</strong>
+                                                </td>
+                                                <td className="is-numeric">
+                                                    <strong>{item.quantity * (unit?.conversion_factor ?? 0)}</strong>
                                                 </td>
                                             </tr>
                                         );
@@ -1630,7 +1699,13 @@ function RepresentativeTransferWizard({
                       source_warehouse_id: transfer.source_warehouse.id,
                       sales_representative_id: transfer.representative.id,
                       notes: transfer.notes ?? '',
-                      items: transfer.items.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
+                      items: transfer.items.map((item) => ({
+                          product_id: item.product.id,
+                          product_unit_id: item.unit?.id,
+                          quantity: item.quantity,
+                          foc_product_unit_id: item.foc_unit?.id,
+                          foc_quantity: item.foc_quantity ?? 0,
+                      })),
                   }
                 : {
                       source_warehouse_id: sourceWarehouseId,
@@ -1653,8 +1728,19 @@ function RepresentativeTransferWizard({
         )
             nextErrors.sales_representative_id = ['Select a representative assigned to this warehouse.'];
         if (step === 2 && !form.items.length) nextErrors.items = ['Select at least one product.'];
-        if (step === 3 && form.items.some((item) => item.quantity < 1))
-            nextErrors.items = ['Each paid quantity must be at least 1.'];
+        if (
+            step === 3 &&
+            form.items.some(
+                (item) =>
+                    !Number.isInteger(item.quantity) ||
+                    item.quantity < 1 ||
+                    !Number.isInteger(item.foc_quantity ?? 0) ||
+                    (item.foc_quantity ?? 0) < 0,
+            )
+        )
+            nextErrors.items = [
+                'Paid quantities must be whole numbers of at least 1; FOC must be a whole number of 0 or more.',
+            ];
         if (
             step === 3 &&
             form.items.some((item) => {
@@ -1852,10 +1938,10 @@ function RepresentativeTransferWizard({
                                 const exceedsStock = physical > available;
                                 return (
                                     <div
-                                        className={`import-line import-line--quantity ${exceedsStock ? 'is-invalid' : ''}`}
+                                        className={`import-line import-line--quantity transfer-quantity-line ${exceedsStock ? 'is-invalid' : ''}`}
                                         key={item.product_id}
                                     >
-                                        <div>
+                                        <div className="transfer-quantity-line__product">
                                             <strong>{product?.name}</strong>
                                             <small
                                                 className={
@@ -1868,9 +1954,10 @@ function RepresentativeTransferWizard({
                                                 {product?.sku} · {product?.unit}
                                             </small>
                                         </div>
-                                        <label className="ui-field">
+                                        <label className="ui-field transfer-quantity-line__paid-unit">
                                             <span>Issue unit</span>
                                             <select
+                                                aria-label="Issue unit"
                                                 onChange={(event) =>
                                                     setForm((value) => ({
                                                         ...value,
@@ -1892,8 +1979,11 @@ function RepresentativeTransferWizard({
                                                     </option>
                                                 ))}
                                             </select>
+                                        </label>
+                                        <label className="ui-field transfer-quantity-line__paid-quantity">
                                             <span>Paid stock quantity</span>
                                             <input
+                                                aria-label="Paid stock quantity"
                                                 aria-invalid={exceedsStock}
                                                 min={1}
                                                 onChange={(event) =>
@@ -1919,9 +2009,10 @@ function RepresentativeTransferWizard({
                                                 </small>
                                             ) : null}
                                         </label>
-                                        <label className="ui-field">
+                                        <label className="ui-field transfer-quantity-line__foc-unit">
                                             <span>FOC unit</span>
                                             <select
+                                                aria-label="FOC unit"
                                                 onChange={(event) =>
                                                     setForm((value) => ({
                                                         ...value,
@@ -1943,8 +2034,11 @@ function RepresentativeTransferWizard({
                                                     </option>
                                                 ))}
                                             </select>
+                                        </label>
+                                        <label className="ui-field transfer-quantity-line__foc-quantity">
                                             <span>FOC quantity</span>
                                             <input
+                                                aria-label="FOC quantity"
                                                 min={0}
                                                 onChange={(event) =>
                                                     setForm((value) => ({
@@ -1992,30 +2086,67 @@ function RepresentativeTransferWizard({
                             <strong>{form.items.length}</strong>
                         </section>
                         <section>
-                            <span>Total units</span>
-                            <strong>{form.items.reduce((sum, item) => sum + item.quantity, 0)}</strong>
+                            <span>Paid / FOC base</span>
+                            <strong>
+                                {form.items.reduce((sum, item) => {
+                                    const product = options.products.find((value) => value.id === item.product_id);
+                                    const unit =
+                                        product?.units?.find((value) => value.id === item.product_unit_id) ??
+                                        product?.units?.find((value) => value.is_default_selling) ??
+                                        product?.units?.[0];
+                                    return sum + item.quantity * (unit?.conversion_factor ?? 1);
+                                }, 0)}{' '}
+                                /{' '}
+                                {form.items.reduce((sum, item) => {
+                                    const product = options.products.find((value) => value.id === item.product_id);
+                                    const unit =
+                                        product?.units?.find((value) => value.id === item.foc_product_unit_id) ??
+                                        product?.units?.find((value) => value.id === item.product_unit_id) ??
+                                        product?.units?.find((value) => value.is_default_selling) ??
+                                        product?.units?.[0];
+                                    return sum + (item.foc_quantity ?? 0) * (unit?.conversion_factor ?? 1);
+                                }, 0)}
+                            </strong>
                         </section>
                         <div className="ui-table-wrap">
                             <table className="ui-table transfer-wizard-review__table">
                                 <thead>
                                     <tr>
                                         <th>Product</th>
-                                        <th className="is-numeric">Quantity</th>
+                                        <th className="is-numeric">Paid</th>
+                                        <th className="is-numeric">FOC</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {form.items.map((item) => {
                                         const product = options.products.find((value) => value.id === item.product_id);
+                                        const paidUnit =
+                                            product?.units?.find((unit) => unit.id === item.product_unit_id) ??
+                                            product?.units?.find((unit) => unit.is_default_selling) ??
+                                            product?.units?.[0];
+                                        const focUnit =
+                                            product?.units?.find((unit) => unit.id === item.foc_product_unit_id) ??
+                                            paidUnit;
                                         return (
                                             <tr key={item.product_id}>
                                                 <td>
                                                     <strong>{product?.name}</strong>
-                                                    <small>
-                                                        {product?.sku} · {product?.unit}
-                                                    </small>
+                                                    <small>{product?.sku}</small>
                                                 </td>
                                                 <td className="is-numeric">
                                                     <strong>{item.quantity}</strong>
+                                                    <small>
+                                                        {paidUnit?.name ?? product?.unit} ·{' '}
+                                                        {item.quantity * (paidUnit?.conversion_factor ?? 1)} base
+                                                    </small>
+                                                </td>
+                                                <td className="is-numeric">
+                                                    <strong>{item.foc_quantity ?? 0}</strong>
+                                                    <small>
+                                                        {focUnit?.name ?? product?.unit} ·{' '}
+                                                        {(item.foc_quantity ?? 0) * (focUnit?.conversion_factor ?? 1)}{' '}
+                                                        base
+                                                    </small>
                                                 </td>
                                             </tr>
                                         );

@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useSession } from '../../auth/session-context';
-import { useBranding } from '../../branding/branding-context';
-import { printInvoice } from '../../services/invoice-print';
 import { saleApi, type Sale, type SaleStatus } from '../../services/sales';
 import { Icon } from '../../ui/icons';
+import { InvoicePrintButton } from '../../ui/invoice-print-dialog';
 import { Button, Dialog, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
 
 const money = (value: number) => `${new Intl.NumberFormat('en-US').format(value)} MMK`;
@@ -14,10 +13,20 @@ const dateTime = (value: string | null) =>
         : '—';
 const message = (error: unknown) => (error instanceof Error ? error.message : 'Unable to load the sale record.');
 const tone = (status: SaleStatus) => (status === 'posted' ? 'success' : status === 'draft' ? 'warning' : 'danger');
+const coordinates = (value: number) => value.toFixed(7);
+const mapLinks = (latitude: number, longitude: number) => {
+    const span = 0.005;
+    const marker = `${latitude},${longitude}`;
+    const box = `${longitude - span},${latitude - span},${longitude + span},${latitude + span}`;
+
+    return {
+        embed: `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(box)}&layer=mapnik&marker=${encodeURIComponent(marker)}`,
+        open: `https://www.openstreetmap.org/?mlat=${encodeURIComponent(latitude)}&mlon=${encodeURIComponent(longitude)}#map=17/${latitude}/${longitude}`,
+    };
+};
 
 export function AdminSaleDetailPage() {
     const { saleId } = useParams();
-    const { branding } = useBranding();
     const { user } = useSession();
     const id = Number(saleId);
     const canVoid = Boolean(user?.roles.includes('super-admin') || user?.permissions.includes('sale.void'));
@@ -119,14 +128,10 @@ export function AdminSaleDetailPage() {
                 <div className="sale-detail-heading__actions">
                     <StatusBadge tone={tone(sale.status)}>{sale.status}</StatusBadge>
                     {sale.status !== 'draft' ? (
-                        <Button
-                            icon="print"
-                            onClick={() => {
-                                if (!printInvoice(sale, branding)) setError('Allow pop-ups to print the invoice.');
-                            }}
-                        >
-                            Print invoice
-                        </Button>
+                        <InvoicePrintButton
+                            onBlocked={() => setError('Allow pop-ups to print the invoice.')}
+                            sale={sale}
+                        />
                     ) : null}
                     {canVoid && sale.status === 'posted' ? (
                         <Button icon="reverse" onClick={() => setVoidOpen(true)} requiresOnline tone="danger">
@@ -218,71 +223,129 @@ export function AdminSaleDetailPage() {
                         </table>
                     </div>
                 </Panel>
-                <Panel eyebrow="Transaction" title="Sale information">
-                    <dl className="transfer-detail-facts">
-                        <div>
-                            <dt>Customer</dt>
-                            <dd>
-                                {sale.customer.name}
-                                <small>{sale.customer.code}</small>
-                            </dd>
-                        </div>
-                        <div>
-                            <dt>Representative</dt>
-                            <dd>
-                                {sale.representative.name}
-                                <small>{sale.representative.code}</small>
-                            </dd>
-                        </div>
-                        <div>
-                            <dt>Warehouse</dt>
-                            <dd>
-                                {sale.warehouse.name}
-                                <small>{sale.warehouse.code}</small>
-                            </dd>
-                        </div>
-                        <div>
-                            <dt>Region / Way</dt>
-                            <dd>
-                                {sale.region?.name ?? '—'}
-                                <small>{sale.way ? `${sale.way.name} · ${sale.way.code}` : 'Not assigned'}</small>
-                            </dd>
-                        </div>
-                        <div>
-                            <dt>Payment</dt>
-                            <dd>{sale.payment_type}</dd>
-                        </div>
-                        <div>
-                            <dt>Created by</dt>
-                            <dd>
-                                {sale.created_by?.name ?? sale.representative.name}
-                                <small>{dateTime(sale.created_at)}</small>
-                            </dd>
-                        </div>
-                        <div>
-                            <dt>Posted by</dt>
-                            <dd>
-                                {sale.posted_by?.name ?? 'Not posted'}
-                                <small>{dateTime(sale.posted_at)}</small>
-                            </dd>
-                        </div>
-                        <div className="is-wide">
-                            <dt>Notes</dt>
-                            <dd>{sale.notes || 'No notes recorded'}</dd>
-                        </div>
-                        {sale.void_reason ? (
-                            <div className="is-wide is-danger">
-                                <dt>Void reason</dt>
+                <div className="admin-sale-detail-sidebar">
+                    <Panel eyebrow="Transaction" title="Sale information">
+                        <dl className="transfer-detail-facts">
+                            <div>
+                                <dt>Customer</dt>
                                 <dd>
-                                    {sale.void_reason}
-                                    <small>
-                                        {sale.voided_by?.name} · {dateTime(sale.voided_at)}
-                                    </small>
+                                    {sale.customer.name}
+                                    <small>{sale.customer.code}</small>
                                 </dd>
                             </div>
-                        ) : null}
-                    </dl>
-                </Panel>
+                            <div>
+                                <dt>Representative</dt>
+                                <dd>
+                                    {sale.representative.name}
+                                    <small>{sale.representative.code}</small>
+                                </dd>
+                            </div>
+                            <div>
+                                <dt>Warehouse</dt>
+                                <dd>
+                                    {sale.warehouse.name}
+                                    <small>{sale.warehouse.code}</small>
+                                </dd>
+                            </div>
+                            <div>
+                                <dt>Region / Way</dt>
+                                <dd>
+                                    {sale.region?.name ?? '—'}
+                                    <small>{sale.way ? `${sale.way.name} · ${sale.way.code}` : 'Not assigned'}</small>
+                                </dd>
+                            </div>
+                            <div>
+                                <dt>Payment</dt>
+                                <dd>{sale.payment_type}</dd>
+                            </div>
+                            <div>
+                                <dt>Created by</dt>
+                                <dd>
+                                    {sale.created_by?.name ?? sale.representative.name}
+                                    <small>{dateTime(sale.created_at)}</small>
+                                </dd>
+                            </div>
+                            <div>
+                                <dt>Posted by</dt>
+                                <dd>
+                                    {sale.posted_by?.name ?? 'Not posted'}
+                                    <small>{dateTime(sale.posted_at)}</small>
+                                </dd>
+                            </div>
+                            <div className="is-wide">
+                                <dt>Notes</dt>
+                                <dd>{sale.notes || 'No notes recorded'}</dd>
+                            </div>
+                            {sale.void_reason ? (
+                                <div className="is-wide is-danger">
+                                    <dt>Void reason</dt>
+                                    <dd>
+                                        {sale.void_reason}
+                                        <small>
+                                            {sale.voided_by?.name} · {dateTime(sale.voided_at)}
+                                        </small>
+                                    </dd>
+                                </div>
+                            ) : null}
+                        </dl>
+                    </Panel>
+                    <Panel className="admin-sale-location-panel" eyebrow="Creation point" title="Sale location">
+                        {sale.creation_location ? (
+                            <div className="sale-location-map">
+                                <iframe
+                                    loading="lazy"
+                                    referrerPolicy="no-referrer"
+                                    src={
+                                        mapLinks(sale.creation_location.latitude, sale.creation_location.longitude)
+                                            .embed
+                                    }
+                                    title={`Map showing where ${sale.reference} was created`}
+                                />
+                                <dl>
+                                    <div>
+                                        <dt>Latitude</dt>
+                                        <dd>{coordinates(sale.creation_location.latitude)}</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Longitude</dt>
+                                        <dd>{coordinates(sale.creation_location.longitude)}</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Accuracy</dt>
+                                        <dd>
+                                            {sale.creation_location.accuracy_meters === null
+                                                ? 'Not reported'
+                                                : `±${sale.creation_location.accuracy_meters} m`}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt>Captured</dt>
+                                        <dd>{dateTime(sale.creation_location.captured_at)}</dd>
+                                    </div>
+                                </dl>
+                                <a
+                                    className="sale-location-map__link"
+                                    href={
+                                        mapLinks(sale.creation_location.latitude, sale.creation_location.longitude).open
+                                    }
+                                    rel="noreferrer"
+                                    target="_blank"
+                                >
+                                    <Icon name="location" size={14} />
+                                    Open larger map
+                                </a>
+                            </div>
+                        ) : (
+                            <div className="sale-location-map__empty">
+                                <Icon name="location" size={20} />
+                                <span>
+                                    <strong>Location unavailable</strong>
+                                    <small>This sale was created before device location capture was enabled.</small>
+                                </span>
+                            </div>
+                        )}
+                    </Panel>
+                </div>
             </div>
             <Dialog
                 description="Voiding creates compensating stock and financial entries. The original sale remains in the audit trail."

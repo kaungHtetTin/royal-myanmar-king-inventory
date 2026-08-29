@@ -122,6 +122,54 @@ class AuthenticationTest extends TestCase
         $this->withHeader('Origin', 'http://localhost')->postJson('/api/auth/login', $payload)->assertOk();
     }
 
+    public function test_sales_only_user_cannot_call_admin_api_with_overlapping_permission(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole(RoleName::SalesRepresentative->value);
+
+        $this->actingAs($user)->getJson('/api/admin/customers')->assertForbidden();
+    }
+
+    public function test_dual_role_user_can_access_both_portals_when_representative_is_active(): void
+    {
+        $warehouse = Warehouse::query()->create(['code' => 'YGN', 'name' => 'Yangon']);
+        $user = User::factory()->create();
+        $user->assignRole([RoleName::OfficeAdmin->value, RoleName::SalesRepresentative->value]);
+        SalesRepresentative::query()->create([
+            'code' => 'SR-001',
+            'user_id' => $user->id,
+            'primary_warehouse_id' => $warehouse->id,
+            'name' => $user->name,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user)->getJson('/api/admin/me')->assertOk();
+        $this->getJson('/api/sales/me')->assertOk();
+    }
+
+    public function test_every_sales_route_requires_an_active_linked_representative(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole(RoleName::SalesRepresentative->value);
+
+        $this->actingAs($user)->getJson('/api/sales/me')
+            ->assertForbidden()
+            ->assertJsonPath('code', 'REPRESENTATIVE_PROFILE_UNAVAILABLE');
+
+        $warehouse = Warehouse::query()->create(['code' => 'YGN', 'name' => 'Yangon']);
+        SalesRepresentative::query()->create([
+            'code' => 'SR-001',
+            'user_id' => $user->id,
+            'primary_warehouse_id' => $warehouse->id,
+            'name' => $user->name,
+            'is_active' => false,
+        ]);
+
+        $this->getJson('/api/sales/me')
+            ->assertForbidden()
+            ->assertJsonPath('code', 'REPRESENTATIVE_PROFILE_UNAVAILABLE');
+    }
+
     public function test_protected_endpoints_reject_unauthenticated_requests(): void
     {
         $endpoints = [

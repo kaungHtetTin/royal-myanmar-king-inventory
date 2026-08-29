@@ -162,7 +162,10 @@ export function AdminDashboardPage() {
                         />
                     ) : (
                         <div className="ui-table-wrap">
-                            <table className="ui-table">
+                            <table
+                                aria-label="Recent stock movements"
+                                className="ui-table dashboard-stock-movements-table"
+                            >
                                 <thead>
                                     <tr>
                                         <th>Reference</th>

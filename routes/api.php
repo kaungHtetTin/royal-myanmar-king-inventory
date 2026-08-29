@@ -53,7 +53,7 @@ Route::prefix('auth')->group(function (): void {
 });
 
 Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
-    Route::prefix('admin')->group(function (): void {
+    Route::prefix('admin')->middleware('role:'.RoleName::SuperAdmin->value.'|'.RoleName::OfficeAdmin->value)->group(function (): void {
         Route::get('/me', [SessionController::class, 'show'])
             ->middleware('permission:'.PermissionName::DashboardView->value);
         Route::get('/dashboard', AdminDashboardController::class)->middleware('permission:'.PermissionName::DashboardView->value);
@@ -235,8 +235,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
 
     Route::prefix('sales')->group(function (): void {
         Route::get('/me', [SessionController::class, 'show'])
-            ->middleware('role:'.RoleName::SalesRepresentative->value);
-        Route::middleware('role:'.RoleName::SalesRepresentative->value)->group(function (): void {
+            ->middleware(['role:'.RoleName::SalesRepresentative->value, 'active_representative']);
+        Route::middleware(['role:'.RoleName::SalesRepresentative->value, 'active_representative'])->group(function (): void {
             Route::get('/profile', [SalesRepresentativeController::class, 'current']);
             Route::put('/profile', [SalesRepresentativeController::class, 'update']);
             Route::put('/profile/password', [SalesRepresentativeController::class, 'updatePassword']);

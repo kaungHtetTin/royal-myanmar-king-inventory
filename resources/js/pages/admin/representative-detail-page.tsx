@@ -36,6 +36,8 @@ export function RepresentativeDetailPage() {
     const [salesMeta, setSalesMeta] = useState(emptyMeta);
     const [cashMeta, setCashMeta] = useState(emptyMeta);
     const [stockPage, setStockPage] = useState(1);
+    const [stockSearch, setStockSearch] = useState('');
+    const [stockSearchDraft, setStockSearchDraft] = useState('');
     const [salesPage, setSalesPage] = useState(1);
     const [cashPage, setCashPage] = useState(1);
     const [loading, setLoading] = useState(true);
@@ -54,7 +56,11 @@ export function RepresentativeDetailPage() {
             setOverview(summary);
             const [stockResponse, salesResponse, cashResponse] = await Promise.all([
                 summary.visibility.stock
-                    ? transferApi.representativeInventory({ page: stockPage, representative_id: representativeId })
+                    ? transferApi.representativeInventory({
+                          page: stockPage,
+                          representative_id: representativeId,
+                          search: stockSearch || undefined,
+                      })
                     : null,
                 summary.visibility.sales
                     ? saleApi.adminSales({ page: salesPage, representative_id: representativeId })
@@ -78,7 +84,7 @@ export function RepresentativeDetailPage() {
         } finally {
             setLoading(false);
         }
-    }, [cashPage, representativeId, salesPage, stockPage]);
+    }, [cashPage, representativeId, salesPage, stockPage, stockSearch]);
 
     useEffect(() => {
         void Promise.resolve().then(load);
@@ -244,23 +250,54 @@ export function RepresentativeDetailPage() {
                 </Panel>
             </div>
 
-            <div className="representative-history-grid">
-                <Panel eyebrow="Current custody" title="Holding stock">
+            <div className="representative-operations-grid">
+                <Panel className="representative-stock-panel" eyebrow="Current custody" title="Holding stock">
+                    {overview.visibility.stock ? (
+                        <form
+                            className="filter-toolbar representative-stock-filter"
+                            onSubmit={(event) => {
+                                event.preventDefault();
+                                setStockPage(1);
+                                setStockSearch(stockSearchDraft.trim());
+                            }}
+                            role="search"
+                        >
+                            <label className="filter-search">
+                                <span className="sr-only">Search holding stock products</span>
+                                <Icon name="search" size={15} />
+                                <input
+                                    onChange={(event) => setStockSearchDraft(event.target.value)}
+                                    placeholder="Search product name or SKU"
+                                    type="search"
+                                    value={stockSearchDraft}
+                                />
+                            </label>
+                            <button className="ui-button ui-button--secondary" disabled={loading} type="submit">
+                                Search
+                            </button>
+                        </form>
+                    ) : null}
                     {!overview.visibility.stock ? (
                         <EmptyState
                             title="Stock restricted"
                             description="Representative stock permission is required."
                         />
                     ) : stock.length === 0 ? (
-                        <EmptyState title="No stock held" description="Issued products will appear here." />
+                        <EmptyState
+                            title={stockSearch ? 'No matching products' : 'No stock held'}
+                            description={
+                                stockSearch ? 'Try another product name or SKU.' : 'Issued products will appear here.'
+                            }
+                        />
                     ) : (
                         <div className="ui-table-wrap">
                             <table className="ui-table representative-detail-table">
                                 <thead>
                                     <tr>
                                         <th>Product</th>
-                                        <th className="is-numeric">On hand</th>
-                                        <th className="is-numeric">Incoming</th>
+                                        <th className="is-numeric">Paid base</th>
+                                        <th className="is-numeric">FOC base</th>
+                                        <th className="is-numeric">Incoming base</th>
                                         <th>Updated</th>
                                     </tr>
                                 </thead>
@@ -275,8 +312,16 @@ export function RepresentativeDetailPage() {
                                             </td>
                                             <td className="is-numeric">
                                                 <strong>{row.quantity}</strong>
+                                                <small>{row.product.base_unit ?? row.product.unit}</small>
                                             </td>
-                                            <td className="is-numeric">{row.pending_quantity}</td>
+                                            <td className="is-numeric">
+                                                <strong>{row.foc_quantity}</strong>
+                                                <small>{row.product.base_unit ?? row.product.unit}</small>
+                                            </td>
+                                            <td className="is-numeric">
+                                                <strong>{row.pending_quantity}</strong>
+                                                <small>{row.product.base_unit ?? row.product.unit}</small>
+                                            </td>
                                             <td>{dateTime(row.updated_at)}</td>
                                         </tr>
                                     ))}
@@ -287,103 +332,107 @@ export function RepresentativeDetailPage() {
                     <Pagination label="Holding stock" loading={loading} meta={stockMeta} onPageChange={setStockPage} />
                 </Panel>
 
-                <Panel eyebrow="Commercial activity" title="Sale history">
-                    {!overview.visibility.sales ? (
-                        <EmptyState title="Sales restricted" description="Sale view permission is required." />
-                    ) : sales.length === 0 ? (
-                        <EmptyState title="No sales found" description="Representative sales will appear here." />
+                <Panel
+                    className="representative-cash-panel"
+                    eyebrow="Office settlement"
+                    title="Cash submission history"
+                >
+                    {!overview.visibility.cash ? (
+                        <EmptyState title="Cash history restricted" description="Cash view permission is required." />
+                    ) : submissions.length === 0 ? (
+                        <EmptyState title="No cash submissions" description="Submitted handovers will appear here." />
                     ) : (
                         <div className="ui-table-wrap">
-                            <table className="ui-table representative-detail-table">
+                            <table className="ui-table representative-cash-history">
                                 <thead>
                                     <tr>
-                                        <th>Sale</th>
-                                        <th>Customer</th>
-                                        <th>Payment</th>
+                                        <th>Submission</th>
                                         <th className="is-numeric">Amount</th>
                                         <th>Status</th>
+                                        <th>Submitted by</th>
+                                        <th>Confirmation</th>
+                                        <th>Notes</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {sales.map((sale) => (
-                                        <tr key={sale.id}>
+                                    {submissions.map((submission) => (
+                                        <tr key={submission.id}>
                                             <td>
-                                                <strong>{sale.reference}</strong>
-                                                <small>{dateTime(sale.posted_at || sale.created_at)}</small>
+                                                <strong>{submission.reference}</strong>
+                                                <small>{dateTime(submission.created_at)}</small>
                                             </td>
-                                            <td>
-                                                <strong>{sale.customer.name}</strong>
-                                                <small>{sale.customer.code}</small>
-                                            </td>
-                                            <td>{sale.payment_type}</td>
                                             <td className="is-numeric">
-                                                <strong>{money(sale.total_amount)}</strong>
+                                                <strong>{money(submission.amount)}</strong>
                                             </td>
                                             <td>
-                                                <StatusBadge tone={statusTone(sale.status)}>{sale.status}</StatusBadge>
+                                                <StatusBadge tone={statusTone(submission.status)}>
+                                                    {submission.status}
+                                                </StatusBadge>
                                             </td>
+                                            <td>{submission.created_by?.name || 'System'}</td>
+                                            <td>
+                                                {submission.confirmed_at
+                                                    ? dateTime(submission.confirmed_at)
+                                                    : 'Awaiting office'}
+                                            </td>
+                                            <td>{submission.notes || '—'}</td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
                         </div>
                     )}
-                    <Pagination label="Sale history" loading={loading} meta={salesMeta} onPageChange={setSalesPage} />
+                    <Pagination
+                        label="Cash submission history"
+                        loading={loading}
+                        meta={cashMeta}
+                        onPageChange={setCashPage}
+                    />
                 </Panel>
             </div>
 
-            <Panel eyebrow="Office settlement" title="Cash submission history">
-                {!overview.visibility.cash ? (
-                    <EmptyState title="Cash history restricted" description="Cash view permission is required." />
-                ) : submissions.length === 0 ? (
-                    <EmptyState title="No cash submissions" description="Submitted handovers will appear here." />
+            <Panel className="representative-sales-panel" eyebrow="Commercial activity" title="Sale history">
+                {!overview.visibility.sales ? (
+                    <EmptyState title="Sales restricted" description="Sale view permission is required." />
+                ) : sales.length === 0 ? (
+                    <EmptyState title="No sales found" description="Representative sales will appear here." />
                 ) : (
                     <div className="ui-table-wrap">
-                        <table className="ui-table representative-cash-history">
+                        <table className="ui-table representative-detail-table">
                             <thead>
                                 <tr>
-                                    <th>Submission</th>
+                                    <th>Sale</th>
+                                    <th>Customer</th>
+                                    <th>Payment</th>
                                     <th className="is-numeric">Amount</th>
                                     <th>Status</th>
-                                    <th>Submitted by</th>
-                                    <th>Confirmation</th>
-                                    <th>Notes</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {submissions.map((submission) => (
-                                    <tr key={submission.id}>
+                                {sales.map((sale) => (
+                                    <tr key={sale.id}>
                                         <td>
-                                            <strong>{submission.reference}</strong>
-                                            <small>{dateTime(submission.created_at)}</small>
+                                            <strong>{sale.reference}</strong>
+                                            <small>{dateTime(sale.posted_at || sale.created_at)}</small>
                                         </td>
+                                        <td>
+                                            <strong>{sale.customer.name}</strong>
+                                            <small>{sale.customer.code}</small>
+                                        </td>
+                                        <td>{sale.payment_type}</td>
                                         <td className="is-numeric">
-                                            <strong>{money(submission.amount)}</strong>
+                                            <strong>{money(sale.total_amount)}</strong>
                                         </td>
                                         <td>
-                                            <StatusBadge tone={statusTone(submission.status)}>
-                                                {submission.status}
-                                            </StatusBadge>
+                                            <StatusBadge tone={statusTone(sale.status)}>{sale.status}</StatusBadge>
                                         </td>
-                                        <td>{submission.created_by?.name || 'System'}</td>
-                                        <td>
-                                            {submission.confirmed_at
-                                                ? dateTime(submission.confirmed_at)
-                                                : 'Awaiting office'}
-                                        </td>
-                                        <td>{submission.notes || '—'}</td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                     </div>
                 )}
-                <Pagination
-                    label="Cash submission history"
-                    loading={loading}
-                    meta={cashMeta}
-                    onPageChange={setCashPage}
-                />
+                <Pagination label="Sale history" loading={loading} meta={salesMeta} onPageChange={setSalesPage} />
             </Panel>
         </div>
     );
