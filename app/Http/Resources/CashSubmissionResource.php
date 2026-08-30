@@ -13,6 +13,7 @@ class CashSubmissionResource extends JsonResource
         return [
             'id' => $this->id,
             'reference' => $this->reference,
+            'trip' => $this->trip_id ? ['id' => $this->trip_id, 'reference' => $this->trip?->reference, 'title' => $this->trip?->title] : null,
             'representative' => ['id' => $this->representative->id, 'code' => $this->representative->code, 'name' => $this->representative->name],
             'warehouse' => ['id' => $this->warehouse->id, 'code' => $this->warehouse->code, 'name' => $this->warehouse->name],
             'amount' => $this->amount,

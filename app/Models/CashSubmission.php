@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CashSubmission extends Model
 {
-    protected $fillable = ['reference', 'sales_representative_id', 'warehouse_id', 'amount', 'status', 'notes', 'created_by', 'confirmed_by', 'confirmed_at', 'cancelled_by', 'cancelled_at', 'cancel_reason', 'reversed_by', 'reversed_at', 'reversal_reason'];
+    protected $fillable = ['reference', 'trip_id', 'sales_representative_id', 'warehouse_id', 'amount', 'status', 'notes', 'created_by', 'confirmed_by', 'confirmed_at', 'cancelled_by', 'cancelled_at', 'cancel_reason', 'reversed_by', 'reversed_at', 'reversal_reason'];
 
     protected function casts(): array
     {
@@ -18,6 +18,11 @@ class CashSubmission extends Model
     public function representative(): BelongsTo
     {
         return $this->belongsTo(SalesRepresentative::class, 'sales_representative_id');
+    }
+
+    public function trip(): BelongsTo
+    {
+        return $this->belongsTo(Trip::class);
     }
 
     public function warehouse(): BelongsTo

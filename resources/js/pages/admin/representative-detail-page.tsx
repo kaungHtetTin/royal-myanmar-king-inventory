@@ -7,17 +7,9 @@ import { saleApi, type Sale } from '../../services/sales';
 import { transferApi, type RepresentativeInventory } from '../../services/transfers';
 import { Icon } from '../../ui/icons';
 import { EmptyState, MetricCard, Pagination, Panel, StatusBadge } from '../../ui/primitives';
+import { useLocale } from '../../localization/locale-context';
 
 const emptyMeta: PaginationMeta = { current_page: 1, from: null, last_page: 1, per_page: 10, to: null, total: 0 };
-
-function money(value: number | null) {
-    return value === null ? 'Restricted' : `${new Intl.NumberFormat().format(value)} MMK`;
-}
-
-function dateTime(value: string | null) {
-    if (!value) return 'Not recorded';
-    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
-}
 
 function statusTone(status: string): 'success' | 'warning' | 'danger' | 'info' | 'neutral' {
     if (status === 'posted' || status === 'confirmed') return 'success';
@@ -27,6 +19,9 @@ function statusTone(status: string): 'success' | 'warning' | 'danger' | 'info' |
 }
 
 export function RepresentativeDetailPage() {
+    const { formatDateTime, formatNumber, t } = useLocale();
+    const money = (value: number | null) => (value === null ? t('Restricted') : `${formatNumber(value)} MMK`);
+    const dateTime = (value: string | null) => (value ? formatDateTime(value) : t('Not recorded'));
     const representativeId = Number(useParams().representativeId);
     const [overview, setOverview] = useState<RepresentativeOverview | null>(null);
     const [stock, setStock] = useState<RepresentativeInventory[]>([]);
@@ -45,7 +40,7 @@ export function RepresentativeDetailPage() {
 
     const load = useCallback(async () => {
         if (!Number.isInteger(representativeId) || representativeId < 1) {
-            setError('The representative reference is invalid.');
+            setError(t('The representative reference is invalid.'));
             setLoading(false);
             return;
         }
@@ -65,7 +60,9 @@ export function RepresentativeDetailPage() {
                 summary.visibility.sales
                     ? saleApi.adminSales({ page: salesPage, representative_id: representativeId })
                     : null,
-                summary.visibility.cash ? financeApi.cashSubmissions(cashPage, representativeId) : null,
+                summary.visibility.cash
+                    ? financeApi.cashSubmissions({ page: cashPage, representative_id: representativeId })
+                    : null,
             ]);
             if (stockResponse) {
                 setStock(stockResponse.data);
@@ -80,11 +77,13 @@ export function RepresentativeDetailPage() {
                 setCashMeta(cashResponse.meta);
             }
         } catch (requestError) {
-            setError(requestError instanceof Error ? requestError.message : 'Unable to load representative details.');
+            setError(
+                requestError instanceof Error ? requestError.message : t('Unable to load representative details.'),
+            );
         } finally {
             setLoading(false);
         }
-    }, [cashPage, representativeId, salesPage, stockPage, stockSearch]);
+    }, [cashPage, representativeId, salesPage, stockPage, stockSearch, t]);
 
     useEffect(() => {
         void Promise.resolve().then(load);
@@ -94,7 +93,7 @@ export function RepresentativeDetailPage() {
         return (
             <div className="ui-loading" role="status">
                 <span />
-                Loading representative details…
+                {t('Loading representative details…')}
             </div>
         );
     }
@@ -108,7 +107,7 @@ export function RepresentativeDetailPage() {
                 </div>
                 <Link className="sale-detail-back" to="/admin/representatives">
                     <Icon name="chevronLeft" size={13} />
-                    Back to representatives
+                    {t('Back to representatives')}
                 </Link>
             </div>
         );
@@ -123,17 +122,17 @@ export function RepresentativeDetailPage() {
                 <div>
                     <Link className="sale-detail-back" to="/admin/representatives">
                         <Icon name="chevronLeft" size={13} />
-                        Representatives
+                        {t('Representatives')}
                     </Link>
-                    <p className="ui-eyebrow">Field performance</p>
+                    <p className="ui-eyebrow">{t('Field performance')}</p>
                     <h1>{representative.name}</h1>
                     <p>
                         {representative.code} · {representative.primary_warehouse.name} ·{' '}
-                        {representative.region || 'No region assigned'}
+                        {representative.region || t('No region assigned')}
                     </p>
                 </div>
                 <StatusBadge tone={representative.is_active ? 'success' : 'danger'}>
-                    {representative.is_active ? 'Active' : 'Inactive'}
+                    {t(representative.is_active ? 'Active' : 'Inactive')}
                 </StatusBadge>
             </header>
 
@@ -142,92 +141,108 @@ export function RepresentativeDetailPage() {
                     <Icon name="x" size={15} />
                     {error}
                     <button onClick={() => void load()} type="button">
-                        Retry
+                        {t('Retry')}
                     </button>
                 </div>
             ) : null}
 
             <section
-                aria-label="Representative key performance indicators"
+                aria-label={t('Representative key performance indicators')}
                 className="metric-grid representative-detail-kpis"
             >
                 <MetricCard
-                    hint={`${overview.kpis.stock_products ?? 0} products currently held`}
+                    hint={t('{count} products currently held', {
+                        count: formatNumber(overview.kpis.stock_products ?? 0),
+                    })}
                     icon="box"
-                    label="Stock on hand"
-                    value={overview.kpis.stock_units === null ? 'Restricted' : `${overview.kpis.stock_units} units`}
+                    label={t('Stock on hand')}
+                    value={
+                        overview.kpis.stock_units === null
+                            ? t('Restricted')
+                            : t('{count} units', { count: formatNumber(overview.kpis.stock_units) })
+                    }
                 />
                 <MetricCard
-                    hint={`${overview.kpis.sales_transactions_30_days ?? 0} posted transactions`}
+                    hint={t('{count} posted transactions', {
+                        count: formatNumber(overview.kpis.sales_transactions_30_days ?? 0),
+                    })}
                     icon="sales"
-                    label="Sales · 30 days"
+                    label={t('Sales · 30 days')}
                     value={money(overview.kpis.sales_30_days)}
                 />
                 <MetricCard
-                    hint="Current accountable balance"
+                    hint={t('Current accountable balance')}
                     icon="cash"
-                    label="Cash held"
+                    label={t('Cash held')}
                     value={money(overview.kpis.cash_hold)}
                 />
                 <MetricCard
-                    hint={`${overview.kpis.pending_submission_count ?? 0} awaiting confirmation`}
+                    hint={t('{count} awaiting confirmation', {
+                        count: formatNumber(overview.kpis.pending_submission_count ?? 0),
+                    })}
                     icon="transfer"
-                    label="Pending handover"
+                    label={t('Pending handover')}
                     value={money(overview.kpis.pending_submissions)}
                 />
             </section>
 
             <div className="representative-detail-overview">
-                <Panel eyebrow="Profile" title="Assignment & contact">
+                <Panel eyebrow={t('Profile')} title={t('Assignment & contact')}>
                     <dl className="representative-detail-facts">
                         <div>
-                            <dt>Warehouse</dt>
+                            <dt>{t('Warehouse')}</dt>
                             <dd>
                                 {representative.primary_warehouse.name}
                                 <small>{representative.primary_warehouse.code}</small>
                             </dd>
                         </div>
                         <div>
-                            <dt>Vehicle</dt>
+                            <dt>{t('Vehicle')}</dt>
                             <dd>
-                                {representative.vehicle?.vehicle_number || 'Unassigned'}
-                                <small>{representative.vehicle?.vehicle_type || 'No linked vehicle'}</small>
+                                {representative.vehicle?.vehicle_number || t('Unassigned')}
+                                <small>{representative.vehicle?.vehicle_type || t('No linked vehicle')}</small>
                             </dd>
                         </div>
                         <div>
-                            <dt>Phone</dt>
-                            <dd>{representative.phone || 'Not specified'}</dd>
+                            <dt>{t('Phone')}</dt>
+                            <dd>{representative.phone || t('Not specified')}</dd>
                         </div>
                         <div>
-                            <dt>Email</dt>
-                            <dd>{representative.email || 'Not specified'}</dd>
+                            <dt>{t('Email')}</dt>
+                            <dd>{representative.email || t('Not specified')}</dd>
                         </div>
                         <div>
-                            <dt>Username</dt>
+                            <dt>{t('Username')}</dt>
                             <dd>
                                 @{representative.account.username}
-                                <small>Last login {dateTime(representative.account.last_login_at)}</small>
+                                <small>
+                                    {t('Last login {date}', { date: dateTime(representative.account.last_login_at) })}
+                                </small>
                             </dd>
                         </div>
                         <div>
-                            <dt>Notes</dt>
-                            <dd>{representative.notes || 'No notes recorded'}</dd>
+                            <dt>{t('Notes')}</dt>
+                            <dd>{representative.notes || t('No notes recorded')}</dd>
                         </div>
                     </dl>
                 </Panel>
 
-                <Panel eyebrow="30-day report" title="Posted sales trend">
+                <Panel eyebrow={t('30-day report')} title={t('Posted sales trend')}>
                     {overview.visibility.sales ? (
                         <div
                             className="representative-sales-chart"
                             role="img"
-                            aria-label="Daily posted sales for the last 30 days"
+                            aria-label={t('Daily posted sales for the last 30 days')}
                         >
                             {overview.sales_chart.map((point) => (
                                 <div
                                     className="representative-sales-chart__bar"
                                     key={point.date}
-                                    title={`${point.date}: ${money(point.amount)} from ${point.transactions} sales`}
+                                    title={t('{date}: {amount} from {count} sales', {
+                                        date: point.date,
+                                        amount: money(point.amount),
+                                        count: formatNumber(point.transactions),
+                                    })}
                                 >
                                     <span
                                         style={{
@@ -238,20 +253,20 @@ export function RepresentativeDetailPage() {
                             ))}
                             <div className="representative-sales-chart__axis">
                                 <span>{overview.sales_chart[0]?.date}</span>
-                                <span>Today</span>
+                                <span>{t('Today')}</span>
                             </div>
                         </div>
                     ) : (
                         <EmptyState
-                            title="Sales report restricted"
-                            description="Sale view permission is required for this chart."
+                            title={t('Sales report restricted')}
+                            description={t('Sale view permission is required for this chart.')}
                         />
                     )}
                 </Panel>
             </div>
 
             <div className="representative-operations-grid">
-                <Panel className="representative-stock-panel" eyebrow="Current custody" title="Holding stock">
+                <Panel className="representative-stock-panel" eyebrow={t('Current custody')} title={t('Holding stock')}>
                     {overview.visibility.stock ? (
                         <form
                             className="filter-toolbar representative-stock-filter"
@@ -263,42 +278,42 @@ export function RepresentativeDetailPage() {
                             role="search"
                         >
                             <label className="filter-search">
-                                <span className="sr-only">Search holding stock products</span>
+                                <span className="sr-only">{t('Search holding stock products')}</span>
                                 <Icon name="search" size={15} />
                                 <input
                                     onChange={(event) => setStockSearchDraft(event.target.value)}
-                                    placeholder="Search product name or SKU"
+                                    placeholder={t('Search product name or SKU')}
                                     type="search"
                                     value={stockSearchDraft}
                                 />
                             </label>
                             <button className="ui-button ui-button--secondary" disabled={loading} type="submit">
-                                Search
+                                {t('Search')}
                             </button>
                         </form>
                     ) : null}
                     {!overview.visibility.stock ? (
                         <EmptyState
-                            title="Stock restricted"
-                            description="Representative stock permission is required."
+                            title={t('Stock restricted')}
+                            description={t('Representative stock permission is required.')}
                         />
                     ) : stock.length === 0 ? (
                         <EmptyState
-                            title={stockSearch ? 'No matching products' : 'No stock held'}
-                            description={
-                                stockSearch ? 'Try another product name or SKU.' : 'Issued products will appear here.'
-                            }
+                            title={t(stockSearch ? 'No matching products' : 'No stock held')}
+                            description={t(
+                                stockSearch ? 'Try another product name or SKU.' : 'Issued products will appear here.',
+                            )}
                         />
                     ) : (
                         <div className="ui-table-wrap">
                             <table className="ui-table representative-detail-table">
                                 <thead>
                                     <tr>
-                                        <th>Product</th>
-                                        <th className="is-numeric">Paid base</th>
-                                        <th className="is-numeric">FOC base</th>
-                                        <th className="is-numeric">Incoming base</th>
-                                        <th>Updated</th>
+                                        <th>{t('Product')}</th>
+                                        <th className="is-numeric">{t('Paid base')}</th>
+                                        <th className="is-numeric">{t('FOC base')}</th>
+                                        <th className="is-numeric">{t('Incoming base')}</th>
+                                        <th>{t('Updated')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -311,15 +326,15 @@ export function RepresentativeDetailPage() {
                                                 </small>
                                             </td>
                                             <td className="is-numeric">
-                                                <strong>{row.quantity}</strong>
+                                                <strong>{formatNumber(row.quantity)}</strong>
                                                 <small>{row.product.base_unit ?? row.product.unit}</small>
                                             </td>
                                             <td className="is-numeric">
-                                                <strong>{row.foc_quantity}</strong>
+                                                <strong>{formatNumber(row.foc_quantity)}</strong>
                                                 <small>{row.product.base_unit ?? row.product.unit}</small>
                                             </td>
                                             <td className="is-numeric">
-                                                <strong>{row.pending_quantity}</strong>
+                                                <strong>{formatNumber(row.pending_quantity)}</strong>
                                                 <small>{row.product.base_unit ?? row.product.unit}</small>
                                             </td>
                                             <td>{dateTime(row.updated_at)}</td>
@@ -329,29 +344,40 @@ export function RepresentativeDetailPage() {
                             </table>
                         </div>
                     )}
-                    <Pagination label="Holding stock" loading={loading} meta={stockMeta} onPageChange={setStockPage} />
+                    <Pagination
+                        label={t('Holding stock')}
+                        loading={loading}
+                        meta={stockMeta}
+                        onPageChange={setStockPage}
+                    />
                 </Panel>
 
                 <Panel
                     className="representative-cash-panel"
-                    eyebrow="Office settlement"
-                    title="Cash submission history"
+                    eyebrow={t('Office settlement')}
+                    title={t('Cash submission history')}
                 >
                     {!overview.visibility.cash ? (
-                        <EmptyState title="Cash history restricted" description="Cash view permission is required." />
+                        <EmptyState
+                            title={t('Cash history restricted')}
+                            description={t('Cash view permission is required.')}
+                        />
                     ) : submissions.length === 0 ? (
-                        <EmptyState title="No cash submissions" description="Submitted handovers will appear here." />
+                        <EmptyState
+                            title={t('No cash submissions')}
+                            description={t('Submitted handovers will appear here.')}
+                        />
                     ) : (
                         <div className="ui-table-wrap">
                             <table className="ui-table representative-cash-history">
                                 <thead>
                                     <tr>
-                                        <th>Submission</th>
-                                        <th className="is-numeric">Amount</th>
-                                        <th>Status</th>
-                                        <th>Submitted by</th>
-                                        <th>Confirmation</th>
-                                        <th>Notes</th>
+                                        <th>{t('Submission')}</th>
+                                        <th className="is-numeric">{t('Amount')}</th>
+                                        <th>{t('Status')}</th>
+                                        <th>{t('Submitted by')}</th>
+                                        <th>{t('Confirmation')}</th>
+                                        <th>{t('Notes')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -366,16 +392,16 @@ export function RepresentativeDetailPage() {
                                             </td>
                                             <td>
                                                 <StatusBadge tone={statusTone(submission.status)}>
-                                                    {submission.status}
+                                                    {t(submission.status)}
                                                 </StatusBadge>
                                             </td>
-                                            <td>{submission.created_by?.name || 'System'}</td>
+                                            <td>{submission.created_by?.name || t('System')}</td>
                                             <td>
                                                 {submission.confirmed_at
                                                     ? dateTime(submission.confirmed_at)
-                                                    : 'Awaiting office'}
+                                                    : t('Awaiting office')}
                                             </td>
-                                            <td>{submission.notes || '—'}</td>
+                                            <td>{submission.notes || t('—')}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -383,7 +409,7 @@ export function RepresentativeDetailPage() {
                         </div>
                     )}
                     <Pagination
-                        label="Cash submission history"
+                        label={t('Cash submission history')}
                         loading={loading}
                         meta={cashMeta}
                         onPageChange={setCashPage}
@@ -391,21 +417,21 @@ export function RepresentativeDetailPage() {
                 </Panel>
             </div>
 
-            <Panel className="representative-sales-panel" eyebrow="Commercial activity" title="Sale history">
+            <Panel className="representative-sales-panel" eyebrow={t('Commercial activity')} title={t('Sale history')}>
                 {!overview.visibility.sales ? (
-                    <EmptyState title="Sales restricted" description="Sale view permission is required." />
+                    <EmptyState title={t('Sales restricted')} description={t('Sale view permission is required.')} />
                 ) : sales.length === 0 ? (
-                    <EmptyState title="No sales found" description="Representative sales will appear here." />
+                    <EmptyState title={t('No sales found')} description={t('Representative sales will appear here.')} />
                 ) : (
                     <div className="ui-table-wrap">
                         <table className="ui-table representative-detail-table">
                             <thead>
                                 <tr>
-                                    <th>Sale</th>
-                                    <th>Customer</th>
-                                    <th>Payment</th>
-                                    <th className="is-numeric">Amount</th>
-                                    <th>Status</th>
+                                    <th>{t('Sale')}</th>
+                                    <th>{t('Customer')}</th>
+                                    <th>{t('Payment')}</th>
+                                    <th className="is-numeric">{t('Amount')}</th>
+                                    <th>{t('Status')}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -419,12 +445,12 @@ export function RepresentativeDetailPage() {
                                             <strong>{sale.customer.name}</strong>
                                             <small>{sale.customer.code}</small>
                                         </td>
-                                        <td>{sale.payment_type}</td>
+                                        <td>{t(sale.payment_type)}</td>
                                         <td className="is-numeric">
                                             <strong>{money(sale.total_amount)}</strong>
                                         </td>
                                         <td>
-                                            <StatusBadge tone={statusTone(sale.status)}>{sale.status}</StatusBadge>
+                                            <StatusBadge tone={statusTone(sale.status)}>{t(sale.status)}</StatusBadge>
                                         </td>
                                     </tr>
                                 ))}
@@ -432,7 +458,7 @@ export function RepresentativeDetailPage() {
                         </table>
                     </div>
                 )}
-                <Pagination label="Sale history" loading={loading} meta={salesMeta} onPageChange={setSalesPage} />
+                <Pagination label={t('Sale history')} loading={loading} meta={salesMeta} onPageChange={setSalesPage} />
             </Panel>
         </div>
     );

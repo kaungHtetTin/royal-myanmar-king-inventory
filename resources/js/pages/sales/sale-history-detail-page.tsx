@@ -4,29 +4,20 @@ import { saleApi, type Sale, type SaleStatus } from '../../services/sales';
 import { Icon } from '../../ui/icons';
 import { InvoicePrintButton } from '../../ui/invoice-print-dialog';
 import { Button, StatusBadge } from '../../ui/primitives';
-
-function money(value: number) {
-    return `${new Intl.NumberFormat('en-US').format(value)} MMK`;
-}
-
-function dateTime(value: string | null) {
-    return value
-        ? new Intl.DateTimeFormat(undefined, {
-              dateStyle: 'medium',
-              timeStyle: 'short',
-          }).format(new Date(value))
-        : '—';
-}
+import { useLocale } from '../../localization/locale-context';
 
 function statusTone(status: SaleStatus) {
     return status === 'posted' ? 'success' : status === 'draft' ? 'warning' : 'neutral';
 }
 
-function requestMessage(error: unknown) {
-    return error instanceof Error ? error.message : 'Unable to load the sale detail.';
+function requestMessage(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback;
 }
 
 export function SaleHistoryDetailPage() {
+    const { formatDateTime, formatNumber, t } = useLocale();
+    const money = (value: number) => `${formatNumber(value)} MMK`;
+    const dateTime = (value: string | null) => (value ? formatDateTime(value) : '—');
     const { saleId } = useParams();
     const id = Number(saleId);
     const [sale, setSale] = useState<Sale | null>(null);
@@ -35,7 +26,7 @@ export function SaleHistoryDetailPage() {
 
     const load = useCallback(async () => {
         if (!Number.isInteger(id) || id < 1) {
-            setError('This sale reference is invalid.');
+            setError(t('This sale reference is invalid.'));
             setLoading(false);
             return;
         }
@@ -45,24 +36,24 @@ export function SaleHistoryDetailPage() {
             const response = await saleApi.ownSale(id);
             setSale(response.data);
         } catch (requestError) {
-            setError(requestMessage(requestError));
+            setError(requestMessage(requestError, t('Unable to load the sale detail.')));
         } finally {
             setLoading(false);
         }
-    }, [id]);
+    }, [id, t]);
 
     useEffect(() => {
         let active = true;
         const operation =
             Number.isInteger(id) && id > 0
                 ? saleApi.ownSale(id)
-                : Promise.reject(new Error('This sale reference is invalid.'));
+                : Promise.reject(new Error(t('This sale reference is invalid.')));
         void operation
             .then((response) => {
                 if (active) setSale(response.data);
             })
             .catch((requestError) => {
-                if (active) setError(requestMessage(requestError));
+                if (active) setError(requestMessage(requestError, t('Unable to load the sale detail.')));
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -70,7 +61,7 @@ export function SaleHistoryDetailPage() {
         return () => {
             active = false;
         };
-    }, [id]);
+    }, [id, t]);
 
     return (
         <div className="sales-sale-detail-page">
@@ -78,24 +69,24 @@ export function SaleHistoryDetailPage() {
                 <div>
                     <Link className="sale-detail-back" to="/sales/sales-history">
                         <Icon name="chevronLeft" size={16} />
-                        Sales history
+                        {t('Sales')}
                     </Link>
-                    <h1>{sale?.reference ?? 'Sale detail'}</h1>
-                    <p>{sale ? `${sale.customer.name} · ${dateTime(sale.created_at)}` : 'Customer sale record'}</p>
+                    <h1>{sale?.reference ?? t('Sale detail')}</h1>
+                    <p>{sale ? `${sale.customer.name} · ${dateTime(sale.created_at)}` : t('Customer sale record')}</p>
                 </div>
                 {sale ? (
                     <div className="sale-detail-heading__actions">
-                        <StatusBadge tone={statusTone(sale.status)}>{sale.status}</StatusBadge>
+                        <StatusBadge tone={statusTone(sale.status)}>{t(sale.status)}</StatusBadge>
                         {sale.status !== 'draft' ? (
                             <InvoicePrintButton
-                                onBlocked={() => setError('Allow pop-ups to print the invoice.')}
+                                onBlocked={() => setError(t('Allow pop-ups to print the invoice.'))}
                                 sale={sale}
                             />
                         ) : null}
                         {sale.status === 'draft' ? (
                             <Link className="ui-button ui-button--primary" to={`/sales/new-sale?edit=${sale.id}`}>
                                 <Icon name="edit" size={16} />
-                                <span>Edit draft</span>
+                                <span>{t('Edit draft')}</span>
                             </Link>
                         ) : null}
                     </div>
@@ -107,7 +98,7 @@ export function SaleHistoryDetailPage() {
                     <Icon name="x" size={15} />
                     {error}
                     <Button onClick={() => void load()} tone="ghost">
-                        Retry
+                        {t('Retry')}
                     </Button>
                 </div>
             ) : null}
@@ -115,62 +106,63 @@ export function SaleHistoryDetailPage() {
             {loading ? (
                 <div className="sales-section ui-loading" role="status">
                     <span />
-                    Loading sale detail…
+                    {t('Loading sale detail…')}
                 </div>
             ) : sale ? (
                 <>
                     <section className="sales-section sale-detail-overview">
                         <header>
                             <div>
-                                <p className="ui-eyebrow">Transaction</p>
-                                <h2>Sale information</h2>
+                                <p className="ui-eyebrow">{t('Transaction')}</p>
+                                <h2>{t('Sale information')}</h2>
                             </div>
                         </header>
                         <dl className="sale-detail-facts">
                             <div>
-                                <dt>Customer</dt>
+                                <dt>{t('Customer')}</dt>
                                 <dd>
                                     <strong>{sale.customer.name}</strong>
                                     <small>{sale.customer.code}</small>
                                 </dd>
                             </div>
                             <div>
-                                <dt>Payment type</dt>
-                                <dd>{sale.payment_type}</dd>
+                                <dt>{t('Payment type')}</dt>
+                                <dd>{t(sale.payment_type)}{sale.payment_method ? ` · ${sale.payment_method_name ?? t(sale.payment_method)}` : ''}</dd>
                             </div>
                             <div>
-                                <dt>Warehouse</dt>
+                                <dt>{t('Warehouse')}</dt>
                                 <dd>
                                     <strong>{sale.warehouse.name}</strong>
                                     <small>{sale.warehouse.code}</small>
                                 </dd>
                             </div>
                             <div>
-                                <dt>Region / Way</dt>
+                                <dt>{t('Region')}</dt>
                                 <dd>
                                     <strong>{sale.region?.name ?? '—'}</strong>
-                                    <small>{sale.way ? `${sale.way.name} · ${sale.way.code}` : 'Not assigned'}</small>
+                                    <small>
+                                    </small>
                                 </dd>
                             </div>
                             <div>
-                                <dt>Created</dt>
+                                <dt>{t('Created')}</dt>
                                 <dd>{dateTime(sale.created_at)}</dd>
                             </div>
                             <div>
-                                <dt>Posted</dt>
+                                <dt>{t('Posted')}</dt>
                                 <dd>{dateTime(sale.posted_at)}</dd>
                             </div>
                             <div>
-                                <dt>Voided</dt>
+                                <dt>{t('Voided')}</dt>
                                 <dd>{dateTime(sale.voided_at)}</dd>
                             </div>
                             <div className="sale-detail-facts__notes">
-                                <dt>Notes</dt>
-                                <dd>{sale.notes || 'No notes'}</dd>
+                                <dt>{t('Notes')}</dt>
+                                <dd>{sale.notes || t('No notes')}</dd>
                             </div>
                             {sale.void_reason ? (
                                 <div className="sale-detail-facts__notes is-danger">
-                                    <dt>Void reason</dt>
+                                    <dt>{t('Void reason')}</dt>
                                     <dd>{sale.void_reason}</dd>
                                 </div>
                             ) : null}
@@ -180,24 +172,28 @@ export function SaleHistoryDetailPage() {
                     <section className="sales-section sale-detail-items">
                         <header>
                             <div>
-                                <p className="ui-eyebrow">Products sold</p>
-                                <h2>Line items</h2>
+                                <p className="ui-eyebrow">{t('Products sold')}</p>
+                                <h2>{t('Line items')}</h2>
                             </div>
                             <small>
-                                {sale.total_quantity} sold · {sale.total_foc_quantity ?? 0} FOC
+                                {t('{sold} sold · {foc} FOC', {
+                                    sold: formatNumber(sale.total_quantity),
+                                    foc: formatNumber(sale.total_foc_quantity ?? 0),
+                                })}
                             </small>
                         </header>
                         <div className="ui-table-wrap sale-detail-items__table-wrap">
                             <table className="ui-table sale-detail-items__table">
-                                <caption className="sr-only">Sale line items</caption>
+                                <caption className="sr-only">{t('Sale line items')}</caption>
                                 <thead>
                                     <tr>
-                                        <th>Product</th>
-                                        <th>Unit</th>
-                                        <th className="is-numeric">Paid qty</th>
-                                        <th className="is-numeric">FOC</th>
-                                        <th className="is-numeric">Unit price</th>
-                                        <th className="is-numeric">Line total</th>
+                                        <th>{t('Product')}</th>
+                                        <th>{t('Unit')}</th>
+                                        <th className="is-numeric">{t('Paid qty')}</th>
+                                        <th className="is-numeric">{t('FOC')}</th>
+                                        <th className="is-numeric">{t('Unit price')}</th>
+                                        <th className="is-numeric">{t('Discount')}</th>
+                                        <th className="is-numeric">{t('Line total')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -208,11 +204,11 @@ export function SaleHistoryDetailPage() {
                                                 <small>{item.product.sku}</small>
                                             </td>
                                             <td>{item.unit?.name ?? item.product.unit}</td>
-                                            <td className="is-numeric">{item.quantity}</td>
+                                            <td className="is-numeric">{formatNumber(item.quantity)}</td>
                                             <td className="is-numeric">
                                                 {item.foc_quantity ? (
                                                     <>
-                                                        <strong>{item.foc_quantity}</strong>
+                                                        <strong>{formatNumber(item.foc_quantity)}</strong>
                                                         <small>
                                                             {item.foc_unit?.name ??
                                                                 item.unit?.name ??
@@ -224,6 +220,7 @@ export function SaleHistoryDetailPage() {
                                                 )}
                                             </td>
                                             <td className="is-numeric">{money(item.unit_price)}</td>
+                                            <td className="is-numeric">{(item.discount_percentage ?? 0) > 0 ? `${item.discount_percentage}% · ${money(item.discount_amount ?? 0)}` : '—'}</td>
                                             <td className="is-numeric sale-detail-items__line-total">
                                                 {money(item.line_total)}
                                             </td>
@@ -234,11 +231,15 @@ export function SaleHistoryDetailPage() {
                         </div>
                         <footer className="sale-detail-total">
                             <span>
-                                {sale.items.length} products · {sale.total_quantity} sold ·{' '}
-                                {sale.total_foc_quantity ?? 0} FOC
+                                {t('{products} products · {sold} sold · {foc} FOC', {
+                                    products: formatNumber(sale.items.length),
+                                    sold: formatNumber(sale.total_quantity),
+                                    foc: formatNumber(sale.total_foc_quantity ?? 0),
+                                })}
                             </span>
                             <div>
-                                <small>Sale total</small>
+                                {sale.promotion_amount ? <small>{sale.promotion_title} · -{money(sale.promotion_amount)}</small> : null}
+                                <small>{t('Sale total')}</small>
                                 <strong>{money(sale.total_amount)}</strong>
                             </div>
                         </footer>

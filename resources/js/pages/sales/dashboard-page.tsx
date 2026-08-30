@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { reportingApi, type SalesDashboard } from '../../services/reporting';
 import { Icon } from '../../ui/icons';
 import { EmptyState, StatusBadge } from '../../ui/primitives';
+import { useLocale } from '../../localization/locale-context';
 
 const empty: SalesDashboard = {
     as_of: '',
@@ -20,25 +21,17 @@ const empty: SalesDashboard = {
     recent_sales: [],
     pending_receivings: [],
 };
-function money(value: number) {
-    return new Intl.NumberFormat('en-US').format(value);
-}
-function dateTime(value: string | null) {
-    return value
-        ? new Intl.DateTimeFormat(undefined, {
-              dateStyle: 'medium',
-              timeStyle: 'short',
-          }).format(new Date(value))
-        : '—';
-}
-function message(error: unknown) {
-    return error instanceof Error ? error.message : 'Unable to load dashboard.';
+function message(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback;
 }
 function saleTone(status: string) {
     return status === 'posted' ? 'success' : status === 'draft' ? 'warning' : 'neutral';
 }
 
 export function RepresentativeDashboardPage() {
+    const { formatDateTime, formatNumber, t } = useLocale();
+    const money = (value: number) => formatNumber(value);
+    const dateTime = (value: string | null) => (value ? formatDateTime(value) : '—');
     const [data, setData] = useState(empty);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -48,11 +41,11 @@ export function RepresentativeDashboardPage() {
         try {
             setData(await reportingApi.salesDashboard());
         } catch (requestError) {
-            setError(message(requestError));
+            setError(message(requestError, t('Unable to load dashboard.')));
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [t]);
     useEffect(() => {
         let active = true;
         void reportingApi
@@ -61,7 +54,7 @@ export function RepresentativeDashboardPage() {
                 if (active) setData(response);
             })
             .catch((requestError) => {
-                if (active) setError(message(requestError));
+                if (active) setError(message(requestError, t('Unable to load dashboard.')));
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -69,50 +62,53 @@ export function RepresentativeDashboardPage() {
         return () => {
             active = false;
         };
-    }, []);
+    }, [t]);
     const kpi = data.kpis;
     return (
         <div className="sales-dashboard">
             <header className="sales-page-heading">
                 <div>
-                    <p>{data.as_of ? dateTime(data.as_of) : 'Today'}</p>
-                    <h1>Route overview</h1>
+                    <p>{data.as_of ? dateTime(data.as_of) : t('Today')}</p>
+                    <h1>{t('Route overview')}</h1>
                 </div>
-                <StatusBadge tone="success">{data.representative.code || 'Active route'}</StatusBadge>
+                <StatusBadge tone="success">{data.representative.code || t('Active route')}</StatusBadge>
             </header>
-            <section aria-label="Today's summary" className="sales-summary-grid representative-dashboard-kpis">
+            <section aria-label={t("Today's summary")} className="sales-summary-grid representative-dashboard-kpis">
                 <article className="sales-summary-card is-primary">
                     <span>
                         <Icon name="cash" size={18} />
                     </span>
-                    <small>Cash hold</small>
+                    <small>{t('Cash hold')}</small>
                     <strong>{money(kpi.cash_hold)}</strong>
-                    <p>MMK currently in custody</p>
+                    <p>{t('MMK currently in custody')}</p>
                 </article>
                 <article className="sales-summary-card">
                     <span>
                         <Icon name="sales" size={18} />
                     </span>
-                    <small>Today's sales</small>
+                    <small>{t("Today's sales")}</small>
                     <strong>{money(kpi.today_sales)}</strong>
                     <p>
-                        {money(kpi.today_cash_sales)} cash · {money(kpi.today_credit_sales)} credit
+                        {t('{cash} cash · {credit} credit', {
+                            cash: money(kpi.today_cash_sales),
+                            credit: money(kpi.today_credit_sales),
+                        })}
                     </p>
                 </article>
                 <article className="sales-summary-card">
                     <span>
                         <Icon name="box" size={18} />
                     </span>
-                    <small>Current stock</small>
+                    <small>{t('Current stock')}</small>
                     <strong>{money(kpi.stock_units)}</strong>
-                    <p>{kpi.stock_products} products on hand</p>
+                    <p>{t('{count} products on hand', { count: formatNumber(kpi.stock_products) })}</p>
                 </article>
             </section>
             {error ? (
                 <div className="ui-flash ui-flash--danger">
                     <Icon name="x" size={15} />
                     {error}
-                    <button onClick={() => void load()}>Retry</button>
+                    <button onClick={() => void load()}>{t('Retry')}</button>
                 </div>
             ) : null}
             <Link className="sales-primary-action" to="/sales/new-sale">
@@ -120,26 +116,29 @@ export function RepresentativeDashboardPage() {
                     <Icon name="plus" size={21} />
                 </span>
                 <div>
-                    <strong>Create new sale</strong>
-                    <small>Cash or customer credit</small>
+                    <strong>{t('Create new sale')}</strong>
+                    <small>{t('Cash or customer credit')}</small>
                 </div>
                 <Icon name="chevronRight" />
             </Link>
             <section className="sales-section sales-dashboard-history">
                 <header>
                     <div>
-                        <p className="ui-eyebrow">Own transactions</p>
-                        <h2>Recent sales</h2>
+                        <p className="ui-eyebrow">{t('Own transactions')}</p>
+                        <h2>{t('Recent sales')}</h2>
                     </div>
-                    <Link to="/sales/sales-history">View sales history</Link>
+                    <Link to="/sales/sales-history">{t('View sales history')}</Link>
                 </header>
                 {loading ? (
                     <div className="ui-loading">
                         <span />
-                        Loading salesâ€¦
+                        {t('Loading sales…')}
                     </div>
                 ) : data.recent_sales.length === 0 ? (
-                    <EmptyState description="Drafts and posted sales will appear here." title="No recent sales" />
+                    <EmptyState
+                        description={t('Drafts and posted sales will appear here.')}
+                        title={t('No recent sales')}
+                    />
                 ) : (
                     <div className="sales-dashboard-history-list">
                         {data.recent_sales.map((sale) => (
@@ -151,17 +150,20 @@ export function RepresentativeDashboardPage() {
                                     <div>
                                         <strong>{sale.reference}</strong>
                                         <small>
-                                            {sale.customer.name} Â· {dateTime(sale.created_at)}
+                                            {sale.customer.name} · {dateTime(sale.created_at)}
                                         </small>
                                     </div>
                                 </Link>
                                 <div className="sales-history__amount">
                                     <strong>{money(sale.total_amount)} MMK</strong>
                                     <small>
-                                        {sale.total_quantity} units Â· {sale.payment_type}
+                                        {t('{count} units · {payment}', {
+                                            count: formatNumber(sale.total_quantity),
+                                            payment: t(sale.payment_type),
+                                        })}
                                     </small>
                                 </div>
-                                <StatusBadge tone={saleTone(sale.status)}>{sale.status}</StatusBadge>
+                                <StatusBadge tone={saleTone(sale.status)}>{t(sale.status)}</StatusBadge>
                             </article>
                         ))}
                     </div>
@@ -171,18 +173,21 @@ export function RepresentativeDashboardPage() {
                 <section className="sales-section">
                     <header>
                         <div>
-                            <p className="ui-eyebrow">Inventory custody</p>
-                            <h2>My stock</h2>
+                            <p className="ui-eyebrow">{t('Inventory custody')}</p>
+                            <h2>{t('My stock')}</h2>
                         </div>
-                        <Link to="/sales/my-stock">View all</Link>
+                        <Link to="/sales/my-stock">{t('View all')}</Link>
                     </header>
                     {loading ? (
                         <div className="ui-loading">
                             <span />
-                            Loading stock…
+                            {t('Loading stock…')}
                         </div>
                     ) : data.stock.length === 0 ? (
-                        <EmptyState description="Received products will appear here." title="No stock on hand" />
+                        <EmptyState
+                            description={t('Received products will appear here.')}
+                            title={t('No stock on hand')}
+                        />
                     ) : (
                         <div className="sales-stock-list">
                             {data.stock.map((row) => (
@@ -206,22 +211,22 @@ export function RepresentativeDashboardPage() {
                 <section className="sales-section sales-pending">
                     <header>
                         <div>
-                            <p className="ui-eyebrow">Receiving</p>
-                            <h2>Pending stock</h2>
+                            <p className="ui-eyebrow">{t('Receiving')}</p>
+                            <h2>{t('Pending stock')}</h2>
                         </div>
                         <StatusBadge tone={kpi.pending_receivings ? 'warning' : 'success'}>
-                            {kpi.pending_receivings} pending
+                            {t('{count} pending', { count: formatNumber(kpi.pending_receivings) })}
                         </StatusBadge>
                     </header>
                     {loading ? (
                         <div className="ui-loading">
                             <span />
-                            Loading receiving…
+                            {t('Loading receiving…')}
                         </div>
                     ) : data.pending_receivings.length === 0 ? (
                         <EmptyState
-                            description="Dispatched stock will appear for confirmation."
-                            title="Nothing waiting"
+                            description={t('Dispatched stock will appear for confirmation.')}
+                            title={t('Nothing waiting')}
                         />
                     ) : (
                         data.pending_receivings.map((row) => (
@@ -232,7 +237,11 @@ export function RepresentativeDashboardPage() {
                                 <div>
                                     <strong>{row.reference}</strong>
                                     <small>
-                                        {row.warehouse.name} · {row.products} products · {row.total_quantity} units
+                                        {t('{warehouse} · {products} products · {quantity} units', {
+                                            warehouse: row.warehouse.name,
+                                            products: formatNumber(row.products),
+                                            quantity: formatNumber(row.total_quantity),
+                                        })}
                                     </small>
                                 </div>
                                 <div className="representative-pending-items">
@@ -249,7 +258,7 @@ export function RepresentativeDashboardPage() {
                                     ))}
                                 </div>
                                 <Link className="representative-pending-action" to={`/sales/receivings/${row.id}`}>
-                                    <span>Open receiving</span>
+                                    <span>{t('Open receiving')}</span>
                                     <Icon name="chevronRight" size={15} />
                                 </Link>
                             </article>
@@ -257,11 +266,11 @@ export function RepresentativeDashboardPage() {
                     )}
                 </section>
             </div>
-            <Link className="sales-report-cta" to="/sales/reports">
+            <Link className="sales-report-cta" to="/sales/sales-history">
                 <Icon name="reports" size={18} />
                 <div>
-                    <strong>Sales report</strong>
-                    <small>Filter your own sales by date, customer, product, and payment type.</small>
+                    <strong>{t('Sales')}</strong>
+                    <small>{t('Review and filter your sales by trip, date, customer, product, and payment type.')}</small>
                 </div>
                 <Icon name="chevronRight" />
             </Link>

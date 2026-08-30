@@ -1,9 +1,11 @@
 import { useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { Link, type LinkProps } from 'react-router-dom';
 import { Icon, type IconName } from './icons';
 import { OFFLINE_TRANSACTION_MESSAGE } from './offline-banner';
 import { useOnlineStatus } from './preferences';
 import type { PaginationMeta } from '../services/administration';
+import { useLocale } from '../localization/locale-context';
 
 type ButtonTone = 'primary' | 'secondary' | 'danger' | 'ghost';
 
@@ -25,12 +27,13 @@ export function Button({
     ...props
 }: ButtonProps) {
     const online = useOnlineStatus();
+    const { t } = useLocale();
     const offlineDisabled = requiresOnline && !online;
     return (
         <button
             className={`ui-button ui-button--${tone} ${className}`.trim()}
             disabled={disabled || offlineDisabled}
-            title={offlineDisabled ? OFFLINE_TRANSACTION_MESSAGE : title}
+            title={offlineDisabled ? t(OFFLINE_TRANSACTION_MESSAGE) : title}
             type={type}
             {...props}
         >
@@ -58,18 +61,38 @@ export function IconButton({
     ...props
 }: IconButtonProps) {
     const online = useOnlineStatus();
+    const { t } = useLocale();
     const offlineDisabled = requiresOnline && !online;
     return (
         <button
             aria-label={label}
             className={`ui-icon-button ui-icon-button--${tone} ${className}`.trim()}
             disabled={disabled || offlineDisabled}
-            title={offlineDisabled ? OFFLINE_TRANSACTION_MESSAGE : label}
+            title={offlineDisabled ? t(OFFLINE_TRANSACTION_MESSAGE) : label}
             type={type}
             {...props}
         >
             <Icon name={icon} />
         </button>
+    );
+}
+
+type IconLinkProps = Omit<LinkProps, 'children'> & {
+    icon: IconName;
+    label: string;
+    tone?: ButtonTone;
+};
+
+export function IconLink({ className = '', icon, label, tone = 'secondary', ...props }: IconLinkProps) {
+    return (
+        <Link
+            aria-label={label}
+            className={`ui-icon-button ui-icon-button--${tone} ${className}`.trim()}
+            title={label}
+            {...props}
+        >
+            <Icon name={icon} />
+        </Link>
     );
 }
 
@@ -150,29 +173,38 @@ export function Pagination({
     meta: PaginationMeta;
     onPageChange: (page: number) => void;
 }) {
+    const { formatNumber, t } = useLocale();
+
     if (meta.total === 0) return null;
 
     return (
-        <nav aria-label={`${label} pagination`} className="table-footer">
+        <nav aria-label={t('{label} pagination', { label })} className="table-footer">
             <span>
-                {meta.from ?? 0}–{meta.to ?? 0} of {meta.total}
+                {t('{from}–{to} of {total}', {
+                    from: formatNumber(meta.from ?? 0),
+                    to: formatNumber(meta.to ?? 0),
+                    total: formatNumber(meta.total),
+                })}
             </span>
             <button
                 disabled={meta.current_page <= 1 || loading}
                 onClick={() => onPageChange(meta.current_page - 1)}
                 type="button"
             >
-                Previous
+                {t('Previous')}
             </button>
             <strong>
-                Page {meta.current_page} of {meta.last_page}
+                {t('Page {current} of {last}', {
+                    current: formatNumber(meta.current_page),
+                    last: formatNumber(meta.last_page),
+                })}
             </strong>
             <button
                 disabled={meta.current_page >= meta.last_page || loading}
                 onClick={() => onPageChange(meta.current_page + 1)}
                 type="button"
             >
-                Next
+                {t('Next')}
             </button>
         </nav>
     );
@@ -189,6 +221,7 @@ type DialogProps = {
 };
 
 export function Dialog({ children, description, footer, onClose, open, title, width = 'standard' }: DialogProps) {
+    const { t } = useLocale();
     const dialogRef = useRef<HTMLElement>(null);
     const onCloseRef = useRef(onClose);
     const titleId = useId();
@@ -263,7 +296,7 @@ export function Dialog({ children, description, footer, onClose, open, title, wi
                         <h2 id={titleId}>{title}</h2>
                         {description ? <p id={descriptionId}>{description}</p> : null}
                     </div>
-                    <IconButton icon="x" label="Close dialog" onClick={onClose} />
+                    <IconButton icon="x" label={t('Close dialog')} onClick={onClose} />
                 </header>
                 <div className="ui-dialog__body">{children}</div>
                 <footer className="ui-dialog__footer">{footer}</footer>
@@ -283,6 +316,7 @@ type DrawerProps = {
 };
 
 export function Drawer({ children, description, footer, onClose, open, title }: DrawerProps) {
+    const { t } = useLocale();
     const drawerRef = useRef<HTMLElement>(null);
     const onCloseRef = useRef(onClose);
     const titleId = useId();
@@ -359,7 +393,7 @@ export function Drawer({ children, description, footer, onClose, open, title }: 
                         <h2 id={titleId}>{title}</h2>
                         {description ? <p id={descriptionId}>{description}</p> : null}
                     </div>
-                    <IconButton icon="x" label="Close drawer" onClick={onClose} />
+                    <IconButton icon="x" label={t('Close drawer')} onClick={onClose} />
                 </header>
                 <div className="ui-drawer__body">{children}</div>
                 {footer ? <footer className="ui-drawer__footer">{footer}</footer> : null}

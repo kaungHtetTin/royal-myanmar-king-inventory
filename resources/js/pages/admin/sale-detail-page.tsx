@@ -5,13 +5,9 @@ import { saleApi, type Sale, type SaleStatus } from '../../services/sales';
 import { Icon } from '../../ui/icons';
 import { InvoicePrintButton } from '../../ui/invoice-print-dialog';
 import { Button, Dialog, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
+import { useLocale } from '../../localization/locale-context';
 
-const money = (value: number) => `${new Intl.NumberFormat('en-US').format(value)} MMK`;
-const dateTime = (value: string | null) =>
-    value
-        ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
-        : '—';
-const message = (error: unknown) => (error instanceof Error ? error.message : 'Unable to load the sale record.');
+const message = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 const tone = (status: SaleStatus) => (status === 'posted' ? 'success' : status === 'draft' ? 'warning' : 'danger');
 const coordinates = (value: number) => value.toFixed(7);
 const mapLinks = (latitude: number, longitude: number) => {
@@ -26,6 +22,9 @@ const mapLinks = (latitude: number, longitude: number) => {
 };
 
 export function AdminSaleDetailPage() {
+    const { formatDateTime, formatNumber, t } = useLocale();
+    const money = (value: number) => `${formatNumber(value)} MMK`;
+    const dateTime = (value: string | null) => (value ? formatDateTime(value) : '—');
     const { saleId } = useParams();
     const { user } = useSession();
     const id = Number(saleId);
@@ -40,7 +39,7 @@ export function AdminSaleDetailPage() {
 
     const load = useCallback(async () => {
         if (!Number.isInteger(id) || id < 1) {
-            setError('Invalid sale reference.');
+            setError(t('Invalid sale reference.'));
             setLoading(false);
             return;
         }
@@ -49,11 +48,11 @@ export function AdminSaleDetailPage() {
         try {
             setSale((await saleApi.adminSale(id)).data);
         } catch (requestError) {
-            setError(message(requestError));
+            setError(message(requestError, t('Unable to load the sale record.')));
         } finally {
             setLoading(false);
         }
-    }, [id]);
+    }, [id, t]);
     useEffect(() => {
         let active = true;
         void saleApi
@@ -62,7 +61,7 @@ export function AdminSaleDetailPage() {
                 if (active) setSale(response.data);
             })
             .catch((requestError) => {
-                if (active) setError(message(requestError));
+                if (active) setError(message(requestError, t('Unable to load the sale record.')));
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -70,7 +69,7 @@ export function AdminSaleDetailPage() {
         return () => {
             active = false;
         };
-    }, [id]);
+    }, [id, t]);
 
     const voidSale = async () => {
         if (!sale || !reason.trim()) return;
@@ -79,11 +78,11 @@ export function AdminSaleDetailPage() {
         try {
             const response = await saleApi.void(sale.id, reason.trim());
             setSale(response.data);
-            setNotice(`${sale.reference} voided with compensating entries.`);
+            setNotice(t('{reference} voided with compensating entries.', { reference: sale.reference }));
             setVoidOpen(false);
             setReason('');
         } catch (requestError) {
-            setError(message(requestError));
+            setError(message(requestError, t('Unable to load the sale record.')));
         } finally {
             setWorking(false);
         }
@@ -92,7 +91,7 @@ export function AdminSaleDetailPage() {
         return (
             <div className="ui-loading" role="status">
                 <span />
-                Loading sale detail…
+                {t('Loading sale detail…')}
             </div>
         );
     if (!sale)
@@ -100,12 +99,12 @@ export function AdminSaleDetailPage() {
             <div className="admin-page admin-sale-detail-page">
                 <Link className="sale-detail-back" to="/admin/sales">
                     <Icon name="chevronLeft" size={13} />
-                    Sales
+                    {t('Sales')}
                 </Link>
                 <div className="ui-flash ui-flash--danger" role="alert">
-                    {error || 'Sale not found.'}
+                    {error || t('Sale not found.')}
                     <button onClick={() => void load()} type="button">
-                        Retry
+                        {t('Retry')}
                     </button>
                 </div>
             </div>
@@ -117,25 +116,25 @@ export function AdminSaleDetailPage() {
                 <div>
                     <Link className="sale-detail-back" to="/admin/sales">
                         <Icon name="chevronLeft" size={13} />
-                        Representative sales
+                        {t('Representative sales')}
                     </Link>
-                    <p className="ui-eyebrow">Sale transaction</p>
+                    <p className="ui-eyebrow">{t('Sale transaction')}</p>
                     <h1>{sale.reference}</h1>
                     <p>
                         {sale.customer.name} · {sale.representative.name} · {dateTime(sale.created_at)}
                     </p>
                 </div>
                 <div className="sale-detail-heading__actions">
-                    <StatusBadge tone={tone(sale.status)}>{sale.status}</StatusBadge>
+                    <StatusBadge tone={tone(sale.status)}>{t(sale.status)}</StatusBadge>
                     {sale.status !== 'draft' ? (
                         <InvoicePrintButton
-                            onBlocked={() => setError('Allow pop-ups to print the invoice.')}
+                            onBlocked={() => setError(t('Allow pop-ups to print the invoice.'))}
                             sale={sale}
                         />
                     ) : null}
                     {canVoid && sale.status === 'posted' ? (
                         <Button icon="reverse" onClick={() => setVoidOpen(true)} requiresOnline tone="danger">
-                            Void sale
+                            {t('Void sale')}
                         </Button>
                     ) : null}
                 </div>
@@ -151,37 +150,45 @@ export function AdminSaleDetailPage() {
                     <Icon name="x" size={15} />
                     {error}
                     <button onClick={() => void load()} type="button">
-                        Retry
+                        {t('Retry')}
                     </button>
                 </div>
             ) : null}
-            <section aria-label="Sale summary" className="metric-grid admin-sale-detail-kpis">
-                <MetricCard hint="Distinct products" icon="box" label="Products" value={String(sale.items.length)} />
+            <section aria-label={t('Sale summary')} className="metric-grid admin-sale-detail-kpis">
                 <MetricCard
-                    hint={`${sale.total_foc_quantity ?? 0} FOC units supplied`}
-                    icon="sales"
-                    label="Sold quantity"
-                    value={String(sale.total_quantity)}
+                    hint={t('Distinct products')}
+                    icon="box"
+                    label={t('Products')}
+                    value={formatNumber(sale.items.length)}
                 />
                 <MetricCard
-                    hint={sale.payment_type === 'cash' ? 'Cash transaction' : 'Customer credit'}
+                    hint={t('{count} FOC units supplied', {
+                        count: formatNumber(sale.total_foc_quantity ?? 0),
+                    })}
+                    icon="sales"
+                    label={t('Sold quantity')}
+                    value={formatNumber(sale.total_quantity)}
+                />
+                <MetricCard
+                    hint={t(sale.payment_type === 'credit' ? 'Customer credit' : sale.adds_to_cash_hold ? 'Cash transaction' : 'Direct / banking payment')}
                     icon="cash"
-                    label="Sale total"
+                    label={t('Sale total')}
                     value={money(sale.total_amount)}
                 />
             </section>
             <div className="admin-sale-detail-grid">
-                <Panel className="admin-sale-detail-items" eyebrow="Products sold" title="Line items">
+                <Panel className="admin-sale-detail-items" eyebrow={t('Products sold')} title={t('Line items')}>
                     <div className="ui-table-wrap">
                         <table className="ui-table">
                             <thead>
                                 <tr>
-                                    <th>Product</th>
-                                    <th>Unit</th>
-                                    <th className="is-numeric">Quantity</th>
-                                    <th className="is-numeric">FOC</th>
-                                    <th className="is-numeric">Unit price</th>
-                                    <th className="is-numeric">Line total</th>
+                                    <th>{t('Product')}</th>
+                                    <th>{t('Unit')}</th>
+                                    <th className="is-numeric">{t('Quantity')}</th>
+                                    <th className="is-numeric">{t('FOC')}</th>
+                                    <th className="is-numeric">{t('Unit price')}</th>
+                                    <th className="is-numeric">{t('Discount')}</th>
+                                    <th className="is-numeric">{t('Line total')}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -192,13 +199,14 @@ export function AdminSaleDetailPage() {
                                             <small>{item.product.sku}</small>
                                         </td>
                                         <td>{item.unit?.name ?? item.product.unit}</td>
-                                        <td className="is-numeric">{item.quantity}</td>
+                                        <td className="is-numeric">{formatNumber(item.quantity)}</td>
                                         <td className="is-numeric">
                                             {item.foc_quantity
-                                                ? `${item.foc_quantity} ${item.foc_unit?.name ?? item.unit?.name ?? item.product.unit}`
+                                                ? `${formatNumber(item.foc_quantity)} ${item.foc_unit?.name ?? item.unit?.name ?? item.product.unit}`
                                                 : '—'}
                                         </td>
                                         <td className="is-numeric">{money(item.unit_price)}</td>
+                                        <td className="is-numeric">{(item.discount_percentage ?? 0) > 0 ? `${item.discount_percentage}% · ${money(item.discount_amount ?? 0)}` : '—'}</td>
                                         <td className="is-numeric">
                                             <strong>{money(item.line_total)}</strong>
                                         </td>
@@ -207,14 +215,15 @@ export function AdminSaleDetailPage() {
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <td colSpan={2}>Total</td>
+                                    <td colSpan={2}>{t('Total')}</td>
                                     <td className="is-numeric">
-                                        <strong>{sale.total_quantity}</strong>
+                                        <strong>{formatNumber(sale.total_quantity)}</strong>
                                     </td>
                                     <td className="is-numeric">
-                                        <strong>{sale.total_foc_quantity ?? 0}</strong>
+                                        <strong>{formatNumber(sale.total_foc_quantity ?? 0)}</strong>
                                     </td>
                                     <td />
+                                    <td className="is-numeric"><strong>{money(sale.total_discount ?? 0)}</strong></td>
                                     <td className="is-numeric">
                                         <strong>{money(sale.total_amount)}</strong>
                                     </td>
@@ -224,61 +233,66 @@ export function AdminSaleDetailPage() {
                     </div>
                 </Panel>
                 <div className="admin-sale-detail-sidebar">
-                    <Panel eyebrow="Transaction" title="Sale information">
+                    <Panel eyebrow={t('Transaction')} title={t('Sale information')}>
                         <dl className="transfer-detail-facts">
                             <div>
-                                <dt>Customer</dt>
+                                <dt>{t('Customer')}</dt>
                                 <dd>
                                     {sale.customer.name}
                                     <small>{sale.customer.code}</small>
                                 </dd>
                             </div>
                             <div>
-                                <dt>Representative</dt>
+                                <dt>{t('Representative')}</dt>
                                 <dd>
                                     {sale.representative.name}
                                     <small>{sale.representative.code}</small>
                                 </dd>
                             </div>
                             <div>
-                                <dt>Warehouse</dt>
+                                <dt>{t('Warehouse')}</dt>
                                 <dd>
                                     {sale.warehouse.name}
                                     <small>{sale.warehouse.code}</small>
                                 </dd>
                             </div>
                             <div>
-                                <dt>Region / Way</dt>
+                                <dt>{t('Region')}</dt>
                                 <dd>
                                     {sale.region?.name ?? '—'}
-                                    <small>{sale.way ? `${sale.way.name} · ${sale.way.code}` : 'Not assigned'}</small>
+                                    <small>
+                                    </small>
                                 </dd>
                             </div>
                             <div>
-                                <dt>Payment</dt>
-                                <dd>{sale.payment_type}</dd>
+                                <dt>{t('Payment')}</dt>
+                                <dd>{t(sale.payment_type)}{sale.payment_method ? ` · ${sale.payment_method_name ?? t(sale.payment_method)}` : ''}</dd>
                             </div>
                             <div>
-                                <dt>Created by</dt>
+                                <dt>{t('Promotion cashback')}</dt>
+                                <dd>{sale.promotion_amount ? `-${money(sale.promotion_amount)}` : t('None')}<small>{sale.promotion_title ?? ''}</small></dd>
+                            </div>
+                            <div>
+                                <dt>{t('Created by')}</dt>
                                 <dd>
                                     {sale.created_by?.name ?? sale.representative.name}
                                     <small>{dateTime(sale.created_at)}</small>
                                 </dd>
                             </div>
                             <div>
-                                <dt>Posted by</dt>
+                                <dt>{t('Posted by')}</dt>
                                 <dd>
-                                    {sale.posted_by?.name ?? 'Not posted'}
+                                    {sale.posted_by?.name ?? t('Not posted')}
                                     <small>{dateTime(sale.posted_at)}</small>
                                 </dd>
                             </div>
                             <div className="is-wide">
-                                <dt>Notes</dt>
-                                <dd>{sale.notes || 'No notes recorded'}</dd>
+                                <dt>{t('Notes')}</dt>
+                                <dd>{sale.notes || t('No notes recorded')}</dd>
                             </div>
                             {sale.void_reason ? (
                                 <div className="is-wide is-danger">
-                                    <dt>Void reason</dt>
+                                    <dt>{t('Void reason')}</dt>
                                     <dd>
                                         {sale.void_reason}
                                         <small>
@@ -289,7 +303,11 @@ export function AdminSaleDetailPage() {
                             ) : null}
                         </dl>
                     </Panel>
-                    <Panel className="admin-sale-location-panel" eyebrow="Creation point" title="Sale location">
+                    <Panel
+                        className="admin-sale-location-panel"
+                        eyebrow={t('Creation point')}
+                        title={t('Sale location')}
+                    >
                         {sale.creation_location ? (
                             <div className="sale-location-map">
                                 <iframe
@@ -299,27 +317,29 @@ export function AdminSaleDetailPage() {
                                         mapLinks(sale.creation_location.latitude, sale.creation_location.longitude)
                                             .embed
                                     }
-                                    title={`Map showing where ${sale.reference} was created`}
+                                    title={t('Map showing where {reference} was created', {
+                                        reference: sale.reference,
+                                    })}
                                 />
                                 <dl>
                                     <div>
-                                        <dt>Latitude</dt>
+                                        <dt>{t('Latitude')}</dt>
                                         <dd>{coordinates(sale.creation_location.latitude)}</dd>
                                     </div>
                                     <div>
-                                        <dt>Longitude</dt>
+                                        <dt>{t('Longitude')}</dt>
                                         <dd>{coordinates(sale.creation_location.longitude)}</dd>
                                     </div>
                                     <div>
-                                        <dt>Accuracy</dt>
+                                        <dt>{t('Accuracy')}</dt>
                                         <dd>
                                             {sale.creation_location.accuracy_meters === null
-                                                ? 'Not reported'
+                                                ? t('Not reported')
                                                 : `±${sale.creation_location.accuracy_meters} m`}
                                         </dd>
                                     </div>
                                     <div>
-                                        <dt>Captured</dt>
+                                        <dt>{t('Captured')}</dt>
                                         <dd>{dateTime(sale.creation_location.captured_at)}</dd>
                                     </div>
                                 </dl>
@@ -332,15 +352,17 @@ export function AdminSaleDetailPage() {
                                     target="_blank"
                                 >
                                     <Icon name="location" size={14} />
-                                    Open larger map
+                                    {t('Open larger map')}
                                 </a>
                             </div>
                         ) : (
                             <div className="sale-location-map__empty">
                                 <Icon name="location" size={20} />
                                 <span>
-                                    <strong>Location unavailable</strong>
-                                    <small>This sale was created before device location capture was enabled.</small>
+                                    <strong>{t('Location unavailable')}</strong>
+                                    <small>
+                                        {t('This sale was created before device location capture was enabled.')}
+                                    </small>
                                 </span>
                             </div>
                         )}
@@ -348,11 +370,13 @@ export function AdminSaleDetailPage() {
                 </div>
             </div>
             <Dialog
-                description="Voiding creates compensating stock and financial entries. The original sale remains in the audit trail."
+                description={t(
+                    'Voiding creates compensating stock and financial entries. The original sale remains in the audit trail.',
+                )}
                 footer={
                     <>
                         <Button disabled={working} onClick={() => setVoidOpen(false)}>
-                            Keep sale
+                            {t('Keep sale')}
                         </Button>
                         <Button
                             disabled={working || !reason.trim()}
@@ -360,22 +384,22 @@ export function AdminSaleDetailPage() {
                             requiresOnline
                             tone="danger"
                         >
-                            {working ? 'Voiding…' : 'Void sale'}
+                            {t(working ? 'Voiding…' : 'Void sale')}
                         </Button>
                     </>
                 }
                 onClose={() => setVoidOpen(false)}
                 open={voidOpen}
-                title={`Void ${sale.reference}?`}
+                title={t('Void {reference}?', { reference: sale.reference })}
                 width="compact"
             >
                 <label className="ui-field">
-                    <span>Reason</span>
+                    <span>{t('Reason')}</span>
                     <textarea
                         autoFocus
                         maxLength={500}
                         onChange={(event) => setReason(event.target.value)}
-                        placeholder="Explain why this sale must be reversed"
+                        placeholder={t('Explain why this sale must be reversed')}
                         rows={4}
                         value={reason}
                     />

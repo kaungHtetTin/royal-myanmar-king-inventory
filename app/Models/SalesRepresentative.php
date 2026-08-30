@@ -84,6 +84,11 @@ class SalesRepresentative extends Model
         return $this->hasMany(CashSubmission::class);
     }
 
+    public function trips(): HasMany
+    {
+        return $this->hasMany(Trip::class);
+    }
+
     public function regions(): BelongsToMany
     {
         return $this->belongsToMany(Region::class)->withTimestamps();

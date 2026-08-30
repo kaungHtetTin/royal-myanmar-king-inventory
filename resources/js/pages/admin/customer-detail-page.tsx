@@ -6,6 +6,7 @@ import { customerApi, type Customer } from '../../services/customers';
 import { saleApi, type Sale, type SaleSummary } from '../../services/sales';
 import { Icon } from '../../ui/icons';
 import { Button, EmptyState, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
+import { useLocale } from '../../localization/locale-context';
 
 const emptyMeta: PaginationMeta = {
     current_page: 1,
@@ -19,18 +20,8 @@ const emptySummary: SaleSummary = { cash_total: 0, credit_total: 0, posted_total
 type DateRange = { date_from: string; date_to: string };
 const emptyDateRange: DateRange = { date_from: '', date_to: '' };
 
-function money(value: number) {
-    return `${new Intl.NumberFormat('en-US').format(value)} MMK`;
-}
-
-function dateTime(value: string | null) {
-    return value
-        ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
-        : '—';
-}
-
-function message(error: unknown) {
-    return error instanceof Error ? error.message : 'Unable to load customer details.';
+function message(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback;
 }
 
 function saleTone(status: string) {
@@ -38,6 +29,9 @@ function saleTone(status: string) {
 }
 
 export function CustomerDetailPage() {
+    const { formatDateTime, formatNumber, t } = useLocale();
+    const money = (value: number) => `${formatNumber(value)} MMK`;
+    const dateTime = (value: string | null) => (value ? formatDateTime(value) : '—');
     const { customerId } = useParams();
     const { user } = useSession();
     const id = Number(customerId);
@@ -54,7 +48,7 @@ export function CustomerDetailPage() {
 
     const load = useCallback(async () => {
         if (!Number.isInteger(id) || id < 1) {
-            setError('Invalid customer reference.');
+            setError(t('Invalid customer reference.'));
             setLoading(false);
             return;
         }
@@ -79,11 +73,11 @@ export function CustomerDetailPage() {
                 setSummary(salesResponse.summary ?? emptySummary);
             }
         } catch (requestError) {
-            setError(message(requestError));
+            setError(message(requestError, t('Unable to load customer details.')));
         } finally {
             setLoading(false);
         }
-    }, [canViewSales, dateRange.date_from, dateRange.date_to, id, page]);
+    }, [canViewSales, dateRange.date_from, dateRange.date_to, id, page, t]);
 
     useEffect(() => {
         void load();
@@ -105,7 +99,7 @@ export function CustomerDetailPage() {
         return (
             <div className="ui-loading" role="status">
                 <span />
-                Loading customer details…
+                {t('Loading customer details…')}
             </div>
         );
     }
@@ -114,7 +108,7 @@ export function CustomerDetailPage() {
         return (
             <div className="admin-page customer-detail-page">
                 <div className="ui-flash ui-flash--danger" role="alert">
-                    {error || 'Customer not found.'}
+                    {error || t('Customer not found.')}
                 </div>
             </div>
         );
@@ -126,16 +120,16 @@ export function CustomerDetailPage() {
                 <div>
                     <Link className="sale-detail-back" to="/admin/customers">
                         <Icon name="chevronLeft" size={13} />
-                        Customers
+                        {t('Customers')}
                     </Link>
-                    <p className="ui-eyebrow">Customer profile</p>
+                    <p className="ui-eyebrow">{t('Customer profile')}</p>
                     <h1>{customer.name}</h1>
                     <p>
-                        {customer.code} · {customer.customer_type || 'Customer'} · {customer.warehouse.name}
+                        {customer.code} · {customer.customer_type || t('Customer')} · {customer.warehouse.name}
                     </p>
                 </div>
                 <StatusBadge tone={customer.is_active ? 'success' : 'danger'}>
-                    {customer.is_active ? 'Active' : 'Inactive'}
+                    {t(customer.is_active ? 'Active' : 'Inactive')}
                 </StatusBadge>
             </header>
 
@@ -143,21 +137,21 @@ export function CustomerDetailPage() {
                 <div className="ui-flash ui-flash--danger" role="alert">
                     {error}
                     <button onClick={() => void load()} type="button">
-                        Retry
+                        {t('Retry')}
                     </button>
                 </div>
             ) : null}
 
             {canViewSales ? (
                 <form
-                    aria-label="Filter customer sales by date"
+                    aria-label={t('Filter customer sales by date')}
                     className="filter-toolbar customer-detail-filters"
                     onSubmit={applyDateRange}
                 >
                     <label>
-                        <span>From date</span>
+                        <span>{t('From date')}</span>
                         <input
-                            aria-label="Customer sales from date"
+                            aria-label={t('Customer sales from date')}
                             max={draftRange.date_to || undefined}
                             onChange={(event) =>
                                 setDraftRange((value) => ({ ...value, date_from: event.target.value }))
@@ -167,9 +161,9 @@ export function CustomerDetailPage() {
                         />
                     </label>
                     <label>
-                        <span>To date</span>
+                        <span>{t('To date')}</span>
                         <input
-                            aria-label="Customer sales to date"
+                            aria-label={t('Customer sales to date')}
                             min={draftRange.date_from || undefined}
                             onChange={(event) => setDraftRange((value) => ({ ...value, date_to: event.target.value }))}
                             type="date"
@@ -179,94 +173,97 @@ export function CustomerDetailPage() {
                     <div className="customer-detail-filters__actions">
                         {dateRange.date_from || dateRange.date_to ? (
                             <Button disabled={loading} onClick={clearDateRange} tone="ghost">
-                                Clear
+                                {t('Clear')}
                             </Button>
                         ) : null}
                         <Button disabled={loading} icon="search" tone="primary" type="submit">
-                            Apply
+                            {t('Apply')}
                         </Button>
                     </div>
                 </form>
             ) : null}
 
-            <section aria-label="Customer sales summary" className="metric-grid customer-detail-kpis">
+            <section aria-label={t('Customer sales summary')} className="metric-grid customer-detail-kpis">
                 <MetricCard
                     hint={
                         dateRange.date_from || dateRange.date_to
-                            ? 'Within selected date range'
-                            : 'All recorded transactions'
+                            ? t('Within selected date range')
+                            : t('All recorded transactions')
                     }
                     icon="sales"
-                    label="Sales"
-                    value={canViewSales ? String(summary.total) : 'Restricted'}
+                    label={t('Sales')}
+                    value={canViewSales ? formatNumber(summary.total) : t('Restricted')}
                 />
                 <MetricCard
-                    hint="Posted sales value"
+                    hint={t('Posted sales value')}
                     icon="cash"
-                    label="Posted total"
-                    value={canViewSales ? money(summary.posted_total) : 'Restricted'}
+                    label={t('Posted total')}
+                    value={canViewSales ? money(summary.posted_total) : t('Restricted')}
                 />
                 <MetricCard
-                    hint={customer.credit_allowed ? 'Office credit enabled' : 'Cash-only customer'}
+                    hint={t(customer.credit_allowed ? 'Office credit enabled' : 'Cash-only customer')}
                     icon="cash"
-                    label="Credit limit"
-                    value={customer.credit_allowed ? money(customer.credit_limit) : 'Cash only'}
+                    label={t('Credit limit')}
+                    value={customer.credit_allowed ? money(customer.credit_limit) : t('Cash only')}
                 />
             </section>
 
-            <Panel eyebrow="Profile" title="Basic information">
+            <Panel eyebrow={t('Profile')} title={t('Basic information')}>
                 <dl className="customer-detail-facts">
                     <div>
-                        <dt>Customer code</dt>
+                        <dt>{t('Customer code')}</dt>
                         <dd>{customer.code}</dd>
                     </div>
                     <div>
-                        <dt>Type</dt>
-                        <dd>{customer.customer_type || 'Not specified'}</dd>
+                        <dt>{t('Type')}</dt>
+                        <dd>{customer.customer_type || t('Not specified')}</dd>
                     </div>
                     <div>
-                        <dt>Phone</dt>
-                        <dd>{customer.phone || 'Not specified'}</dd>
+                        <dt>{t('Phone')}</dt>
+                        <dd>{customer.phone || t('Not specified')}</dd>
                     </div>
                     <div>
-                        <dt>Warehouse</dt>
+                        <dt>{t('Warehouse')}</dt>
                         <dd>
                             {customer.warehouse.name}
                             <small>{customer.warehouse.code}</small>
                         </dd>
                     </div>
                     <div>
-                        <dt>Location</dt>
-                        <dd>{[customer.township, customer.region].filter(Boolean).join(', ') || 'Not specified'}</dd>
+                        <dt>{t('Location')}</dt>
+                        <dd>{[customer.township, customer.region].filter(Boolean).join(', ') || t('Not specified')}</dd>
                     </div>
                     <div>
-                        <dt>Address</dt>
-                        <dd>{customer.address || 'Not specified'}</dd>
+                        <dt>{t('Address')}</dt>
+                        <dd>{customer.address || t('Not specified')}</dd>
                     </div>
                     <div>
-                        <dt>Notes</dt>
-                        <dd>{customer.notes || 'No notes recorded'}</dd>
+                        <dt>{t('Notes')}</dt>
+                        <dd>{customer.notes || t('No notes recorded')}</dd>
                     </div>
                     <div>
-                        <dt>Created</dt>
+                        <dt>{t('Created')}</dt>
                         <dd>
                             {dateTime(customer.created_at)}
-                            <small>Updated {dateTime(customer.updated_at)}</small>
+                            <small>{t('Updated {date}', { date: dateTime(customer.updated_at) })}</small>
                         </dd>
                     </div>
                 </dl>
             </Panel>
 
-            <Panel eyebrow="Transactions" title="Sale history">
+            <Panel eyebrow={t('Transactions')} title={t('Sale history')}>
                 {!canViewSales ? (
-                    <EmptyState title="Sales history restricted" description="Sale view permission is required." />
+                    <EmptyState
+                        title={t('Sales history restricted')}
+                        description={t('Sale view permission is required.')}
+                    />
                 ) : sales.length === 0 ? (
                     <EmptyState
-                        title="No sales found"
+                        title={t('No sales found')}
                         description={
                             dateRange.date_from || dateRange.date_to
-                                ? 'No customer sales fall within the selected date range.'
-                                : "This customer's sales will appear here."
+                                ? t('No customer sales fall within the selected date range.')
+                                : t("This customer's sales will appear here.")
                         }
                     />
                 ) : (
@@ -274,13 +271,13 @@ export function CustomerDetailPage() {
                         <table className="ui-table customer-detail-sales-table">
                             <thead>
                                 <tr>
-                                    <th>Reference</th>
-                                    <th>Representative</th>
-                                    <th>Payment</th>
-                                    <th className="is-numeric">Quantity</th>
-                                    <th className="is-numeric">Total</th>
-                                    <th>Status</th>
-                                    <th>Date</th>
+                                    <th>{t('Reference')}</th>
+                                    <th>{t('Representative')}</th>
+                                    <th>{t('Payment')}</th>
+                                    <th className="is-numeric">{t('Quantity')}</th>
+                                    <th className="is-numeric">{t('Total')}</th>
+                                    <th>{t('Status')}</th>
+                                    <th>{t('Date')}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -294,13 +291,13 @@ export function CustomerDetailPage() {
                                             <strong>{sale.representative.name}</strong>
                                             <small>{sale.representative.code}</small>
                                         </td>
-                                        <td>{sale.payment_type === 'cash' ? 'Cash' : 'Credit'}</td>
-                                        <td className="is-numeric">{sale.total_quantity}</td>
+                                        <td>{t(sale.payment_type === 'cash' ? 'Cash' : 'Credit')}</td>
+                                        <td className="is-numeric">{formatNumber(sale.total_quantity)}</td>
                                         <td className="is-numeric">
                                             <strong>{money(sale.total_amount)}</strong>
                                         </td>
                                         <td>
-                                            <StatusBadge tone={saleTone(sale.status)}>{sale.status}</StatusBadge>
+                                            <StatusBadge tone={saleTone(sale.status)}>{t(sale.status)}</StatusBadge>
                                         </td>
                                         <td>{dateTime(sale.posted_at ?? sale.created_at)}</td>
                                     </tr>
@@ -312,24 +309,31 @@ export function CustomerDetailPage() {
                 {canViewSales ? (
                     <footer className="table-footer">
                         <span>
-                            {meta.from ?? 0}–{meta.to ?? 0} of {meta.total} sales
+                            {t('{from}–{to} of {total} sales', {
+                                from: formatNumber(meta.from ?? 0),
+                                to: formatNumber(meta.to ?? 0),
+                                total: formatNumber(meta.total),
+                            })}
                         </span>
                         <button
                             disabled={page <= 1 || loading}
                             onClick={() => setPage((value) => value - 1)}
                             type="button"
                         >
-                            Previous
+                            {t('Previous')}
                         </button>
                         <strong>
-                            Page {meta.current_page} of {meta.last_page}
+                            {t('Page {current} of {last}', {
+                                current: formatNumber(meta.current_page),
+                                last: formatNumber(meta.last_page),
+                            })}
                         </strong>
                         <button
                             disabled={page >= meta.last_page || loading}
                             onClick={() => setPage((value) => value + 1)}
                             type="button"
                         >
-                            Next
+                            {t('Next')}
                         </button>
                     </footer>
                 ) : null}

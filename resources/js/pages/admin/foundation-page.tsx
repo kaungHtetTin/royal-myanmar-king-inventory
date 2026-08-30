@@ -1,4 +1,5 @@
 import { Button, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
+import { useLocale } from '../../localization/locale-context';
 
 const movements = [
     {
@@ -49,43 +50,60 @@ const movements = [
 ];
 
 export function AdminFoundationPage() {
+    const { formatNumber, t } = useLocale();
+
     return (
         <div className="admin-page">
             <header className="page-heading">
                 <div>
-                    <p className="ui-eyebrow">Monday, 17 August</p>
-                    <h1>Operations overview</h1>
-                    <p>Inventory, sales, and settlement activity across accessible warehouses.</p>
+                    <p className="ui-eyebrow">{t('Monday, 17 August')}</p>
+                    <h1>{t('Operations overview')}</h1>
+                    <p>{t('Inventory, sales, and settlement activity across accessible warehouses.')}</p>
                 </div>
                 <Button icon="plus" tone="primary">
-                    New stock import
+                    {t('New stock import')}
                 </Button>
             </header>
 
-            <section className="metric-grid" aria-label="Key performance indicators">
-                <MetricCard hint="Across 3 warehouses" icon="warehouse" label="Warehouse stock" value="24,680" />
-                <MetricCard hint="12 awaiting receipt" icon="box" label="Representative stock" value="8,420" />
-                <MetricCard hint="+8.4% from yesterday" icon="sales" label="Today's sales" value="8.42M" />
-                <MetricCard hint="27 active credit accounts" icon="cash" label="Outstanding credit" value="12.6M" />
+            <section className="metric-grid" aria-label={t('Key performance indicators')}>
+                <MetricCard
+                    hint={t('Across 3 warehouses')}
+                    icon="warehouse"
+                    label={t('Warehouse stock')}
+                    value={formatNumber(24680)}
+                />
+                <MetricCard
+                    hint={t('12 awaiting receipt')}
+                    icon="box"
+                    label={t('Representative stock')}
+                    value={formatNumber(8420)}
+                />
+                <MetricCard hint={t('+8.4% from yesterday')} icon="sales" label={t("Today's sales")} value="8.42M" />
+                <MetricCard
+                    hint={t('27 active credit accounts')}
+                    icon="cash"
+                    label={t('Outstanding credit')}
+                    value="12.6M"
+                />
             </section>
 
             <div className="dashboard-grid">
                 <Panel
-                    actions={<Button tone="ghost">View movement ledger</Button>}
-                    eyebrow="Live ledger"
-                    title="Recent stock movements"
+                    actions={<Button tone="ghost">{t('View movement ledger')}</Button>}
+                    eyebrow={t('Live ledger')}
+                    title={t('Recent stock movements')}
                 >
                     <div className="ui-table-wrap">
                         <table className="ui-table">
                             <thead>
                                 <tr>
-                                    <th>Reference</th>
-                                    <th>Product / route</th>
-                                    <th className="is-numeric">Qty</th>
-                                    <th>Status</th>
-                                    <th>Time</th>
+                                    <th>{t('Reference')}</th>
+                                    <th>{t('Product / route')}</th>
+                                    <th className="is-numeric">{t('Qty')}</th>
+                                    <th>{t('Status')}</th>
+                                    <th>{t('Time')}</th>
                                     <th className="ui-table__actions">
-                                        <span className="sr-only">Actions</span>
+                                        <span className="sr-only">{t('Actions')}</span>
                                     </th>
                                 </tr>
                             </thead>
@@ -96,18 +114,21 @@ export function AdminFoundationPage() {
                                             <strong>{movement.reference}</strong>
                                         </td>
                                         <td>
-                                            <span className="table-primary">{movement.product}</span>
-                                            <small>{movement.detail}</small>
+                                            <span className="table-primary">{t(movement.product)}</span>
+                                            <small>{t(movement.detail)}</small>
                                         </td>
                                         <td className="is-numeric">
-                                            <strong>{movement.quantity}</strong>
+                                            <strong>{formatNumber(Number(movement.quantity.replace(',', '')))}</strong>
                                         </td>
                                         <td>
-                                            <StatusBadge tone={movement.tone}>{movement.status}</StatusBadge>
+                                            <StatusBadge tone={movement.tone}>{t(movement.status)}</StatusBadge>
                                         </td>
                                         <td className="table-muted">{movement.time}</td>
                                         <td className="ui-table__actions">
-                                            <IconButton icon="chevronRight" label={`Open ${movement.reference}`} />
+                                            <IconButton
+                                                icon="chevronRight"
+                                                label={t('Open {reference}', { reference: movement.reference })}
+                                            />
                                         </td>
                                     </tr>
                                 ))}
@@ -115,57 +136,57 @@ export function AdminFoundationPage() {
                         </table>
                     </div>
                     <footer className="table-footer">
-                        <span>Showing 5 latest movements</span>
-                        <button type="button">Previous</button>
+                        <span>{t('Showing 5 latest movements')}</span>
+                        <button type="button">{t('Previous')}</button>
                         <strong>1</strong>
-                        <button type="button">Next</button>
+                        <button type="button">{t('Next')}</button>
                     </footer>
                 </Panel>
 
                 <div className="dashboard-side-stack">
-                    <Panel eyebrow="Attention" title="Needs action">
+                    <Panel eyebrow={t('Attention')} title={t('Needs action')}>
                         <ul className="attention-list">
                             <li>
                                 <span className="attention-icon is-warning">12</span>
                                 <div>
-                                    <strong>Transfers awaiting receipt</strong>
-                                    <small>Oldest pending for 2 days</small>
+                                    <strong>{t('Transfers awaiting receipt')}</strong>
+                                    <small>{t('Oldest pending for 2 days')}</small>
                                 </div>
-                                <IconButton icon="chevronRight" label="View pending transfers" />
+                                <IconButton icon="chevronRight" label={t('View pending transfers')} />
                             </li>
                             <li>
                                 <span className="attention-icon is-danger">6</span>
                                 <div>
-                                    <strong>Low stock products</strong>
-                                    <small>Across 2 warehouses</small>
+                                    <strong>{t('Low stock products')}</strong>
+                                    <small>{t('Across 2 warehouses')}</small>
                                 </div>
-                                <IconButton icon="chevronRight" label="View low stock" />
+                                <IconButton icon="chevronRight" label={t('View low stock')} />
                             </li>
                             <li>
                                 <span className="attention-icon is-info">9</span>
                                 <div>
-                                    <strong>Cash submissions</strong>
-                                    <small>4.2M MMK pending confirmation</small>
+                                    <strong>{t('Cash submissions')}</strong>
+                                    <small>{t('4.2M MMK pending confirmation')}</small>
                                 </div>
-                                <IconButton icon="chevronRight" label="View cash submissions" />
+                                <IconButton icon="chevronRight" label={t('View cash submissions')} />
                             </li>
                         </ul>
                     </Panel>
 
-                    <Panel eyebrow="Shortcuts" title="Quick actions">
+                    <Panel eyebrow={t('Shortcuts')} title={t('Quick actions')}>
                         <div className="quick-actions">
-                            <Button icon="transfer">Create transfer</Button>
-                            <Button icon="adjustments">Stock adjustment</Button>
-                            <Button icon="cash">Record payment</Button>
-                            <Button icon="reports">Open reports</Button>
+                            <Button icon="transfer">{t('Create transfer')}</Button>
+                            <Button icon="adjustments">{t('Stock adjustment')}</Button>
+                            <Button icon="cash">{t('Record payment')}</Button>
+                            <Button icon="reports">{t('Open reports')}</Button>
                         </div>
                     </Panel>
                 </div>
             </div>
 
             <p className="foundation-note">
-                <strong>UI foundation preview.</strong> Values are sample data and no transaction actions are connected
-                yet.
+                <strong>{t('UI foundation preview.')}</strong>{' '}
+                {t('Values are sample data and no transaction actions are connected yet.')}
             </p>
         </div>
     );

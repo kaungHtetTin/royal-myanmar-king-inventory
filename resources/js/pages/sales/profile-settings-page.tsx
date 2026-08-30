@@ -9,6 +9,8 @@ import {
 } from '../../services/sales-profile';
 import { Icon } from '../../ui/icons';
 import { Button, StatusBadge } from '../../ui/primitives';
+import { FontScaleSetting } from '../../ui/font-scale-setting';
+import { useLocale } from '../../localization/locale-context';
 
 const emptyProfile: SalesProfileInput = { email: '', name: '', phone: '', region: '', username: '' };
 const emptyPassword = { current_password: '', password: '', password_confirmation: '' };
@@ -16,6 +18,7 @@ const fieldError = (fields: Record<string, string[]>, name: string) => fields[na
 
 export function ProfileSettingsPage() {
     const { updateUser } = useSession();
+    const { t } = useLocale();
     const [record, setRecord] = useState<SalesProfile | null>(null);
     const [profile, setProfile] = useState(emptyProfile);
     const [password, setPassword] = useState(emptyPassword);
@@ -43,7 +46,8 @@ export function ProfileSettingsPage() {
                 });
             })
             .catch((requestError) => {
-                if (active) setError(requestError instanceof Error ? requestError.message : 'Unable to load profile.');
+                if (active)
+                    setError(requestError instanceof Error ? requestError.message : t('Unable to load profile.'));
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -51,7 +55,7 @@ export function ProfileSettingsPage() {
         return () => {
             active = false;
         };
-    }, []);
+    }, [t]);
 
     const showNotice = (value: string) => {
         setNotice(value);
@@ -66,12 +70,12 @@ export function ProfileSettingsPage() {
             const response = await salesProfileApi.update(profile);
             setRecord(response.representative);
             updateUser({ email: response.user.email, name: response.user.name, username: response.user.username });
-            showNotice('Profile information updated.');
+            showNotice(t('Profile information updated.'));
         } catch (requestError) {
             const failure =
                 requestError instanceof SalesProfileError
                     ? requestError
-                    : new SalesProfileError('Unable to update your profile.');
+                    : new SalesProfileError(t('Unable to update your profile.'));
             setProfileErrors(failure.fields);
             setError(failure.message);
         } finally {
@@ -86,12 +90,12 @@ export function ProfileSettingsPage() {
         try {
             await salesProfileApi.updatePassword(password);
             setPassword(emptyPassword);
-            showNotice('Password updated successfully.');
+            showNotice(t('Password updated successfully.'));
         } catch (requestError) {
             const failure =
                 requestError instanceof SalesProfileError
                     ? requestError
-                    : new SalesProfileError('Unable to update your password.');
+                    : new SalesProfileError(t('Unable to update your password.'));
             setPasswordErrors(failure.fields);
             setError(failure.message);
         } finally {
@@ -105,13 +109,15 @@ export function ProfileSettingsPage() {
                 <div>
                     <Link className="sale-detail-back" to="/sales/dashboard">
                         <Icon name="chevronLeft" size={13} />
-                        Dashboard
+                        {t('Dashboard')}
                     </Link>
-                    <p className="ui-eyebrow">Account settings</p>
-                    <h1>Profile &amp; security</h1>
-                    <p>Keep your personal information and login credentials current.</p>
+                    <p className="ui-eyebrow">{t('Account settings')}</p>
+                    <h1>{t('Profile & security')}</h1>
+                    <p>{t('Keep your personal information and login credentials current.')}</p>
                 </div>
-                {record ? <StatusBadge tone="success">Active · {record.code}</StatusBadge> : null}
+                {record ? (
+                    <StatusBadge tone="success">{t('Active · {code}', { code: record.code })}</StatusBadge>
+                ) : null}
             </header>
 
             {notice ? <div className="ui-flash ui-flash--success">{notice}</div> : null}
@@ -119,20 +125,31 @@ export function ProfileSettingsPage() {
             {loading ? (
                 <div className="ui-loading" role="status">
                     <span />
-                    Loading profile…
+                    {t('Loading profile…')}
                 </div>
             ) : (
                 <div className="sales-profile-settings-grid">
+                    <section className="sales-section sales-profile-settings-form sales-profile-settings-display">
+                        <header>
+                            <div>
+                                <p className="ui-eyebrow">{t('Device preference')}</p>
+                                <h2>{t('Display')}</h2>
+                            </div>
+                        </header>
+                        <div className="sales-profile-settings-form__body">
+                            <FontScaleSetting />
+                        </div>
+                    </section>
                     <form className="sales-section sales-profile-settings-form" onSubmit={saveProfile}>
                         <header>
                             <div>
-                                <p className="ui-eyebrow">Profile information</p>
-                                <h2>Personal details</h2>
+                                <p className="ui-eyebrow">{t('Profile information')}</p>
+                                <h2>{t('Personal details')}</h2>
                             </div>
                         </header>
                         <div className="sales-profile-settings-form__body">
                             <div className="sales-profile-form-grid">
-                                <ProfileField error={fieldError(profileErrors, 'name')} label="Display name">
+                                <ProfileField error={fieldError(profileErrors, 'name')} label={t('Display name')}>
                                     <input
                                         autoComplete="name"
                                         onChange={(event) => setProfile({ ...profile, name: event.target.value })}
@@ -140,7 +157,7 @@ export function ProfileSettingsPage() {
                                         value={profile.name}
                                     />
                                 </ProfileField>
-                                <ProfileField error={fieldError(profileErrors, 'username')} label="Username">
+                                <ProfileField error={fieldError(profileErrors, 'username')} label={t('Username')}>
                                     <input
                                         autoComplete="username"
                                         onChange={(event) => setProfile({ ...profile, username: event.target.value })}
@@ -148,7 +165,7 @@ export function ProfileSettingsPage() {
                                         value={profile.username}
                                     />
                                 </ProfileField>
-                                <ProfileField error={fieldError(profileErrors, 'email')} label="Email address">
+                                <ProfileField error={fieldError(profileErrors, 'email')} label={t('Email address')}>
                                     <input
                                         autoComplete="email"
                                         onChange={(event) => setProfile({ ...profile, email: event.target.value })}
@@ -156,27 +173,27 @@ export function ProfileSettingsPage() {
                                         value={profile.email}
                                     />
                                 </ProfileField>
-                                <ProfileField error={fieldError(profileErrors, 'phone')} label="Phone number">
+                                <ProfileField error={fieldError(profileErrors, 'phone')} label={t('Phone number')}>
                                     <input
                                         autoComplete="tel"
                                         onChange={(event) => setProfile({ ...profile, phone: event.target.value })}
                                         value={profile.phone}
                                     />
                                 </ProfileField>
-                                <ProfileField error={fieldError(profileErrors, 'region')} label="Region">
+                                <ProfileField error={fieldError(profileErrors, 'region')} label={t('Region')}>
                                     <input
                                         onChange={(event) => setProfile({ ...profile, region: event.target.value })}
                                         value={profile.region}
                                     />
                                 </ProfileField>
-                                <ProfileField label="Assigned warehouse">
+                                <ProfileField label={t('Assigned warehouse')}>
                                     <input disabled value={record?.primary_warehouse.name ?? '—'} />
                                 </ProfileField>
                             </div>
                         </div>
                         <footer>
                             <Button disabled={savingProfile} requiresOnline tone="primary" type="submit">
-                                {savingProfile ? 'Saving…' : 'Save profile'}
+                                {t(savingProfile ? 'Saving…' : 'Save profile')}
                             </Button>
                         </footer>
                     </form>
@@ -184,17 +201,19 @@ export function ProfileSettingsPage() {
                     <form className="sales-section sales-profile-settings-form" onSubmit={savePassword}>
                         <header>
                             <div>
-                                <p className="ui-eyebrow">Security</p>
-                                <h2>Change password</h2>
+                                <p className="ui-eyebrow">{t('Security')}</p>
+                                <h2>{t('Change password')}</h2>
                             </div>
                         </header>
                         <div className="sales-profile-settings-form__body">
                             <p className="sales-profile-security-note">
-                                Use at least 6 characters. Your current password is required to confirm this change.
+                                {t(
+                                    'Use at least 6 characters. Your current password is required to confirm this change.',
+                                )}
                             </p>
                             <ProfileField
                                 error={fieldError(passwordErrors, 'current_password')}
-                                label="Current password"
+                                label={t('Current password')}
                             >
                                 <input
                                     autoComplete="current-password"
@@ -207,7 +226,7 @@ export function ProfileSettingsPage() {
                                     value={password.current_password}
                                 />
                             </ProfileField>
-                            <ProfileField error={fieldError(passwordErrors, 'password')} label="New password">
+                            <ProfileField error={fieldError(passwordErrors, 'password')} label={t('New password')}>
                                 <input
                                     autoComplete="new-password"
                                     minLength={6}
@@ -219,7 +238,7 @@ export function ProfileSettingsPage() {
                             </ProfileField>
                             <ProfileField
                                 error={fieldError(passwordErrors, 'password_confirmation')}
-                                label="Confirm new password"
+                                label={t('Confirm new password')}
                             >
                                 <input
                                     autoComplete="new-password"
@@ -235,7 +254,7 @@ export function ProfileSettingsPage() {
                         </div>
                         <footer>
                             <Button disabled={savingPassword} requiresOnline tone="primary" type="submit">
-                                {savingPassword ? 'Updating…' : 'Update password'}
+                                {t(savingPassword ? 'Updating…' : 'Update password')}
                             </Button>
                         </footer>
                     </form>

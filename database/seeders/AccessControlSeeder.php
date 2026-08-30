@@ -25,11 +25,16 @@ class AccessControlSeeder extends Seeder
         Role::findOrCreate(RoleName::OfficeAdmin->value, 'web')->syncPermissions([
             $permissions[PermissionName::DashboardView->value],
             $permissions[PermissionName::WarehouseView->value],
+            $permissions[PermissionName::TripView->value],
+            $permissions[PermissionName::TripManage->value],
+            $permissions[PermissionName::TripClose->value],
         ]);
 
         Role::findOrCreate(RoleName::SalesRepresentative->value, 'web')->syncPermissions([
             $permissions[PermissionName::RepresentativeStockView->value],
             $permissions[PermissionName::RepresentativeStockReceive->value],
+            $permissions[PermissionName::TripView->value],
+            $permissions[PermissionName::TripExpenseCreate->value],
             $permissions[PermissionName::CustomerView->value],
             $permissions[PermissionName::SaleView->value],
             $permissions[PermissionName::SaleCreate->value],

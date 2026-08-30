@@ -15,6 +15,7 @@ class RepresentativeTransferResource extends JsonResource
         return [
             'id' => $this->id,
             'reference' => $this->reference,
+            'trip' => $this->trip_id ? ['id' => $this->trip_id, 'reference' => $this->trip?->reference, 'title' => $this->trip?->title] : null,
             'direction' => $this->direction,
             'source_warehouse' => ['id' => $this->sourceWarehouse->id, 'code' => $this->sourceWarehouse->code, 'name' => $this->sourceWarehouse->name],
             'representative' => ['id' => $this->representative->id, 'code' => $this->representative->code, 'name' => $this->representative->name],

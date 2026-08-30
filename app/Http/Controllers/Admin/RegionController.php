@@ -22,7 +22,7 @@ class RegionController extends Controller
         $region = $warehouse->regions()->create($data);
         $this->auditLogger->record($request, 'region.created', $request->user(), $region, ['new' => $region->toArray()]);
 
-        return response()->json(['data' => $this->data($region->load('ways'))], 201);
+        return response()->json(['data' => $this->data($region)], 201);
     }
 
     public function update(Request $request, Region $region): JsonResponse
@@ -33,7 +33,7 @@ class RegionController extends Controller
         $region->update($data);
         $this->auditLogger->record($request, 'region.updated', $request->user(), $region, ['old' => $old, 'new' => $region->toArray()]);
 
-        return response()->json(['data' => $this->data($region->load('ways'))]);
+        return response()->json(['data' => $this->data($region)]);
     }
 
     private function rules(Warehouse $warehouse, ?Region $region = null): array
@@ -47,8 +47,6 @@ class RegionController extends Controller
 
     private function data(Region $region): array
     {
-        return $region->only(['id', 'warehouse_id', 'name', 'notes', 'is_active', 'created_at', 'updated_at']) + [
-            'ways' => $region->ways->map->only(['id', 'region_id', 'code', 'name', 'notes', 'is_active'])->values(),
-        ];
+        return $region->only(['id', 'warehouse_id', 'name', 'notes', 'is_active', 'created_at', 'updated_at']);
     }
 }

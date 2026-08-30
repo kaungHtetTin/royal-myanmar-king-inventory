@@ -6,6 +6,7 @@ export type Product = {
     category: string | null;
     created_at: string | null;
     description: string | null;
+    discount_percentage: number;
     id: number;
     is_active: boolean;
     name: string;
@@ -31,6 +32,7 @@ export type ProductInput = {
     barcode: string;
     category: string;
     description: string;
+    discount_percentage: number;
     is_active: boolean;
     name: string;
     selling_price: number;

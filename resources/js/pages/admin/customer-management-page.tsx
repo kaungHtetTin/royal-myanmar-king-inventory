@@ -14,6 +14,7 @@ import {
 import { Icon } from '../../ui/icons';
 import { editableNumber } from '../../ui/form-values';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
+import { useLocale } from '../../localization/locale-context';
 
 const emptyMeta: PaginationMeta = {
     current_page: 1,
@@ -23,24 +24,17 @@ const emptyMeta: PaginationMeta = {
     to: null,
     total: 0,
 };
-const emptyOptions: CustomerOptions = { types: [], warehouses: [], regions: [], ways: [] };
+const emptyOptions: CustomerOptions = { types: [], warehouses: [], regions: [] };
 const emptySummary: CustomerSummary = { active: 0, credit_enabled: 0, credit_limit: 0, total: 0 };
 
-function errorMessage(error: unknown) {
-    return error instanceof Error ? error.message : 'Unable to complete the request.';
-}
-function money(value: number) {
-    return `${new Intl.NumberFormat('en-US').format(value)} MMK`;
-}
-function dateTime(value: string | null) {
-    if (!value) return 'Not available';
-    return new Intl.DateTimeFormat(undefined, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-    }).format(new Date(value));
+function errorMessage(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback;
 }
 
 export function CustomerManagementPage() {
+    const { formatDateTime, formatNumber, t } = useLocale();
+    const money = (value: number) => `${formatNumber(value)} MMK`;
+    const dateTime = (value: string | null) => (value ? formatDateTime(value) : t('Not available'));
     const { user } = useSession();
     const isSuperAdmin = user?.roles.includes('super-admin');
     const canCreate = Boolean(isSuperAdmin || user?.permissions.includes('customer.create'));
@@ -59,7 +53,6 @@ export function CustomerManagementPage() {
         region_id: '',
         search: '',
         warehouse_id: '',
-        way_id: '',
     });
     const [filters, setFilters] = useState<CustomerFilters>({
         page: 1,
@@ -75,11 +68,11 @@ export function CustomerManagementPage() {
             setSummary(response.summary ?? emptySummary);
             setOptions(availableOptions);
         } catch (requestError) {
-            setError(errorMessage(requestError));
+            setError(errorMessage(requestError, t('Unable to complete the request.')));
         } finally {
             setLoading(false);
         }
-    }, [filters]);
+    }, [filters, t]);
 
     useEffect(() => {
         let active = true;
@@ -92,7 +85,7 @@ export function CustomerManagementPage() {
                 setOptions(availableOptions);
             })
             .catch((requestError) => {
-                if (active) setError(errorMessage(requestError));
+                if (active) setError(errorMessage(requestError, t('Unable to complete the request.')));
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -100,7 +93,7 @@ export function CustomerManagementPage() {
         return () => {
             active = false;
         };
-    }, [filters]);
+    }, [filters, t]);
 
     const showNotice = (message: string) => {
         setNotice(message);
@@ -111,9 +104,11 @@ export function CustomerManagementPage() {
         <div className="admin-page customer-management">
             <header className="page-heading">
                 <div>
-                    <p className="ui-eyebrow">Master data</p>
-                    <h1>Customers</h1>
-                    <p>Maintain customer profiles, operating warehouse, and office-controlled credit settings.</p>
+                    <p className="ui-eyebrow">{t('Master data')}</p>
+                    <h1>{t('Customers')}</h1>
+                    <p>
+                        {t('Maintain customer profiles, operating warehouse, and office-controlled credit settings.')}
+                    </p>
                 </div>
                 {canCreate ? (
                     <Button
@@ -124,34 +119,34 @@ export function CustomerManagementPage() {
                         }}
                         tone="primary"
                     >
-                        New customer
+                        {t('New customer')}
                     </Button>
                 ) : null}
             </header>
 
             <div className="metric-grid access-metrics">
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="customers"
-                    label="Customers"
-                    value={String(summary.total)}
+                    label={t('Customers')}
+                    value={formatNumber(summary.total)}
                 />
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="dashboard"
-                    label="Active"
-                    value={String(summary.active)}
+                    label={t('Active')}
+                    value={formatNumber(summary.active)}
                 />
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="cash"
-                    label="Credit enabled"
-                    value={String(summary.credit_enabled)}
+                    label={t('Credit enabled')}
+                    value={formatNumber(summary.credit_enabled)}
                 />
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="reports"
-                    label="Credit limits"
+                    label={t('Credit limits')}
                     value={money(summary.credit_limit)}
                 />
             </div>
@@ -167,12 +162,12 @@ export function CustomerManagementPage() {
                     <Icon name="x" size={15} />
                     {error}
                     <button onClick={() => void loadCustomers()} type="button">
-                        Retry
+                        {t('Retry')}
                     </button>
                 </div>
             ) : null}
 
-            <Panel eyebrow="Directory" title="Customer accounts">
+            <Panel eyebrow={t('Directory')} title={t('Customer accounts')}>
                 <form
                     className="filter-toolbar customer-filters"
                     onSubmit={(event) => {
@@ -183,34 +178,32 @@ export function CustomerManagementPage() {
                             region_id: draftFilters.region_id,
                             search: draftFilters.search || undefined,
                             warehouse_id: draftFilters.warehouse_id,
-                            way_id: draftFilters.way_id,
                         });
                     }}
                 >
                     <label className="filter-search">
-                        <span className="sr-only">Search customers</span>
+                        <span className="sr-only">{t('Search customers')}</span>
                         <Icon name="search" size={15} />
                         <input
                             onChange={(event) => setDraftFilters((value) => ({ ...value, search: event.target.value }))}
-                            placeholder="Search code, name, phone, or location"
+                            placeholder={t('Search code, name, phone, or location')}
                             type="search"
                             value={draftFilters.search}
                         />
                     </label>
                     <label>
-                        <span className="sr-only">Filter by warehouse</span>
+                        <span className="sr-only">{t('Filter by warehouse')}</span>
                         <select
                             onChange={(event) =>
                                 setDraftFilters((value) => ({
                                     ...value,
                                     region_id: '',
                                     warehouse_id: event.target.value,
-                                    way_id: '',
                                 }))
                             }
                             value={draftFilters.warehouse_id}
                         >
-                            <option value="">All warehouses</option>
+                            <option value="">{t('All warehouses')}</option>
                             {options.warehouses.map((warehouse) => (
                                 <option key={warehouse.id} value={warehouse.id}>
                                     {warehouse.name} · {warehouse.code}
@@ -219,19 +212,18 @@ export function CustomerManagementPage() {
                         </select>
                     </label>
                     <label>
-                        <span className="sr-only">Filter by region</span>
+                        <span className="sr-only">{t('Filter by region')}</span>
                         <select
                             disabled={!draftFilters.warehouse_id}
                             onChange={(event) =>
                                 setDraftFilters((value) => ({
                                     ...value,
                                     region_id: event.target.value,
-                                    way_id: '',
                                 }))
                             }
                             value={draftFilters.region_id}
                         >
-                            <option value="">All regions</option>
+                            <option value="">{t('All regions')}</option>
                             {(options.regions ?? [])
                                 .filter((region) => String(region.warehouse_id) === draftFilters.warehouse_id)
                                 .map((region) => (
@@ -241,56 +233,36 @@ export function CustomerManagementPage() {
                                 ))}
                         </select>
                     </label>
-                    <label>
-                        <span className="sr-only">Filter by way</span>
-                        <select
-                            disabled={!draftFilters.region_id}
-                            onChange={(event) =>
-                                setDraftFilters((value) => ({
-                                    ...value,
-                                    way_id: event.target.value,
-                                }))
-                            }
-                            value={draftFilters.way_id}
-                        >
-                            <option value="">All ways</option>
-                            {(options.ways ?? [])
-                                .filter((way) => String(way.region_id) === draftFilters.region_id)
-                                .map((way) => (
-                                    <option key={way.id} value={way.id}>
-                                        {way.name} · {way.code}
-                                    </option>
-                                ))}
-                        </select>
-                    </label>
                     <Button icon="search" type="submit">
-                        Apply
+                        {t('Apply')}
                     </Button>
                 </form>
 
                 {loading ? (
                     <div className="ui-loading" role="status">
                         <span />
-                        Loading customers…
+                        {t('Loading customers…')}
                     </div>
                 ) : customers.length === 0 ? (
                     <EmptyState
-                        description="Change the filters or create the first customer account."
-                        title="No customers found"
+                        description={t('Change the filters or create the first customer account.')}
+                        title={t('No customers found')}
                     />
                 ) : (
                     <div className="ui-table-wrap">
                         <table className="ui-table customer-table">
                             <thead>
                                 <tr>
-                                    <th>Customer</th>
-                                    <th>Type / location</th>
-                                    <th>Contact</th>
-                                    <th>Warehouse</th>
-                                    <th className="is-numeric">Credit</th>
-                                    <th>Status</th>
-                                    <th>Updated</th>
-                                    {canEdit || canCredit ? <th className="ui-table__actions">Actions</th> : null}
+                                    <th>{t('Customer')}</th>
+                                    <th>{t('Type / location')}</th>
+                                    <th>{t('Contact')}</th>
+                                    <th>{t('Warehouse')}</th>
+                                    <th className="is-numeric">{t('Credit')}</th>
+                                    <th>{t('Status')}</th>
+                                    <th>{t('Updated')}</th>
+                                    {canEdit || canCredit ? (
+                                        <th className="ui-table__actions">{t('Actions')}</th>
+                                    ) : null}
                                 </tr>
                             </thead>
                             <tbody>
@@ -307,16 +279,18 @@ export function CustomerManagementPage() {
                                         </td>
                                         <td>
                                             <span className="table-primary">
-                                                {customer.customer_type || 'Not specified'}
+                                                {customer.customer_type || t('Not specified')}
                                             </span>
                                             <small>
-                                                {[customer.township, customer.region].filter(Boolean).join(', ') ||
-                                                    'No location'}
+                                                {[customer.township, customer.region?.name].filter(Boolean).join(', ') ||
+                                                    t('No location')}
                                             </small>
                                         </td>
                                         <td>
-                                            <span className="table-primary">{customer.phone || 'Not specified'}</span>
-                                            <small>{customer.address || 'No address recorded'}</small>
+                                            <span className="table-primary">
+                                                {customer.phone || t('Not specified')}
+                                            </span>
+                                            <small>{customer.address || t('No address recorded')}</small>
                                         </td>
                                         <td>
                                             <strong>{customer.warehouse.name}</strong>
@@ -326,26 +300,31 @@ export function CustomerManagementPage() {
                                             {customer.credit_allowed ? (
                                                 <>
                                                     <strong>{money(customer.credit_limit)}</strong>
-                                                    <small>Credit enabled</small>
+                                                    <small>{t('Credit enabled')}</small>
                                                 </>
                                             ) : (
-                                                <span className="table-muted">Cash only</span>
+                                                <span className="table-muted">{t('Cash only')}</span>
                                             )}
                                         </td>
                                         <td>
                                             <StatusBadge tone={customer.is_active ? 'success' : 'danger'}>
-                                                {customer.is_active ? 'Active' : 'Inactive'}
+                                                {t(customer.is_active ? 'Active' : 'Inactive')}
                                             </StatusBadge>
                                         </td>
                                         <td>
                                             <span className="table-primary">{dateTime(customer.updated_at)}</span>
-                                            <small>Created {dateTime(customer.created_at)}</small>
+                                            <small>
+                                                {t('Created {date}', { date: dateTime(customer.created_at) })}
+                                            </small>
                                         </td>
                                         {canEdit || canCredit ? (
                                             <td className="ui-table__actions">
                                                 <IconButton
                                                     icon="settings"
-                                                    label={`${canEdit ? 'Edit' : 'Manage credit for'} ${customer.name}`}
+                                                    label={t('{action} {name}', {
+                                                        action: t(canEdit ? 'Edit' : 'Manage credit for'),
+                                                        name: customer.name,
+                                                    })}
                                                     onClick={() => {
                                                         setSelected(customer);
                                                         setDialogOpen(true);
@@ -361,7 +340,11 @@ export function CustomerManagementPage() {
                 )}
                 <footer className="table-footer">
                     <span>
-                        {meta.from ?? 0}–{meta.to ?? 0} of {meta.total} customers
+                        {t('{from}–{to} of {total} customers', {
+                            from: formatNumber(meta.from ?? 0),
+                            to: formatNumber(meta.to ?? 0),
+                            total: formatNumber(meta.total),
+                        })}
                     </span>
                     <button
                         disabled={meta.current_page <= 1 || loading}
@@ -374,10 +357,13 @@ export function CustomerManagementPage() {
                         }}
                         type="button"
                     >
-                        Previous
+                        {t('Previous')}
                     </button>
                     <strong>
-                        Page {meta.current_page} of {meta.last_page}
+                        {t('Page {current} of {last}', {
+                            current: formatNumber(meta.current_page),
+                            last: formatNumber(meta.last_page),
+                        })}
                     </strong>
                     <button
                         disabled={meta.current_page >= meta.last_page || loading}
@@ -390,7 +376,7 @@ export function CustomerManagementPage() {
                         }}
                         type="button"
                     >
-                        Next
+                        {t('Next')}
                     </button>
                 </footer>
             </Panel>
@@ -433,6 +419,7 @@ function CustomerDialog({
     open: boolean;
     options: CustomerOptions;
 }) {
+    const { t } = useLocale();
     const [form, setForm] = useState<CustomerInput>({
         address: '',
         code: '',
@@ -443,10 +430,9 @@ function CustomerDialog({
         name: '',
         notes: '',
         phone: '',
-        region: '',
+        region_id: 0,
         township: '',
         warehouse_id: 0,
-        way_id: 0,
     });
     const [regionId, setRegionId] = useState(0);
     const [errors, setErrors] = useState<Record<string, string[]>>({});
@@ -457,7 +443,7 @@ function CustomerDialog({
         setErrors({});
         const warehouseId = customer?.warehouse_id ?? options.warehouses[0]?.id ?? 0;
         const selectedRegionId =
-            customer?.way?.region.id ??
+            customer?.region_id ??
             (options.regions ?? []).find((region) => region.warehouse_id === warehouseId)?.id ??
             0;
         setRegionId(selectedRegionId);
@@ -471,12 +457,11 @@ function CustomerDialog({
             name: customer?.name ?? '',
             notes: customer?.notes ?? '',
             phone: customer?.phone ?? '',
-            region: customer?.region ?? '',
+            region_id: selectedRegionId,
             township: customer?.township ?? '',
             warehouse_id: warehouseId,
-            way_id: customer?.way_id ?? (options.ways ?? []).find((way) => way.region_id === selectedRegionId)?.id ?? 0,
         });
-    }, [customer, open, options.warehouses, options.regions, options.ways]);
+    }, [customer, open, options.warehouses, options.regions]);
 
     const change = (field: keyof CustomerInput, value: boolean | number | string) =>
         setForm((current) => ({ ...current, [field]: value }));
@@ -486,7 +471,9 @@ function CustomerDialog({
             customer?.is_active &&
             !form.is_active &&
             !window.confirm(
-                `Deactivate ${customer.name}? It will remain in history but cannot be selected for new sales.`,
+                t('Deactivate {name}? It will remain in history but cannot be selected for new sales.', {
+                    name: customer.name,
+                }),
             )
         )
             return;
@@ -494,7 +481,7 @@ function CustomerDialog({
             customer &&
             canCredit &&
             (customer.credit_allowed !== form.credit_allowed || customer.credit_limit !== form.credit_limit) &&
-            !window.confirm(`Apply the new credit settings for ${customer.name}?`)
+            !window.confirm(t('Apply the new credit settings for {name}?', { name: customer.name }))
         )
             return;
         setSaving(true);
@@ -507,12 +494,12 @@ function CustomerDialog({
                     credit_allowed: form.credit_allowed,
                     credit_limit: form.credit_limit,
                 });
-            await onSaved(customer ? 'Customer updated.' : 'Customer created.');
+            await onSaved(t(customer ? 'Customer updated.' : 'Customer created.'));
         } catch (requestError) {
             if (requestError instanceof CustomerApiError) setErrors(requestError.fields);
             setErrors((current) => ({
                 ...current,
-                form: [errorMessage(requestError)],
+                form: [errorMessage(requestError, t('Unable to complete the request.'))],
             }));
         } finally {
             setSaving(false);
@@ -521,11 +508,13 @@ function CustomerDialog({
 
     return (
         <Dialog
-            description="Customer profiles belong to one operating warehouse. Credit settings require explicit office authorization."
+            description={t(
+                'Customer profiles belong to one operating warehouse. Credit settings require explicit office authorization.',
+            )}
             footer={
                 <>
                     <Button disabled={saving} onClick={onClose}>
-                        Cancel
+                        {t('Cancel')}
                     </Button>
                     <Button
                         disabled={saving}
@@ -534,7 +523,7 @@ function CustomerDialog({
                         tone="primary"
                         type="submit"
                     >
-                        {saving ? 'Saving…' : 'Save customer'}
+                        {saving ? t('Saving…') : t('Save customer')}
                     </Button>
                 </>
             }
@@ -542,8 +531,11 @@ function CustomerDialog({
             open={open}
             title={
                 customer
-                    ? `${profileDisabled ? 'Manage credit' : 'Edit customer'} · ${customer.code}`
-                    : 'Create customer'
+                    ? t('{action} · {code}', {
+                          action: t(profileDisabled ? 'Manage credit' : 'Edit customer'),
+                          code: customer.code,
+                      })
+                    : t('Create customer')
             }
         >
             <form className="management-form" id="customer-management-form" onSubmit={submit}>
@@ -555,12 +547,12 @@ function CustomerDialog({
                 <div className="form-grid">
                     {customer ? (
                         <label className="ui-field">
-                            <span>Customer code</span>
+                            <span>{t('Customer code')}</span>
                             <input disabled value={form.code} />
                         </label>
                     ) : null}
                     <label className="ui-field">
-                        <span>Customer name</span>
+                        <span>{t('Customer name')}</span>
                         <input
                             autoFocus
                             disabled={profileDisabled}
@@ -572,7 +564,7 @@ function CustomerDialog({
                         <FieldError errors={errors} name="name" />
                     </label>
                     <label className="ui-field">
-                        <span>Customer type</span>
+                        <span>{t('Customer type')}</span>
                         <input
                             disabled={profileDisabled}
                             list="customer-type-options"
@@ -588,7 +580,7 @@ function CustomerDialog({
                         <FieldError errors={errors} name="customer_type" />
                     </label>
                     <label className="ui-field">
-                        <span>Operating warehouse</span>
+                        <span>{t('Operating warehouse')}</span>
                         <select
                             disabled={profileDisabled}
                             onChange={(event) => {
@@ -600,14 +592,14 @@ function CustomerDialog({
                                 setForm((value) => ({
                                     ...value,
                                     warehouse_id: warehouseId,
-                                    way_id: (options.ways ?? []).find((way) => way.region_id === nextRegion)?.id ?? 0,
+                                    region_id: nextRegion,
                                 }));
                             }}
                             required
                             value={form.warehouse_id}
                         >
                             <option disabled value={0}>
-                                Select warehouse
+                                {t('Select warehouse')}
                             </option>
                             {options.warehouses.map((warehouse) => (
                                 <option key={warehouse.id} value={warehouse.id}>
@@ -618,7 +610,7 @@ function CustomerDialog({
                         <FieldError errors={errors} name="warehouse_id" />
                     </label>
                     <label className="ui-field">
-                        <span>Phone</span>
+                        <span>{t('Phone')}</span>
                         <input
                             disabled={profileDisabled}
                             maxLength={50}
@@ -629,7 +621,7 @@ function CustomerDialog({
                         <FieldError errors={errors} name="phone" />
                     </label>
                     <label className="ui-field">
-                        <span>Region</span>
+                        <span>{t('Region')}</span>
                         <select
                             disabled={profileDisabled}
                             onChange={(event) => {
@@ -637,14 +629,13 @@ function CustomerDialog({
                                 setRegionId(id);
                                 setForm((value) => ({
                                     ...value,
-                                    region: (options.regions ?? []).find((region) => region.id === id)?.name ?? '',
-                                    way_id: (options.ways ?? []).find((way) => way.region_id === id)?.id ?? 0,
+                                    region_id: id,
                                 }));
                             }}
                             required
                             value={regionId}
                         >
-                            <option value={0}>Select region</option>
+                            <option value={0}>{t('Select region')}</option>
                             {(options.regions ?? [])
                                 .filter((region) => region.warehouse_id === form.warehouse_id)
                                 .map((region) => (
@@ -653,32 +644,20 @@ function CustomerDialog({
                                     </option>
                                 ))}
                         </select>
+                        <FieldError errors={errors} name="region_id" />
                     </label>
                     <label className="ui-field">
-                        <span>Way</span>
-                        <select
+                        <span>{t('Township')}</span>
+                        <input
                             disabled={profileDisabled}
-                            onChange={(event) => {
-                                const id = Number(event.target.value);
-                                const way = (options.ways ?? []).find((item) => item.id === id);
-                                setForm((value) => ({ ...value, way_id: id, township: way?.name ?? '' }));
-                            }}
-                            required
-                            value={form.way_id}
-                        >
-                            <option value={0}>Select Way</option>
-                            {(options.ways ?? [])
-                                .filter((way) => way.region_id === regionId)
-                                .map((way) => (
-                                    <option key={way.id} value={way.id}>
-                                        {way.name} · {way.code}
-                                    </option>
-                                ))}
-                        </select>
-                        <FieldError errors={errors} name="way_id" />
+                            maxLength={100}
+                            onChange={(event) => change('township', event.target.value)}
+                            value={form.township}
+                        />
+                        <FieldError errors={errors} name="township" />
                     </label>
                     <label className="ui-field">
-                        <span>Address</span>
+                        <span>{t('Address')}</span>
                         <input
                             disabled={profileDisabled}
                             maxLength={500}
@@ -688,11 +667,11 @@ function CustomerDialog({
                         <FieldError errors={errors} name="address" />
                     </label>
                     <fieldset className="credit-settings form-grid__wide">
-                        <legend>Office credit control</legend>
+                        <legend>{t('Office credit control')}</legend>
                         <p>
                             {canCredit
-                                ? 'Changes are recorded with old and new values.'
-                                : 'You can view these settings but need customer.credit_manage to change them.'}
+                                ? t('Changes are recorded with old and new values.')
+                                : t('You can view these settings but need customer.credit_manage to change them.')}
                         </p>
                         <div className="credit-settings__grid">
                             <label className="ui-check">
@@ -703,12 +682,12 @@ function CustomerDialog({
                                     type="checkbox"
                                 />
                                 <span>
-                                    <strong>Credit allowed</strong>
-                                    <small>Required before a credit sale can be posted.</small>
+                                    <strong>{t('Credit allowed')}</strong>
+                                    <small>{t('Required before a credit sale can be posted.')}</small>
                                 </span>
                             </label>
                             <label className="ui-field">
-                                <span>Credit limit (MMK)</span>
+                                <span>{t('Credit limit (MMK)')}</span>
                                 <input
                                     disabled={!canCredit}
                                     min={0}
@@ -723,7 +702,7 @@ function CustomerDialog({
                         </div>
                     </fieldset>
                     <label className="ui-field form-grid__wide">
-                        <span>Notes</span>
+                        <span>{t('Notes')}</span>
                         <textarea
                             disabled={profileDisabled}
                             maxLength={1000}
@@ -741,8 +720,10 @@ function CustomerDialog({
                             type="checkbox"
                         />
                         <span>
-                            <strong>Active customer</strong>
-                            <small>Inactive customers remain in history but cannot be selected for new sales.</small>
+                            <strong>{t('Active customer')}</strong>
+                            <small>
+                                {t('Inactive customers remain in history but cannot be selected for new sales.')}
+                            </small>
                         </span>
                     </label>
                 </div>

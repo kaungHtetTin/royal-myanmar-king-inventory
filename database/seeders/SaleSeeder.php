@@ -8,6 +8,7 @@ use App\Models\Customer;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SalesRepresentative;
+use App\Models\Trip;
 use App\Services\DocumentReferenceGenerator;
 use App\Services\SalePostingService;
 use Illuminate\Database\Seeder;
@@ -56,7 +57,7 @@ class SaleSeeder extends Seeder
                 $unit = isset($line['unit'])
                     ? $line['product']->units()->where('name', $line['unit'])->firstOrFail()
                     : $line['product']->defaultSellingUnit()->firstOrFail();
-                $unitPrice = $unit->regionPrices()->where('region_id', $customer->way->region_id)->value('price');
+                $unitPrice = $unit->regionPrices()->where('region_id', $customer->region_id)->value('price');
                 if ($unitPrice === null) {
                     throw new \LogicException("A regional price is missing for {$line['product']->sku}.");
                 }
@@ -75,10 +76,10 @@ class SaleSeeder extends Seeder
             });
             $sale = Sale::query()->create([
                 'reference' => app(DocumentReferenceGenerator::class)->next('sale', 'SAL'),
+                'trip_id' => Trip::query()->where('sales_representative_id', $representative->id)->where('status', 'operation')->value('id'),
                 'sales_representative_id' => $representative->id,
                 'warehouse_id' => $representative->primary_warehouse_id,
-                'region_id' => $customer->way->region_id,
-                'way_id' => $customer->way_id,
+                'region_id' => $customer->region_id,
                 'customer_id' => $customer->id,
                 'payment_type' => $paymentType,
                 'total_amount' => $items->sum('line_total'),

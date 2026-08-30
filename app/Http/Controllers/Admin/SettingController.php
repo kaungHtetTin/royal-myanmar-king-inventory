@@ -66,6 +66,9 @@ class SettingController extends Controller
 
     public function update(Request $request): JsonResponse
     {
+        if (is_string($request->input('payment_methods'))) {
+            $request->merge(['payment_methods' => json_decode($request->string('payment_methods')->toString(), true)]);
+        }
         $data = $request->validate([
             'business_name' => ['required', 'string', 'max:120'],
             'business_tagline' => ['nullable', 'string', 'max:160'],
@@ -77,11 +80,21 @@ class SettingController extends Controller
             'timezone' => ['required', 'timezone'],
             'low_stock_threshold' => ['required', 'integer', 'min:0', 'max:1000000'],
             'invoice_footer' => ['nullable', 'string', 'max:500'],
+            'payment_methods' => ['sometimes', 'array', 'min:1', 'max:20'],
+            'payment_methods.*.key' => ['required', 'string', 'max:50', 'regex:/^[a-z0-9_]+$/', 'distinct'],
+            'payment_methods.*.name' => ['required', 'string', 'max:80'],
+            'payment_methods.*.adds_to_cash_hold' => ['required', 'boolean'],
+            'payment_methods.*.is_active' => ['required', 'boolean'],
             'logo' => ['nullable', File::image()->types(['png', 'jpg', 'jpeg', 'webp'])->max(2048)],
             'favicon' => ['nullable', File::image()->types(['png', 'jpg', 'jpeg', 'webp'])->max(1024)],
             'remove_logo' => ['nullable', 'boolean'],
             'remove_favicon' => ['nullable', 'boolean'],
         ]);
+        if (isset($data['payment_methods']) && ! collect($data['payment_methods'])->contains(fn (array $method) => $method['is_active'] && $method['adds_to_cash_hold'])) {
+            throw ValidationException::withMessages([
+                'payment_methods' => ['Keep at least one active method that adds physical cash to the representative cash hold.'],
+            ]);
+        }
 
         $settings = ApplicationSetting::query()->firstOrCreate(['id' => 1]);
         $old = $settings->toArray();
@@ -128,6 +141,7 @@ class SettingController extends Controller
             'timezone',
             'low_stock_threshold',
             'invoice_footer',
+            'payment_methods',
         ]);
     }
 

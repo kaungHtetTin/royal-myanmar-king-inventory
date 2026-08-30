@@ -26,9 +26,6 @@ class Phase2MasterDataTest extends TestCase
         $region = $this->postJson('/api/admin/warehouses/'.$warehouse['id'].'/regions', [
             'name' => 'Yangon', 'notes' => '', 'is_active' => true,
         ])->assertCreated()->json('data');
-        $way = $this->postJson('/api/admin/regions/'.$region['id'].'/ways', [
-            'name' => 'Hlaing', 'notes' => '', 'is_active' => true,
-        ])->assertCreated()->json('data');
         $product = $this->postJson('/api/admin/products', [
             'sku' => 'P2-WATER', 'name' => 'Phase 2 Water', 'category' => 'Drinking Water', 'unit' => 'bottle',
             'selling_price' => 1200, 'barcode' => '8990000000012', 'description' => '', 'is_active' => true,
@@ -39,7 +36,7 @@ class Phase2MasterDataTest extends TestCase
         ])->assertCreated()->json('data');
         $customer = $this->postJson('/api/admin/customers', [
             'warehouse_id' => $warehouse['id'], 'code' => 'CUS-P2', 'name' => 'Phase 2 Shop', 'customer_type' => 'Shop',
-            'phone' => '09-100000001', 'way_id' => $way['id'], 'address' => '',
+            'phone' => '09-100000001', 'region_id' => $region['id'], 'township' => 'Hlaing', 'address' => '',
             'credit_allowed' => true, 'credit_limit' => 1000000, 'notes' => '', 'is_active' => true,
         ])->assertCreated()->json('data');
         $representative = $this->postJson('/api/admin/representatives', [

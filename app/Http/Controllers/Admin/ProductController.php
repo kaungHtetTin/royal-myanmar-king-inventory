@@ -127,6 +127,7 @@ class ProductController extends Controller
             'category' => ['nullable', 'string', 'max:100'],
             'unit' => ['nullable', 'string', 'max:50'],
             'selling_price' => ['nullable', 'integer', 'min:0', 'max:999999999999999'],
+            'discount_percentage' => ['sometimes', 'numeric', 'min:0', 'max:100', 'decimal:0,2'],
             'barcode' => ['nullable', 'string', 'max:100', Rule::unique('products', 'barcode')->ignore($product)],
             'description' => ['nullable', 'string', 'max:2000'],
             'is_active' => ['required', 'boolean'],
@@ -165,7 +166,7 @@ class ProductController extends Controller
         $default = collect($data['units'])->firstWhere('is_default_selling', true);
         $firstPrice = collect($default['prices'] ?? [])->first()['price'] ?? ($data['selling_price'] ?? 0);
 
-        return $this->normalized(collect($data)->only(['sku', 'name', 'category', 'description', 'is_active'])->all() + [
+        return $this->normalized(collect($data)->only(['sku', 'name', 'category', 'description', 'discount_percentage', 'is_active'])->all() + [
             'unit' => $default['name'],
             'selling_price' => $firstPrice,
             'barcode' => $default['barcode'] ?? null,

@@ -14,6 +14,7 @@ import {
 import { Icon } from '../../ui/icons';
 import { editableNumber } from '../../ui/form-values';
 import { Button, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
+import { useLocale } from '../../localization/locale-context';
 
 const emptyMeta: PaginationMeta = {
     current_page: 1,
@@ -26,20 +27,8 @@ const emptyMeta: PaginationMeta = {
 const emptyOptions: ProductOptions = { categories: [], units: [], regions: [] };
 const emptySummary: ProductSummary = { active: 0, categories: 0, inactive: 0, total: 0 };
 
-function errorMessage(error: unknown) {
-    return error instanceof Error ? error.message : 'Unable to complete the request.';
-}
-
-function dateTime(value: string | null) {
-    if (!value) return 'Not available';
-    return new Intl.DateTimeFormat(undefined, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-    }).format(new Date(value));
-}
-
-function money(value: number) {
-    return `${new Intl.NumberFormat('en-US').format(value)} MMK`;
+function errorMessage(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback;
 }
 
 const priceFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
@@ -57,6 +46,7 @@ export function ProductManagementPage() {
     const navigate = useNavigate();
     const location = useLocation();
     const { user } = useSession();
+    const { formatDateTime, formatNumber, t } = useLocale();
     const isSuperAdmin = user?.roles.includes('super-admin');
     const canCreate = Boolean(isSuperAdmin || user?.permissions.includes('product.create'));
     const canEdit = Boolean(isSuperAdmin || user?.permissions.includes('product.edit'));
@@ -86,11 +76,11 @@ export function ProductManagementPage() {
             setSummary(response.summary ?? emptySummary);
             setOptions(availableOptions);
         } catch (requestError) {
-            setError(errorMessage(requestError));
+            setError(errorMessage(requestError, t('Unable to complete the request.')));
         } finally {
             setLoading(false);
         }
-    }, [filters]);
+    }, [filters, t]);
 
     useEffect(() => {
         let active = true;
@@ -103,7 +93,7 @@ export function ProductManagementPage() {
                 setOptions(availableOptions);
             })
             .catch((requestError) => {
-                if (active) setError(errorMessage(requestError));
+                if (active) setError(errorMessage(requestError, t('Unable to complete the request.')));
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -111,19 +101,22 @@ export function ProductManagementPage() {
         return () => {
             active = false;
         };
-    }, [filters]);
+    }, [filters, t]);
+
+    const dateTime = (value: string | null) => (value ? formatDateTime(value) : t('Not available'));
+    const money = (value: number) => `${formatNumber(value)} MMK`;
 
     return (
         <div className="admin-page product-management">
             <header className="page-heading">
                 <div>
-                    <p className="ui-eyebrow">Master data</p>
-                    <h1>Products</h1>
-                    <p>Maintain the sellable catalogue, units, barcodes, and default MMK prices.</p>
+                    <p className="ui-eyebrow">{t('Master data')}</p>
+                    <h1>{t('Products')}</h1>
+                    <p>{t('Maintain the sellable catalogue, units, barcodes, and default MMK prices.')}</p>
                 </div>
                 {canCreate ? (
                     <Button icon="plus" onClick={() => navigate('/admin/products/new')} tone="primary">
-                        New product
+                        {t('New product')}
                     </Button>
                 ) : null}
             </header>
@@ -136,24 +129,29 @@ export function ProductManagementPage() {
             ) : null}
 
             <div className="metric-grid access-metrics">
-                <MetricCard hint="Current filtered result" icon="box" label="Products" value={String(summary.total)} />
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
+                    icon="box"
+                    label={t('Products')}
+                    value={formatNumber(summary.total)}
+                />
+                <MetricCard
+                    hint={t('Current filtered result')}
                     icon="dashboard"
-                    label="Active"
-                    value={String(summary.active)}
+                    label={t('Active')}
+                    value={formatNumber(summary.active)}
                 />
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="adjustments"
-                    label="Inactive"
-                    value={String(summary.inactive)}
+                    label={t('Inactive')}
+                    value={formatNumber(summary.inactive)}
                 />
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="reports"
-                    label="Categories"
-                    value={String(summary.categories)}
+                    label={t('Categories')}
+                    value={formatNumber(summary.categories)}
                 />
             </div>
 
@@ -162,12 +160,12 @@ export function ProductManagementPage() {
                     <Icon name="x" size={15} />
                     {error}
                     <button onClick={() => void loadProducts()} type="button">
-                        Retry
+                        {t('Retry')}
                     </button>
                 </div>
             ) : null}
 
-            <Panel eyebrow="Catalogue" title="Product directory">
+            <Panel eyebrow={t('Catalogue')} title={t('Product directory')}>
                 <form
                     className="filter-toolbar product-filters"
                     onSubmit={(event) => {
@@ -183,7 +181,7 @@ export function ProductManagementPage() {
                     }}
                 >
                     <label className="filter-search">
-                        <span className="sr-only">Search products</span>
+                        <span className="sr-only">{t('Search products')}</span>
                         <Icon name="search" size={15} />
                         <input
                             onChange={(event) =>
@@ -192,13 +190,13 @@ export function ProductManagementPage() {
                                     search: event.target.value,
                                 }))
                             }
-                            placeholder="Search SKU, name, or barcode"
+                            placeholder={t('Search SKU, name, or barcode')}
                             type="search"
                             value={draftFilters.search}
                         />
                     </label>
                     <label>
-                        <span className="sr-only">Filter by status</span>
+                        <span className="sr-only">{t('Filter by status')}</span>
                         <select
                             onChange={(event) =>
                                 setDraftFilters((value) => ({
@@ -208,13 +206,13 @@ export function ProductManagementPage() {
                             }
                             value={draftFilters.status}
                         >
-                            <option value="">All statuses</option>
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
+                            <option value="">{t('All statuses')}</option>
+                            <option value="active">{t('Active')}</option>
+                            <option value="inactive">{t('Inactive')}</option>
                         </select>
                     </label>
                     <label>
-                        <span className="sr-only">Filter by category</span>
+                        <span className="sr-only">{t('Filter by category')}</span>
                         <select
                             onChange={(event) =>
                                 setDraftFilters((value) => ({
@@ -224,14 +222,14 @@ export function ProductManagementPage() {
                             }
                             value={draftFilters.category}
                         >
-                            <option value="">All categories</option>
+                            <option value="">{t('All categories')}</option>
                             {options.categories.map((category) => (
                                 <option key={category}>{category}</option>
                             ))}
                         </select>
                     </label>
                     <label>
-                        <span className="sr-only">Filter by unit</span>
+                        <span className="sr-only">{t('Filter by unit')}</span>
                         <select
                             onChange={(event) =>
                                 setDraftFilters((value) => ({
@@ -241,39 +239,39 @@ export function ProductManagementPage() {
                             }
                             value={draftFilters.unit}
                         >
-                            <option value="">All units</option>
+                            <option value="">{t('All units')}</option>
                             {options.units.map((unit) => (
                                 <option key={unit}>{unit}</option>
                             ))}
                         </select>
                     </label>
                     <Button icon="search" type="submit">
-                        Apply
+                        {t('Apply')}
                     </Button>
                 </form>
 
                 {loading ? (
                     <div className="ui-loading" role="status">
                         <span />
-                        Loading products…
+                        {t('Loading products…')}
                     </div>
                 ) : products.length === 0 ? (
                     <EmptyState
-                        description="Change the filters or create the first catalogue item."
-                        title="No products found"
+                        description={t('Change the filters or create the first catalogue item.')}
+                        title={t('No products found')}
                     />
                 ) : (
                     <div className="ui-table-wrap">
                         <table className="ui-table product-table">
                             <thead>
                                 <tr>
-                                    <th>Product</th>
-                                    <th>Category / unit</th>
-                                    <th>Barcode</th>
-                                    <th className="is-numeric">Default price</th>
-                                    <th>Status</th>
-                                    <th>Updated</th>
-                                    {canEdit ? <th className="ui-table__actions">Actions</th> : null}
+                                    <th>{t('Product')}</th>
+                                    <th>{t('Category / unit')}</th>
+                                    <th>{t('Barcode')}</th>
+                                    <th className="is-numeric">{t('Default price')}</th>
+                                    <th>{t('Status')}</th>
+                                    <th>{t('Updated')}</th>
+                                    {canEdit ? <th className="ui-table__actions">{t('Actions')}</th> : null}
                                 </tr>
                             </thead>
                             <tbody>
@@ -284,30 +282,34 @@ export function ProductManagementPage() {
                                             <small>{product.sku}</small>
                                         </td>
                                         <td>
-                                            <span className="table-primary">{product.category || 'Uncategorized'}</span>
-                                            <small>Per {product.unit}</small>
+                                            <span className="table-primary">
+                                                {product.category || t('Uncategorized')}
+                                            </span>
+                                            <small>{t('Per {unit}', { unit: product.unit })}</small>
                                         </td>
                                         <td>
-                                            <span className="table-primary">{product.barcode || 'Not specified'}</span>
-                                            <small>{product.description || 'No description'}</small>
+                                            <span className="table-primary">
+                                                {product.barcode || t('Not specified')}
+                                            </span>
+                                            <small>{product.description || t('No description')}</small>
                                         </td>
                                         <td className="is-numeric">
                                             <strong>{money(product.selling_price)}</strong>
                                         </td>
                                         <td>
                                             <StatusBadge tone={product.is_active ? 'success' : 'danger'}>
-                                                {product.is_active ? 'Active' : 'Inactive'}
+                                                {t(product.is_active ? 'Active' : 'Inactive')}
                                             </StatusBadge>
                                         </td>
                                         <td>
                                             <span className="table-primary">{dateTime(product.updated_at)}</span>
-                                            <small>Created {dateTime(product.created_at)}</small>
+                                            <small>{t('Created {date}', { date: dateTime(product.created_at) })}</small>
                                         </td>
                                         {canEdit ? (
                                             <td className="ui-table__actions">
                                                 <IconButton
                                                     icon="settings"
-                                                    label={`Edit ${product.name}`}
+                                                    label={t('Edit {name}', { name: product.name })}
                                                     onClick={() => navigate(`/admin/products/${product.id}/edit`)}
                                                 />
                                             </td>
@@ -320,7 +322,11 @@ export function ProductManagementPage() {
                 )}
                 <footer className="table-footer">
                     <span>
-                        {meta.from ?? 0}–{meta.to ?? 0} of {meta.total} products
+                        {t('{from}–{to} of {total} products', {
+                            from: formatNumber(meta.from ?? 0),
+                            to: formatNumber(meta.to ?? 0),
+                            total: formatNumber(meta.total),
+                        })}
                     </span>
                     <button
                         disabled={meta.current_page <= 1 || loading}
@@ -333,10 +339,13 @@ export function ProductManagementPage() {
                         }}
                         type="button"
                     >
-                        Previous
+                        {t('Previous')}
                     </button>
                     <strong>
-                        Page {meta.current_page} of {meta.last_page}
+                        {t('Page {current} of {total}', {
+                            current: formatNumber(meta.current_page),
+                            total: formatNumber(meta.last_page),
+                        })}
                     </strong>
                     <button
                         disabled={meta.current_page >= meta.last_page || loading}
@@ -349,7 +358,7 @@ export function ProductManagementPage() {
                         }}
                         type="button"
                     >
-                        Next
+                        {t('Next')}
                     </button>
                 </footer>
             </Panel>
@@ -359,6 +368,7 @@ export function ProductManagementPage() {
 
 export function ProductFormPage() {
     const { user } = useSession();
+    const { t } = useLocale();
     const navigate = useNavigate();
     const { productId } = useParams();
     const id = productId ? Number(productId) : null;
@@ -386,7 +396,7 @@ export function ProductFormPage() {
                 setProduct(response?.data ?? null);
             })
             .catch((requestError) => {
-                if (active) setError(errorMessage(requestError));
+                if (active) setError(errorMessage(requestError, t('Unable to complete the request.')));
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -394,36 +404,40 @@ export function ProductFormPage() {
         return () => {
             active = false;
         };
-    }, [id, invalidLink]);
+    }, [id, invalidLink, t]);
 
     const pageError = invalidLink
-        ? 'This product link is invalid.'
+        ? t('This product link is invalid.')
         : !canManage
-          ? `You do not have permission to ${id === null ? 'create' : 'edit'} products.`
+          ? t('You do not have permission to {action} products.', {
+                action: t(id === null ? 'create' : 'edit'),
+            })
           : error;
 
     return (
         <div className="admin-page product-form-page">
             <header className="page-heading">
                 <div>
-                    <p className="ui-eyebrow">Product catalogue</p>
-                    <h1>{product ? `Edit ${product.sku}` : 'Create product'}</h1>
-                    <p>Define product details, selling units, conversions, and prices for every active Region.</p>
+                    <p className="ui-eyebrow">{t('Product catalogue')}</p>
+                    <h1>{product ? t('Edit {name}', { name: product.sku }) : t('Create product')}</h1>
+                    <p>
+                        {t('Define product details, selling units, conversions, and prices for every active Region.')}
+                    </p>
                 </div>
                 <Button icon="chevronLeft" onClick={() => navigate('/admin/products')}>
-                    Back to products
+                    {t('Back to products')}
                 </Button>
             </header>
             {pageError ? (
                 <div className="ui-flash ui-flash--danger" role="alert">
                     <Icon name="x" size={15} />
                     {pageError}
-                    <Link to="/admin/products">Return to products</Link>
+                    <Link to="/admin/products">{t('Return to products')}</Link>
                 </div>
             ) : loading ? (
                 <div className="ui-loading" role="status">
                     <span />
-                    Loading product form…
+                    {t('Loading product form…')}
                 </div>
             ) : (
                 <ProductForm
@@ -452,10 +466,12 @@ function ProductForm({
     product: Product | null;
     options: ProductOptions;
 }) {
+    const { formatNumber, t } = useLocale();
     const [form, setForm] = useState<ProductInput>({
         barcode: '',
         category: '',
         description: '',
+        discount_percentage: 0,
         is_active: true,
         name: '',
         selling_price: 0,
@@ -520,6 +536,7 @@ function ProductForm({
             barcode: product?.barcode ?? '',
             category: product?.category ?? '',
             description: product?.description ?? '',
+            discount_percentage: product?.discount_percentage ?? 0,
             is_active: product?.is_active ?? true,
             name: product?.name ?? '',
             selling_price: product?.selling_price ?? 0,
@@ -556,7 +573,9 @@ function ProductForm({
             product?.is_active &&
             !form.is_active &&
             !window.confirm(
-                `Deactivate ${product.name}? It will remain in history but cannot be used for new transactions.`,
+                t('Deactivate {name}? It will remain in history but cannot be used for new transactions.', {
+                    name: product.name,
+                }),
             )
         )
             return;
@@ -572,12 +591,12 @@ function ProductForm({
             };
             if (product) await productApi.update(product.id, payload);
             else await productApi.create(payload);
-            onSaved(product ? 'Product updated.' : 'Product created.');
+            onSaved(t(product ? 'Product updated.' : 'Product created.'));
         } catch (requestError) {
             if (requestError instanceof ProductApiError) setErrors(requestError.fields);
             setErrors((current) => ({
                 ...current,
-                form: [errorMessage(requestError)],
+                form: [errorMessage(requestError, t('Unable to complete the request.'))],
             }));
         } finally {
             setSaving(false);
@@ -588,11 +607,12 @@ function ProductForm({
         <form className="management-form product-form" id="product-management-form" onSubmit={submit}>
             <section className="product-form__intro">
                 <div>
-                    <p className="ui-eyebrow">Product definition</p>
-                    <h2>Catalogue and pricing setup</h2>
+                    <p className="ui-eyebrow">{t('Product definition')}</p>
+                    <h2>{t('Catalogue and pricing setup')}</h2>
                     <p>
-                        Define the smallest stock unit, default selling unit, conversion factors, and prices for every
-                        active Region.
+                        {t(
+                            'Define the smallest stock unit, default selling unit, conversion factors, and prices for every active Region.',
+                        )}
                     </p>
                 </div>
             </section>
@@ -604,7 +624,7 @@ function ProductForm({
                 ) : null}
                 <div className="form-grid">
                     <label className="ui-field">
-                        <span>SKU</span>
+                        <span>{t('SKU')}</span>
                         <input
                             autoFocus
                             maxLength={50}
@@ -616,7 +636,7 @@ function ProductForm({
                         <FieldError errors={errors} name="sku" />
                     </label>
                     <label className="ui-field">
-                        <span>Product name</span>
+                        <span>{t('Product name')}</span>
                         <input
                             maxLength={255}
                             onChange={(event) => change('name', event.target.value)}
@@ -626,29 +646,36 @@ function ProductForm({
                         <FieldError errors={errors} name="name" />
                     </label>
                     <label className="ui-field">
-                        <span>Category</span>
+                        <span>{t('Category')}</span>
                         <input
                             maxLength={100}
                             onChange={(event) => change('category', event.target.value)}
-                            placeholder="Drinking Water"
+                            placeholder={t('Drinking Water')}
                             value={form.category}
                         />
                         <FieldError errors={errors} name="category" />
                     </label>
                     <label className="ui-field">
-                        <span>Legacy display unit</span>
+                        <span>{t('Legacy display unit')}</span>
                         <input
                             disabled
-                            value={form.units.find((unit) => unit.is_default_selling)?.name ?? 'Not selected'}
+                            value={form.units.find((unit) => unit.is_default_selling)?.name ?? t('Not selected')}
                         />
+                    </label>
+                    <label className="ui-field">
+                        <span>{t('Item discount (%)')}</span>
+                        <input max={100} min={0} onChange={(event) => change('discount_percentage', Number(event.target.value))} step="0.01" type="number" value={form.discount_percentage} />
+                        <small>{t('Applied to this product in every region during sales.')}</small>
+                        <FieldError errors={errors} name="discount_percentage" />
                     </label>
                     <section className="product-unit-editor form-grid__wide">
                         <header>
                             <div>
-                                <strong>Units and regional prices</strong>
+                                <strong>{t('Units and regional prices')}</strong>
                                 <small>
-                                    Stock is stored in the base unit. Conversion factors express how many base units are
-                                    in one selected unit. Regional prices are entered in MMK.
+                                    {t(
+                                        'Stock is stored in the base unit. Conversion factors express how many base units are in one selected unit. Regional prices are entered in MMK.',
+                                    )}
                                 </small>
                             </div>
                             <Button
@@ -676,31 +703,33 @@ function ProductForm({
                                 tone="secondary"
                                 type="button"
                             >
-                                Add unit
+                                {t('Add unit')}
                             </Button>
                         </header>
                         <div className="ui-table-wrap product-unit-table-wrap">
                             <table
                                 className="ui-table product-unit-table"
-                                style={{ minWidth: `${760 + sortedRegions.length * 150}px` }}
+                                style={{ minWidth: `${560 + sortedRegions.length * 105}px` }}
                             >
-                                <caption className="sr-only">Product units and prices by warehouse Region</caption>
+                                <caption className="sr-only">
+                                    {t('Product units and prices by warehouse Region')}
+                                </caption>
                                 <thead>
                                     <tr>
                                         <th rowSpan={sortedRegions.length ? 2 : 1} scope="col">
-                                            Unit name
+                                            {t('Unit name')}
                                         </th>
                                         <th rowSpan={sortedRegions.length ? 2 : 1} scope="col">
-                                            Base units
+                                            {t('Base units')}
                                         </th>
                                         <th rowSpan={sortedRegions.length ? 2 : 1} scope="col">
-                                            Barcode
+                                            {t('Barcode')}
                                         </th>
                                         <th rowSpan={sortedRegions.length ? 2 : 1} scope="col">
-                                            Base unit
+                                            {t('Base unit')}
                                         </th>
                                         <th rowSpan={sortedRegions.length ? 2 : 1} scope="col">
-                                            Default selling
+                                            {t('Default selling')}
                                         </th>
                                         {warehouseRegionGroups.map((group) => (
                                             <th colSpan={group.regions.length} key={group.code} scope="colgroup">
@@ -709,7 +738,7 @@ function ProductForm({
                                             </th>
                                         ))}
                                         <th rowSpan={sortedRegions.length ? 2 : 1} scope="col">
-                                            Actions
+                                            {t('Actions')}
                                         </th>
                                     </tr>
                                     {sortedRegions.length ? (
@@ -725,19 +754,22 @@ function ProductForm({
                                 </thead>
                                 <tbody>
                                     {form.units.map((unit, unitIndex) => {
-                                        const unitLabel = unit.name || `Unit ${unitIndex + 1}`;
+                                        const unitLabel =
+                                            unit.name || t('Unit {number}', { number: formatNumber(unitIndex + 1) });
                                         return (
                                             <tr key={unit.id ?? `new-${unitIndex}`}>
                                                 <td>
                                                     <label>
                                                         <span className="sr-only">
-                                                            Unit name for row {unitIndex + 1}
+                                                            {t('Unit name for row {number}', {
+                                                                number: formatNumber(unitIndex + 1),
+                                                            })}
                                                         </span>
                                                         <input
                                                             onChange={(event) =>
                                                                 updateUnit(unitIndex, { name: event.target.value })
                                                             }
-                                                            placeholder="bottle / box"
+                                                            placeholder={t('bottle / box')}
                                                             required
                                                             value={unit.name}
                                                         />
@@ -745,7 +777,9 @@ function ProductForm({
                                                 </td>
                                                 <td>
                                                     <label>
-                                                        <span className="sr-only">Base units in {unitLabel}</span>
+                                                        <span className="sr-only">
+                                                            {t('Base units in {unit}', { unit: unitLabel })}
+                                                        </span>
                                                         <input
                                                             disabled={unit.is_base}
                                                             min={1}
@@ -764,7 +798,9 @@ function ProductForm({
                                                 </td>
                                                 <td>
                                                     <label>
-                                                        <span className="sr-only">Barcode for {unitLabel}</span>
+                                                        <span className="sr-only">
+                                                            {t('Barcode for {unit}', { unit: unitLabel })}
+                                                        </span>
                                                         <input
                                                             onChange={(event) =>
                                                                 updateUnit(unitIndex, { barcode: event.target.value })
@@ -776,7 +812,9 @@ function ProductForm({
                                                 <td className="product-unit-table__choice">
                                                     <label>
                                                         <input
-                                                            aria-label={`Use ${unitLabel} as base unit`}
+                                                            aria-label={t('Use {unit} as base unit', {
+                                                                unit: unitLabel,
+                                                            })}
                                                             checked={unit.is_base}
                                                             name="base-unit"
                                                             onChange={() =>
@@ -799,7 +837,9 @@ function ProductForm({
                                                 <td className="product-unit-table__choice">
                                                     <label>
                                                         <input
-                                                            aria-label={`Use ${unitLabel} as default selling unit`}
+                                                            aria-label={t('Use {unit} as default selling unit', {
+                                                                unit: unitLabel,
+                                                            })}
                                                             checked={unit.is_default_selling}
                                                             name="default-selling-unit"
                                                             onChange={() =>
@@ -819,7 +859,10 @@ function ProductForm({
                                                     <td className="is-numeric" key={region.id}>
                                                         <label className="product-price-input">
                                                             <span className="sr-only">
-                                                                {region.name} price for {unitLabel} in MMK
+                                                                {t('{region} price for {unit} in MMK', {
+                                                                    region: region.name,
+                                                                    unit: unitLabel,
+                                                                })}
                                                             </span>
                                                             <input
                                                                 autoComplete="off"
@@ -860,7 +903,7 @@ function ProductForm({
                                                             tone="secondary"
                                                             type="button"
                                                         >
-                                                            Remove
+                                                            {t('Remove')}
                                                         </Button>
                                                     ) : (
                                                         <span aria-hidden="true">—</span>
@@ -875,7 +918,7 @@ function ProductForm({
                         <FieldError errors={errors} name="units" />
                     </section>
                     <label className="ui-field form-grid__wide">
-                        <span>Description</span>
+                        <span>{t('Description')}</span>
                         <textarea
                             maxLength={2000}
                             onChange={(event) => change('description', event.target.value)}
@@ -891,9 +934,9 @@ function ProductForm({
                             type="checkbox"
                         />
                         <span>
-                            <strong>Active product</strong>
+                            <strong>{t('Active product')}</strong>
                             <small>
-                                Inactive products remain in history but cannot be selected for new transactions.
+                                {t('Inactive products remain in history but cannot be selected for new transactions.')}
                             </small>
                         </span>
                     </label>
@@ -901,10 +944,10 @@ function ProductForm({
             </div>
             <footer className="product-form__actions">
                 <Button disabled={saving} onClick={onCancel} type="button">
-                    Cancel
+                    {t('Cancel')}
                 </Button>
                 <Button disabled={saving} requiresOnline tone="primary" type="submit">
-                    {saving ? 'Saving…' : 'Save product'}
+                    {saving ? t('Saving…') : t('Save product')}
                 </Button>
             </footer>
         </form>

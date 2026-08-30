@@ -7,6 +7,7 @@ import {
     type SessionStatus,
     type SessionUser,
 } from './session-context';
+import { useLocale } from '../localization/locale-context';
 const sessionMarker = 'inventory.had_session';
 const sessionUserCache = 'inventory.last_user';
 
@@ -24,9 +25,9 @@ function rememberUser(user: SessionUser) {
     window.sessionStorage.setItem(sessionMarker, 'true');
 }
 
-function responseError(error: unknown): SessionError {
+function responseError(error: unknown, unexpectedFallback: string, requestFallback: string): SessionError {
     if (!axios.isAxiosError(error)) {
-        return new SessionError('Something went wrong. Please try again.');
+        return new SessionError(unexpectedFallback);
     }
 
     const response = (
@@ -36,14 +37,11 @@ function responseError(error: unknown): SessionError {
             message?: string;
         }>
     ).response;
-    return new SessionError(
-        response?.data.message ?? 'Unable to complete the request.',
-        response?.data.code,
-        response?.data.errors,
-    );
+    return new SessionError(response?.data.message ?? requestFallback, response?.data.code, response?.data.errors);
 }
 
 export function SessionProvider({ children, initialUser }: { children: ReactNode; initialUser?: SessionUser | null }) {
+    const { t } = useLocale();
     const [user, setUser] = useState<SessionUser | null>(initialUser ?? null);
     const [status, setStatus] = useState<SessionStatus>(
         initialUser === undefined ? 'restoring' : initialUser ? 'authenticated' : 'guest',
@@ -95,7 +93,11 @@ export function SessionProvider({ children, initialUser }: { children: ReactNode
                     rememberUser(data.user);
                     return data.user;
                 } catch (error) {
-                    const sessionError = responseError(error);
+                    const sessionError = responseError(
+                        error,
+                        t('Something went wrong. Please try again.'),
+                        t('Unable to complete the request.'),
+                    );
                     throw sessionError;
                 }
             },
@@ -120,7 +122,7 @@ export function SessionProvider({ children, initialUser }: { children: ReactNode
             },
             user,
         }),
-        [status, user],
+        [status, t, user],
     );
 
     return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

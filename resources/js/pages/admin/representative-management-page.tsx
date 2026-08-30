@@ -13,6 +13,7 @@ import {
 } from '../../services/representatives';
 import { Icon } from '../../ui/icons';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
+import { useLocale } from '../../localization/locale-context';
 
 const emptyMeta: PaginationMeta = {
     current_page: 1,
@@ -24,18 +25,13 @@ const emptyMeta: PaginationMeta = {
 };
 const emptyOptions: RepresentativeOptions = { vehicles: [], warehouses: [], regions: [] };
 const emptySummary: RepresentativeSummary = { active: 0, signed_in: 0, total: 0, with_vehicle: 0 };
-function errorMessage(error: unknown) {
-    return error instanceof Error ? error.message : 'Unable to complete the request.';
-}
-function dateTime(value: string | null) {
-    if (!value) return 'Never';
-    return new Intl.DateTimeFormat(undefined, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-    }).format(new Date(value));
+function errorMessage(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback;
 }
 
 export function RepresentativeManagementPage() {
+    const { formatDateTime, formatNumber, t } = useLocale();
+    const dateTime = (value: string | null) => (value ? formatDateTime(value) : t('Never'));
     const { user } = useSession();
     const isSuperAdmin = user?.roles.includes('super-admin');
     const canCreate = Boolean(isSuperAdmin || user?.permissions.includes('representative.create'));
@@ -72,11 +68,11 @@ export function RepresentativeManagementPage() {
             setSummary(response.summary ?? emptySummary);
             setOptions(availableOptions);
         } catch (requestError) {
-            setError(errorMessage(requestError));
+            setError(errorMessage(requestError, t('Unable to complete the request.')));
         } finally {
             setLoading(false);
         }
-    }, [filters]);
+    }, [filters, t]);
 
     useEffect(() => {
         let active = true;
@@ -89,7 +85,7 @@ export function RepresentativeManagementPage() {
                 setOptions(availableOptions);
             })
             .catch((requestError) => {
-                if (active) setError(errorMessage(requestError));
+                if (active) setError(errorMessage(requestError, t('Unable to complete the request.')));
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -97,7 +93,7 @@ export function RepresentativeManagementPage() {
         return () => {
             active = false;
         };
-    }, [filters]);
+    }, [filters, t]);
 
     const showNotice = (message: string) => {
         setNotice(message);
@@ -108,9 +104,11 @@ export function RepresentativeManagementPage() {
         <div className="admin-page representative-management">
             <header className="page-heading">
                 <div>
-                    <p className="ui-eyebrow">Master data</p>
-                    <h1>Representatives</h1>
-                    <p>Maintain representative profiles, login accounts, warehouse ownership, and vehicle links.</p>
+                    <p className="ui-eyebrow">{t('Master data')}</p>
+                    <h1>{t('Representatives')}</h1>
+                    <p>
+                        {t('Maintain representative profiles, login accounts, warehouse ownership, and vehicle links.')}
+                    </p>
                 </div>
                 {canCreate ? (
                     <Button
@@ -121,35 +119,35 @@ export function RepresentativeManagementPage() {
                         }}
                         tone="primary"
                     >
-                        New representative
+                        {t('New representative')}
                     </Button>
                 ) : null}
             </header>
 
             <div className="metric-grid access-metrics">
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="users"
-                    label="Representatives"
-                    value={String(summary.total)}
+                    label={t('Representatives')}
+                    value={formatNumber(summary.total)}
                 />
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="dashboard"
-                    label="Active"
-                    value={String(summary.active)}
+                    label={t('Active')}
+                    value={formatNumber(summary.active)}
                 />
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="truck"
-                    label="With vehicle"
-                    value={String(summary.with_vehicle)}
+                    label={t('With vehicle')}
+                    value={formatNumber(summary.with_vehicle)}
                 />
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="logout"
-                    label="Have signed in"
-                    value={String(summary.signed_in)}
+                    label={t('Have signed in')}
+                    value={formatNumber(summary.signed_in)}
                 />
             </div>
 
@@ -164,12 +162,12 @@ export function RepresentativeManagementPage() {
                     <Icon name="x" size={15} />
                     {error}
                     <button onClick={() => void loadRepresentatives()} type="button">
-                        Retry
+                        {t('Retry')}
                     </button>
                 </div>
             ) : null}
 
-            <Panel eyebrow="Field team" title="Representative directory">
+            <Panel eyebrow={t('Field team')} title={t('Representative directory')}>
                 <form
                     className="filter-toolbar representative-filters"
                     onSubmit={(event) => {
@@ -185,7 +183,7 @@ export function RepresentativeManagementPage() {
                     }}
                 >
                     <label className="filter-search">
-                        <span className="sr-only">Search representatives</span>
+                        <span className="sr-only">{t('Search representatives')}</span>
                         <Icon name="search" size={15} />
                         <input
                             onChange={(event) =>
@@ -194,13 +192,13 @@ export function RepresentativeManagementPage() {
                                     search: event.target.value,
                                 }))
                             }
-                            placeholder="Search code, name, username, phone, or region"
+                            placeholder={t('Search code, name, username, phone, or region')}
                             type="search"
                             value={draftFilters.search}
                         />
                     </label>
                     <label>
-                        <span className="sr-only">Filter by status</span>
+                        <span className="sr-only">{t('Filter by status')}</span>
                         <select
                             onChange={(event) =>
                                 setDraftFilters((value) => ({
@@ -210,13 +208,13 @@ export function RepresentativeManagementPage() {
                             }
                             value={draftFilters.status}
                         >
-                            <option value="">All statuses</option>
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
+                            <option value="">{t('All statuses')}</option>
+                            <option value="active">{t('Active')}</option>
+                            <option value="inactive">{t('Inactive')}</option>
                         </select>
                     </label>
                     <label>
-                        <span className="sr-only">Filter by warehouse</span>
+                        <span className="sr-only">{t('Filter by warehouse')}</span>
                         <select
                             onChange={(event) =>
                                 setDraftFilters((value) => ({
@@ -226,7 +224,7 @@ export function RepresentativeManagementPage() {
                             }
                             value={draftFilters.warehouse_id}
                         >
-                            <option value="">All warehouses</option>
+                            <option value="">{t('All warehouses')}</option>
                             {options.warehouses.map((warehouse) => (
                                 <option key={warehouse.id} value={warehouse.id}>
                                     {warehouse.code}
@@ -235,7 +233,7 @@ export function RepresentativeManagementPage() {
                         </select>
                     </label>
                     <label>
-                        <span className="sr-only">Filter by vehicle</span>
+                        <span className="sr-only">{t('Filter by vehicle')}</span>
                         <select
                             onChange={(event) =>
                                 setDraftFilters((value) => ({
@@ -245,39 +243,39 @@ export function RepresentativeManagementPage() {
                             }
                             value={draftFilters.vehicle}
                         >
-                            <option value="">All vehicles</option>
-                            <option value="assigned">Assigned</option>
-                            <option value="unassigned">Unassigned</option>
+                            <option value="">{t('All vehicles')}</option>
+                            <option value="assigned">{t('Assigned')}</option>
+                            <option value="unassigned">{t('Unassigned')}</option>
                         </select>
                     </label>
                     <Button icon="search" type="submit">
-                        Apply
+                        {t('Apply')}
                     </Button>
                 </form>
 
                 {loading ? (
                     <div className="ui-loading" role="status">
                         <span />
-                        Loading representatives…
+                        {t('Loading representatives…')}
                     </div>
                 ) : representatives.length === 0 ? (
                     <EmptyState
-                        description="Change the filters or create the first field representative."
-                        title="No representatives found"
+                        description={t('Change the filters or create the first field representative.')}
+                        title={t('No representatives found')}
                     />
                 ) : (
                     <div className="ui-table-wrap">
                         <table className="ui-table representative-table">
                             <thead>
                                 <tr>
-                                    <th>Representative</th>
-                                    <th>Login account</th>
-                                    <th>Warehouse / region</th>
-                                    <th>Vehicle</th>
-                                    <th>Contact</th>
-                                    <th>Status</th>
-                                    <th>Updated</th>
-                                    {canEdit ? <th className="ui-table__actions">Actions</th> : null}
+                                    <th>{t('Representative')}</th>
+                                    <th>{t('Login account')}</th>
+                                    <th>{t('Warehouse / region')}</th>
+                                    <th>{t('Vehicle')}</th>
+                                    <th>{t('Contact')}</th>
+                                    <th>{t('Status')}</th>
+                                    <th>{t('Updated')}</th>
+                                    {canEdit ? <th className="ui-table__actions">{t('Actions')}</th> : null}
                                 </tr>
                             </thead>
                             <tbody>
@@ -294,7 +292,11 @@ export function RepresentativeManagementPage() {
                                         </td>
                                         <td>
                                             <span className="table-primary">@{representative.account.username}</span>
-                                            <small>Last login: {dateTime(representative.account.last_login_at)}</small>
+                                            <small>
+                                                {t('Last login: {date}', {
+                                                    date: dateTime(representative.account.last_login_at),
+                                                })}
+                                            </small>
                                         </td>
                                         <td>
                                             <strong>{representative.primary_warehouse.name}</strong>
@@ -309,29 +311,31 @@ export function RepresentativeManagementPage() {
                                                     <small>{representative.vehicle.vehicle_type}</small>
                                                 </>
                                             ) : (
-                                                <span className="table-muted">Unassigned</span>
+                                                <span className="table-muted">{t('Unassigned')}</span>
                                             )}
                                         </td>
                                         <td>
                                             <span className="table-primary">
-                                                {representative.phone || 'Not specified'}
+                                                {representative.phone || t('Not specified')}
                                             </span>
-                                            <small>{representative.email || 'No email'}</small>
+                                            <small>{representative.email || t('No email')}</small>
                                         </td>
                                         <td>
                                             <StatusBadge tone={representative.is_active ? 'success' : 'danger'}>
-                                                {representative.is_active ? 'Active' : 'Inactive'}
+                                                {t(representative.is_active ? 'Active' : 'Inactive')}
                                             </StatusBadge>
                                         </td>
                                         <td>
                                             <span className="table-primary">{dateTime(representative.updated_at)}</span>
-                                            <small>Created {dateTime(representative.created_at)}</small>
+                                            <small>
+                                                {t('Created {date}', { date: dateTime(representative.created_at) })}
+                                            </small>
                                         </td>
                                         {canEdit ? (
                                             <td className="ui-table__actions">
                                                 <IconButton
                                                     icon="settings"
-                                                    label={`Edit ${representative.name}`}
+                                                    label={t('Edit {name}', { name: representative.name })}
                                                     onClick={() => {
                                                         setSelected(representative);
                                                         setDialogOpen(true);
@@ -347,7 +351,11 @@ export function RepresentativeManagementPage() {
                 )}
                 <footer className="table-footer">
                     <span>
-                        {meta.from ?? 0}–{meta.to ?? 0} of {meta.total} representatives
+                        {t('{from}–{to} of {total} representatives', {
+                            from: formatNumber(meta.from ?? 0),
+                            to: formatNumber(meta.to ?? 0),
+                            total: formatNumber(meta.total),
+                        })}
                     </span>
                     <button
                         disabled={meta.current_page <= 1 || loading}
@@ -360,10 +368,13 @@ export function RepresentativeManagementPage() {
                         }}
                         type="button"
                     >
-                        Previous
+                        {t('Previous')}
                     </button>
                     <strong>
-                        Page {meta.current_page} of {meta.last_page}
+                        {t('Page {current} of {last}', {
+                            current: formatNumber(meta.current_page),
+                            last: formatNumber(meta.last_page),
+                        })}
                     </strong>
                     <button
                         disabled={meta.current_page >= meta.last_page || loading}
@@ -376,7 +387,7 @@ export function RepresentativeManagementPage() {
                         }}
                         type="button"
                     >
-                        Next
+                        {t('Next')}
                     </button>
                 </footer>
             </Panel>
@@ -413,6 +424,7 @@ function RepresentativeDialog({
     options: RepresentativeOptions;
     representative: Representative | null;
 }) {
+    const { t } = useLocale();
     const [form, setForm] = useState<RepresentativeInput>({
         code: '',
         email: '',
@@ -457,7 +469,9 @@ function RepresentativeDialog({
         if (
             representative?.is_active &&
             !form.is_active &&
-            !window.confirm(`Deactivate ${representative.name}? Their sales login will stop immediately.`)
+            !window.confirm(
+                t('Deactivate {name}? Their sales login will stop immediately.', { name: representative.name }),
+            )
         )
             return;
         setSaving(true);
@@ -469,12 +483,12 @@ function RepresentativeDialog({
             };
             if (representative) await representativeApi.update(representative.id, payload);
             else await representativeApi.create(payload);
-            await onSaved(representative ? 'Representative updated.' : 'Representative created.');
+            await onSaved(t(representative ? 'Representative updated.' : 'Representative created.'));
         } catch (requestError) {
             if (requestError instanceof RepresentativeApiError) setErrors(requestError.fields);
             setErrors((current) => ({
                 ...current,
-                form: [errorMessage(requestError)],
+                form: [errorMessage(requestError, t('Unable to complete the request.'))],
             }));
         } finally {
             setSaving(false);
@@ -483,11 +497,13 @@ function RepresentativeDialog({
 
     return (
         <Dialog
-            description="The profile and sales login are saved together. The representative code is generated automatically."
+            description={t(
+                'The profile and sales login are saved together. The representative code is generated automatically.',
+            )}
             footer={
                 <>
                     <Button disabled={saving} onClick={onClose}>
-                        Cancel
+                        {t('Cancel')}
                     </Button>
                     <Button
                         disabled={saving}
@@ -496,13 +512,17 @@ function RepresentativeDialog({
                         tone="primary"
                         type="submit"
                     >
-                        {saving ? 'Saving…' : 'Save representative'}
+                        {saving ? t('Saving…') : t('Save representative')}
                     </Button>
                 </>
             }
             onClose={onClose}
             open={open}
-            title={representative ? `Edit representative · ${representative.code}` : 'Create representative'}
+            title={
+                representative
+                    ? t('Edit representative · {code}', { code: representative.code })
+                    : t('Create representative')
+            }
         >
             <form className="management-form" id="representative-management-form" onSubmit={submit}>
                 {errors.form?.[0] ? (
@@ -513,12 +533,12 @@ function RepresentativeDialog({
                 <div className="form-grid">
                     {representative ? (
                         <label className="ui-field">
-                            <span>Representative code</span>
+                            <span>{t('Representative code')}</span>
                             <input disabled value={form.code} />
                         </label>
                     ) : null}
                     <label className="ui-field">
-                        <span>Full name</span>
+                        <span>{t('Full name')}</span>
                         <input
                             autoFocus
                             maxLength={255}
@@ -529,7 +549,7 @@ function RepresentativeDialog({
                         <FieldError errors={errors} name="name" />
                     </label>
                     <label className="ui-field">
-                        <span>Username</span>
+                        <span>{t('Username')}</span>
                         <input
                             autoComplete="username"
                             maxLength={100}
@@ -540,7 +560,7 @@ function RepresentativeDialog({
                         <FieldError errors={errors} name="username" />
                     </label>
                     <label className="ui-field">
-                        <span>Email (optional)</span>
+                        <span>{t('Email (optional)')}</span>
                         <input
                             maxLength={255}
                             onChange={(event) => change('email', event.target.value)}
@@ -552,8 +572,8 @@ function RepresentativeDialog({
                     <label className="ui-field">
                         <span>
                             {representative
-                                ? 'New password (optional, minimum 6 characters)'
-                                : 'Password (minimum 6 characters)'}
+                                ? t('New password (optional, minimum 6 characters)')
+                                : t('Password (minimum 6 characters)')}
                         </span>
                         <input
                             autoComplete="new-password"
@@ -566,7 +586,7 @@ function RepresentativeDialog({
                         <FieldError errors={errors} name="password" />
                     </label>
                     <label className="ui-field">
-                        <span>Confirm password</span>
+                        <span>{t('Confirm password')}</span>
                         <input
                             autoComplete="new-password"
                             minLength={6}
@@ -577,7 +597,7 @@ function RepresentativeDialog({
                         />
                     </label>
                     <label className="ui-field">
-                        <span>Primary warehouse</span>
+                        <span>{t('Primary warehouse')}</span>
                         <select
                             onChange={(event) =>
                                 setForm((value) => ({
@@ -590,7 +610,7 @@ function RepresentativeDialog({
                             value={form.primary_warehouse_id}
                         >
                             <option disabled value={0}>
-                                Select warehouse
+                                {t('Select warehouse')}
                             </option>
                             {options.warehouses.map((warehouse) => (
                                 <option key={warehouse.id} value={warehouse.id}>
@@ -601,8 +621,8 @@ function RepresentativeDialog({
                         <FieldError errors={errors} name="primary_warehouse_id" />
                     </label>
                     <fieldset className="region-assignment form-grid__wide">
-                        <legend>Assigned regions</legend>
-                        <small>The representative may sell to every Way within the selected regions.</small>
+                        <legend>{t('Assigned regions')}</legend>
+                        <small>{t('The representative may sell to customers within the selected regions.')}</small>
                         <div className="region-assignment__grid">
                             {(options.regions ?? [])
                                 .filter((region) => region.warehouse_id === form.primary_warehouse_id)
@@ -630,7 +650,7 @@ function RepresentativeDialog({
                         <FieldError errors={errors} name="region_ids" />
                     </fieldset>
                     <label className="ui-field">
-                        <span>Phone</span>
+                        <span>{t('Phone')}</span>
                         <input
                             maxLength={50}
                             onChange={(event) => change('phone', event.target.value)}
@@ -640,14 +660,14 @@ function RepresentativeDialog({
                         <FieldError errors={errors} name="phone" />
                     </label>
                     <label className="ui-field">
-                        <span>Vehicle (optional)</span>
+                        <span>{t('Vehicle (optional)')}</span>
                         <select
                             onChange={(event) =>
                                 change('vehicle_id', event.target.value ? Number(event.target.value) : null)
                             }
                             value={form.vehicle_id ?? ''}
                         >
-                            <option value="">Unassigned</option>
+                            <option value="">{t('Unassigned')}</option>
                             {options.vehicles.map((vehicle) => (
                                 <option
                                     disabled={Boolean(
@@ -660,7 +680,7 @@ function RepresentativeDialog({
                                     {vehicle.vehicle_number} · {vehicle.vehicle_type}
                                     {vehicle.sales_representative_id &&
                                     vehicle.sales_representative_id !== representative?.id
-                                        ? ' · already assigned'
+                                        ? t(' · already assigned')
                                         : ''}
                                 </option>
                             ))}
@@ -668,7 +688,7 @@ function RepresentativeDialog({
                         <FieldError errors={errors} name="vehicle_id" />
                     </label>
                     <label className="ui-field form-grid__wide">
-                        <span>Notes</span>
+                        <span>{t('Notes')}</span>
                         <textarea
                             maxLength={1000}
                             onChange={(event) => change('notes', event.target.value)}
@@ -684,9 +704,9 @@ function RepresentativeDialog({
                             type="checkbox"
                         />
                         <span>
-                            <strong>Active representative and login</strong>
+                            <strong>{t('Active representative and login')}</strong>
                             <small>
-                                Turning this off preserves history and immediately blocks sales-portal access.
+                                {t('Turning this off preserves history and immediately blocks sales-portal access.')}
                             </small>
                         </span>
                     </label>

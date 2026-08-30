@@ -21,11 +21,6 @@ class Region extends Model
         return $this->belongsTo(Warehouse::class);
     }
 
-    public function ways(): HasMany
-    {
-        return $this->hasMany(Way::class);
-    }
-
     public function representatives(): BelongsToMany
     {
         return $this->belongsToMany(SalesRepresentative::class)->withTimestamps();
@@ -39,5 +34,15 @@ class Region extends Model
     public function sales(): HasMany
     {
         return $this->hasMany(Sale::class);
+    }
+
+    public function customers(): HasMany
+    {
+        return $this->hasMany(Customer::class);
+    }
+
+    public function trips(): HasMany
+    {
+        return $this->hasMany(Trip::class);
     }
 }

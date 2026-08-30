@@ -16,6 +16,7 @@ export type CashTransaction = {
 export type CashSubmission = {
     id: number;
     reference: string;
+    trip?: { id: number; reference: string; title: string } | null;
     representative: { id: number; code: string; name: string };
     warehouse: { id: number; code: string; name: string };
     amount: number;
@@ -47,6 +48,7 @@ export type RepresentativeCashBalance = {
     pending_submissions: number;
     available_to_submit: number;
 };
+export type AdminCashCollectionInput = { sales_representative_id: number; amount: number; notes: string };
 export type CustomerCreditBalance = {
     id: number;
     code: string;
@@ -64,6 +66,8 @@ export type CustomerPayment = {
     amount: number;
     payment_date: string;
     payment_method: string;
+    payment_method_name?: string;
+    adds_to_cash_hold?: boolean;
     payment_reference: string | null;
     notes: string | null;
     status: CustomerPaymentStatus;
@@ -85,7 +89,7 @@ export type PaymentOptions = {
         outstanding_amount: number;
     }>;
     warehouses: Array<{ id: number; code: string; name: string }>;
-    payment_methods: string[];
+    payment_methods: Array<{ key: string; name: string; adds_to_cash_hold: boolean; is_active: boolean }>;
 };
 export type CustomerPaymentInput = {
     customer_id: number;
@@ -131,13 +135,14 @@ async function request<T>(operation: () => Promise<{ data: T }>) {
 }
 const headers = () => ({ 'Idempotency-Key': crypto.randomUUID() });
 const pageParams = (page = 1) => ({ page, per_page: 10 });
+export type FinanceListFilters = { page?: number; search?: string; warehouse_id?: number };
 
 export const financeApi = {
     ownOverview: () => request<CashOverview>(() => window.axios.get('api/sales/cash-hold')),
-    ownSubmissions: (page = 1) =>
+    ownSubmissions: (page = 1, tripId?: number) =>
         request<{ data: CashSubmission[]; meta: PaginationMeta }>(() =>
             window.axios.get('api/sales/cash-submissions', {
-                params: pageParams(page),
+                params: { ...pageParams(page), ...(tripId ? { trip_id: tripId } : {}) },
             }),
         ),
     ownCashActivity: (page = 1) =>
@@ -154,41 +159,45 @@ export const financeApi = {
         request<{ data: CashSubmission }>(() =>
             window.axios.post(`api/sales/cash-submissions/${id}/cancel`, { reason }, { headers: headers() }),
         ),
-    cashBalances: () =>
+    cashBalances: (filters: FinanceListFilters = {}) =>
         request<{
             data: RepresentativeCashBalance[];
             meta: PaginationMeta;
             summary: { cash_held: number; pending_handover: number };
         }>(() =>
             window.axios.get('api/admin/cash-balances', {
-                params: pageParams(),
+                params: { ...pageParams(filters.page), ...filters },
             }),
         ),
-    cashSubmissions: (page = 1, representativeId?: number) =>
+    cashSubmissions: (filters: FinanceListFilters & { representative_id?: number } = {}) =>
         request<{ data: CashSubmission[]; meta: PaginationMeta }>(() =>
             window.axios.get('api/admin/cash-submissions', {
-                params: { ...pageParams(page), representative_id: representativeId },
+                params: { ...pageParams(filters.page), ...filters },
             }),
         ),
     confirmSubmission: (id: number) =>
         request<{ data: CashSubmission }>(() =>
             window.axios.post(`api/admin/cash-submissions/${id}/confirm`, {}, { headers: headers() }),
         ),
+    collectCash: (input: AdminCashCollectionInput) =>
+        request<{ data: CashSubmission }>(() =>
+            window.axios.post('api/admin/cash-submissions', input, { headers: headers() }),
+        ),
     reverseSubmission: (id: number, reason: string) =>
         request<{ data: CashSubmission }>(() =>
             window.axios.post(`api/admin/cash-submissions/${id}/reverse`, { reason }, { headers: headers() }),
         ),
-    creditBalances: () =>
+    creditBalances: (filters: FinanceListFilters = {}) =>
         request<{ data: CustomerCreditBalance[]; meta: PaginationMeta; summary: { outstanding: number } }>(() =>
             window.axios.get('api/admin/customer-credit-balances', {
-                params: pageParams(),
+                params: { ...pageParams(filters.page), ...filters },
             }),
         ),
     paymentOptions: () => request<PaymentOptions>(() => window.axios.get('api/admin/customer-payment-options')),
-    payments: () =>
+    payments: (filters: FinanceListFilters = {}) =>
         request<{ data: CustomerPayment[]; meta: PaginationMeta; summary: { draft_amount: number } }>(() =>
             window.axios.get('api/admin/customer-payments', {
-                params: pageParams(),
+                params: { ...pageParams(filters.page), ...filters },
             }),
         ),
     createPayment: (input: CustomerPaymentInput) =>

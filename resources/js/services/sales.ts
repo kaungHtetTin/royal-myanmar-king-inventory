@@ -3,6 +3,7 @@ import type { PaginationMeta } from './administration';
 
 export type SaleStatus = 'draft' | 'posted' | 'voided';
 export type PaymentType = 'cash' | 'credit';
+export type PaymentMethod = { key: string; name: string; adds_to_cash_hold: boolean; is_active: boolean };
 export type SaleProduct = {
     id: number;
     sku: string;
@@ -14,6 +15,9 @@ export type SaleItem = {
     product: SaleProduct;
     quantity: number;
     unit_price: number;
+    gross_total?: number;
+    discount_percentage?: number;
+    discount_amount?: number;
     line_total: number;
     base_quantity?: number;
     unit?: SaleUnit | null;
@@ -32,13 +36,19 @@ export type SaleUnit = {
 export type Sale = {
     id: number;
     reference: string;
+    trip?: { id: number; reference: string; title: string } | null;
     representative: { id: number; code: string; name: string; phone?: string | null };
     warehouse: { id: number; code: string; name: string; address?: string | null; phone?: string | null };
     region?: { id: number; name: string } | null;
-    way?: { id: number; code: string; name: string } | null;
     customer: { id: number; code: string; name: string; address?: string | null; phone?: string | null };
     payment_type: PaymentType;
+    payment_method?: string | null;
+    payment_method_name?: string | null;
+    adds_to_cash_hold?: boolean;
     total_amount: number;
+    promotion_title?: string | null;
+    promotion_amount?: number;
+    merchandise_subtotal?: number;
     status: SaleStatus;
     notes: string | null;
     creation_location: {
@@ -50,6 +60,8 @@ export type Sale = {
     items: SaleItem[];
     total_quantity: number;
     total_foc_quantity?: number;
+    gross_amount?: number;
+    total_discount?: number;
     posted_at: string | null;
     voided_at: string | null;
     void_reason: string | null;
@@ -66,7 +78,7 @@ export type SaleCustomerOption = {
     credit_limit: number;
     outstanding_amount: number;
     available_credit: number;
-    way: { id: number; code: string; name: string; region: { id: number; name: string; warehouse_id: number } };
+    region: { id: number; name: string; warehouse_id: number };
 };
 export type SalesCustomerInput = {
     address: string;
@@ -74,9 +86,8 @@ export type SalesCustomerInput = {
     name: string;
     notes: string;
     phone: string;
-    region: string;
+    region_id: number;
     township: string;
-    way_id: number;
 };
 export type SalesCustomer = SalesCustomerInput & {
     code: string;
@@ -85,39 +96,58 @@ export type SalesCustomer = SalesCustomerInput & {
     credit_limit: number;
     id: number;
     is_active: boolean;
-    way: {
-        code: string;
+    outstanding_amount: number;
+    available_credit: number;
+    region: {
         id: number;
         name: string;
-        region: {
-            id: number;
-            name: string;
-            warehouse: { code: string; id: number; name: string } | null;
-            warehouse_id: number;
-        } | null;
+        warehouse: { code: string; id: number; name: string } | null;
+        warehouse_id: number;
     } | null;
 };
 export type SaleProductOption = SaleProduct & {
+    discount_percentage: number;
     selling_price: number;
     quantity: number;
     foc_quantity: number;
     units: SaleUnit[];
 };
 export type SaleOptions = {
+    trip?: {
+        id: number;
+        reference: string;
+        title: string;
+        status: string;
+        region: { id: number; name: string };
+        warehouse: { id: number; code: string; name: string };
+    };
     representative: {
         id: number;
         code: string;
         name: string;
-        regions?: Array<{ id: number; name: string; ways: Array<{ id: number; code: string; name: string }> }>;
+        regions?: Array<{ id: number; name: string }>;
     };
     customers: SaleCustomerOption[];
     products: SaleProductOption[];
+    payment_methods: PaymentMethod[];
     cash_hold: number;
+};
+export type SalesCustomerOptions = {
+    regions: Array<{
+        id: number;
+        name: string;
+        warehouse_id: number;
+        warehouse: { id: number; code: string; name: string } | null;
+    }>;
+    payment_methods: PaymentMethod[];
 };
 export type SaleInput = {
     customer_id: number;
     payment_type: PaymentType;
+    payment_method: string;
     notes: string;
+    promotion_title: string;
+    promotion_amount: number;
     creation_latitude?: number;
     creation_longitude?: number;
     location_accuracy_meters?: number;
@@ -136,12 +166,20 @@ export type SaleFilters = {
     warehouse_id?: number;
     representative_id?: number;
     customer_id?: number;
+    product_id?: number;
+    trip_id?: number;
     payment_type?: string;
     period?: string;
     status?: string;
     search?: string;
 };
 export type SaleSummary = { cash_total: number; credit_total: number; posted_total: number; total: number };
+export type OwnSaleSummary = { gross_sales: number; cash_sales: number; credit_sales: number; units_sold: number };
+export type SaleHistoryOptions = {
+    customers: Array<{ id: number; code: string; name: string }>;
+    products: Array<{ id: number; sku: string; name: string; unit: string }>;
+    trips: Array<{ id: number; reference: string; title: string }>;
+};
 
 export class SaleApiError extends Error {
     constructor(
@@ -188,10 +226,17 @@ export const saleApi = {
         request<{ data: SalesCustomer[]; meta: PaginationMeta }>(() =>
             window.axios.get('api/sales/customers', { params: filters }),
         ),
+    customerOptions: () => request<SalesCustomerOptions>(() => window.axios.get('api/sales/customer-options')),
+    collectCredit: (input: { customer_id: number; amount: number; notes: string; payment_method: string }) =>
+        request<{ data: { id: number; reference: string }; outstanding_amount: number }>(() =>
+            window.axios.post('api/sales/credit-collections', input, { headers: headers() }),
+        ),
     ownSales: (filters: SaleFilters = {}) =>
-        request<{ data: Sale[]; meta: PaginationMeta }>(() =>
+        request<{ data: Sale[]; meta: PaginationMeta; summary: OwnSaleSummary }>(() =>
             window.axios.get('api/sales/sales', { params: { ...filters, per_page: 10 } }),
         ),
+    historyOptions: (filters: Pick<SaleFilters, 'date_from' | 'date_to' | 'period'> = {}) =>
+        request<SaleHistoryOptions>(() => window.axios.get('api/sales/sale-history-options', { params: filters })),
     ownSale: (id: number) => request<{ data: Sale }>(() => window.axios.get(`api/sales/sales/${id}`)),
     create: (
         input: SaleInput & {
@@ -202,6 +247,7 @@ export const saleApi = {
     ) => request<{ data: Sale }>(() => window.axios.post('api/sales/sales', input, { headers: headers() })),
     update: (id: number, input: SaleInput) =>
         request<{ data: Sale }>(() => window.axios.put(`api/sales/sales/${id}`, input)),
+    deleteDraft: (id: number) => request<void>(() => window.axios.delete(`api/sales/sales/${id}`)),
     post: (id: number) =>
         request<{ data: Sale }>(() => window.axios.post(`api/sales/sales/${id}/post`, {}, { headers: headers() })),
     adminSales: (filters: SaleFilters = {}) =>

@@ -1,11 +1,7 @@
 import { useState } from 'react';
 import { useSession } from '../auth/session-context';
 import { useBranding } from '../branding/branding-context';
-import {
-    invoicePaperSizes,
-    printInvoice,
-    type InvoicePaperSize,
-} from '../services/invoice-print';
+import { invoicePaperSizes, printInvoice, type InvoicePaperSize } from '../services/invoice-print';
 import {
     configuredInvoicePaperSize,
     invoicePaperPreferenceKey,
@@ -14,6 +10,7 @@ import {
 import type { Sale } from '../services/sales';
 import { Icon } from './icons';
 import { Button, Dialog, IconButton } from './primitives';
+import { useLocale } from '../localization/locale-context';
 
 function PaperSizeOptions({
     name,
@@ -24,13 +21,15 @@ function PaperSizeOptions({
     onChange: (value: InvoicePaperSize) => void;
     paperSize: InvoicePaperSize;
 }) {
+    const { t } = useLocale();
+
     return (
         <fieldset className="invoice-paper-options">
-            <legend>Paper size</legend>
+            <legend>{t('Paper size')}</legend>
             {invoicePaperSizes.map((option) => (
                 <label className={paperSize === option.value ? 'is-selected' : ''} key={option.value}>
                     <input
-                        aria-label={`${option.label}, ${option.description}`}
+                        aria-label={`${option.label}, ${t(option.description)}`}
                         checked={paperSize === option.value}
                         name={name}
                         onChange={() => onChange(option.value)}
@@ -40,7 +39,7 @@ function PaperSizeOptions({
                     <span aria-hidden="true" className={`invoice-paper-swatch invoice-paper-swatch--${option.value}`} />
                     <span>
                         <strong>{option.label}</strong>
-                        <small>{option.description}</small>
+                        <small>{t(option.description)}</small>
                     </span>
                 </label>
             ))}
@@ -57,6 +56,7 @@ type InvoicePrintButtonProps = {
 export function InvoicePrintButton({ iconOnly = false, onBlocked, sale }: InvoicePrintButtonProps) {
     const { branding } = useBranding();
     const { user } = useSession();
+    const { locale, t } = useLocale();
     const [open, setOpen] = useState(false);
     const [paperSize, setPaperSize] = useState<InvoicePaperSize>(() => preferredInvoicePaperSize(user?.id ?? 0));
     const [setAsDefault, setSetAsDefault] = useState(false);
@@ -65,7 +65,7 @@ export function InvoicePrintButton({ iconOnly = false, onBlocked, sale }: Invoic
         const userId = user?.id ?? 0;
         const defaultSize = configuredInvoicePaperSize(userId);
         if (defaultSize) {
-            if (!printInvoice(sale, branding, defaultSize)) onBlocked();
+            if (!printInvoice(sale, branding, defaultSize, locale)) onBlocked();
             return;
         }
         setPaperSize('a4');
@@ -75,38 +75,42 @@ export function InvoicePrintButton({ iconOnly = false, onBlocked, sale }: Invoic
     const submit = () => {
         if (setAsDefault) window.localStorage.setItem(invoicePaperPreferenceKey(user?.id ?? 0), paperSize);
         setOpen(false);
-        if (!printInvoice(sale, branding, paperSize)) onBlocked();
+        if (!printInvoice(sale, branding, paperSize, locale)) onBlocked();
     };
 
     return (
         <>
             {iconOnly ? (
-                <IconButton icon="print" label={`Print invoice ${sale.reference}`} onClick={startPrint} />
+                <IconButton
+                    icon="print"
+                    label={t('Print invoice {reference}', { reference: sale.reference })}
+                    onClick={startPrint}
+                />
             ) : (
                 <Button icon="print" onClick={startPrint}>
-                    Print invoice
+                    {t('Print invoice')}
                 </Button>
             )}
             <Dialog
-                description={`Choose the paper loaded in the printer for invoice ${sale.reference}.`}
+                description={t('Choose the paper loaded in the printer for invoice {reference}.', {
+                    reference: sale.reference,
+                })}
                 footer={
                     <>
-                        <Button onClick={() => setOpen(false)}>Cancel</Button>
+                        <Button onClick={() => setOpen(false)}>{t('Cancel')}</Button>
                         <Button icon="print" onClick={submit} tone="primary">
-                            Print on {invoicePaperSizes.find((option) => option.value === paperSize)?.label}
+                            {t('Print on {paper}', {
+                                paper: invoicePaperSizes.find((option) => option.value === paperSize)?.label ?? '',
+                            })}
                         </Button>
                     </>
                 }
                 onClose={() => setOpen(false)}
                 open={open}
-                title="Select paper size"
+                title={t('Select paper size')}
                 width="compact"
             >
-                <PaperSizeOptions
-                    name={`invoice-paper-${sale.id}`}
-                    onChange={setPaperSize}
-                    paperSize={paperSize}
-                />
+                <PaperSizeOptions name={`invoice-paper-${sale.id}`} onChange={setPaperSize} paperSize={paperSize} />
                 <label className="invoice-default-choice">
                     <input
                         checked={setAsDefault}
@@ -114,8 +118,8 @@ export function InvoicePrintButton({ iconOnly = false, onBlocked, sale }: Invoic
                         type="checkbox"
                     />
                     <span>
-                        <strong>Use as my default on this device</strong>
-                        <small>Future invoices will print immediately with this paper size.</small>
+                        <strong>{t('Use as my default on this device')}</strong>
+                        <small>{t('Future invoices will print immediately with this paper size.')}</small>
                     </span>
                 </label>
             </Dialog>
@@ -125,6 +129,7 @@ export function InvoicePrintButton({ iconOnly = false, onBlocked, sale }: Invoic
 
 function PrintSettingsDialogContent({ onClose }: { onClose: () => void }) {
     const { user } = useSession();
+    const { t } = useLocale();
     const userId = user?.id ?? 0;
     const [paperSize, setPaperSize] = useState<InvoicePaperSize>(() => preferredInvoicePaperSize(userId));
 
@@ -135,18 +140,20 @@ function PrintSettingsDialogContent({ onClose }: { onClose: () => void }) {
 
     return (
         <Dialog
-            description="This default is saved for your account on this device only. You can still choose another size before printing."
+            description={t(
+                'This default is saved for your account on this device only. You can still choose another size before printing.',
+            )}
             footer={
                 <>
-                    <Button onClick={onClose}>Cancel</Button>
+                    <Button onClick={onClose}>{t('Cancel')}</Button>
                     <Button onClick={save} tone="primary">
-                        Save default
+                        {t('Save default')}
                     </Button>
                 </>
             }
             onClose={onClose}
             open
-            title="Print settings"
+            title={t('Print settings')}
             width="compact"
         >
             <PaperSizeOptions name={`default-invoice-paper-${userId}`} onChange={setPaperSize} paperSize={paperSize} />
@@ -160,6 +167,7 @@ export function PrintSettingsDialog({ onClose, open }: { onClose: () => void; op
 
 export function PrintSettingsForm() {
     const { user } = useSession();
+    const { t } = useLocale();
     const userId = user?.id ?? 0;
     const [paperSize, setPaperSize] = useState<InvoicePaperSize>(() => preferredInvoicePaperSize(userId));
     const [saved, setSaved] = useState(false);
@@ -177,10 +185,11 @@ export function PrintSettingsForm() {
                     <Icon name="print" size={17} />
                 </span>
                 <span>
-                    <strong>Personal device preference</strong>
+                    <strong>{t('Personal device preference')}</strong>
                     <small>
-                        Saved for {user?.name ?? 'this user'} in this browser. Other users and devices keep their own
-                        defaults.
+                        {t('Saved for {user} in this browser. Other users and devices keep their own defaults.', {
+                            user: user?.name ?? t('this user'),
+                        })}
                     </small>
                 </span>
             </div>
@@ -193,9 +202,11 @@ export function PrintSettingsForm() {
                 paperSize={paperSize}
             />
             <footer className="settings-save-bar">
-                <span aria-live="polite">{saved ? 'Default paper size saved on this device.' : 'Used by both portals on this device.'}</span>
+                <span aria-live="polite">
+                    {t(saved ? 'Default paper size saved on this device.' : 'Used by both portals on this device.')}
+                </span>
                 <Button icon="check" tone="primary" type="submit">
-                    Save printing default
+                    {t('Save printing default')}
                 </Button>
             </footer>
         </form>

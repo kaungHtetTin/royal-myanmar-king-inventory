@@ -184,7 +184,7 @@ class Phase6SettlementTest extends TestCase
     /** @return array<string, mixed> */
     private function paymentPayload(Customer $customer, int $amount): array
     {
-        return ['customer_id' => $customer->id, 'amount' => $amount, 'payment_date' => '2026-08-17', 'payment_method' => 'bank_transfer', 'payment_reference' => 'BANK-991', 'notes' => 'Payment received by finance desk.'];
+        return ['customer_id' => $customer->id, 'amount' => $amount, 'payment_date' => '2026-08-17', 'payment_method' => 'banking', 'payment_reference' => 'BANK-991', 'notes' => 'Payment received by finance desk.'];
     }
 
     private function command(string $uri, string $key, array $payload = [])

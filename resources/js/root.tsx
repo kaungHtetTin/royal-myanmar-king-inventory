@@ -6,6 +6,8 @@ import { BrandingProvider } from './branding/branding-provider';
 import type { SessionUser } from './auth/session-context';
 import { AdminShell } from './layouts/admin-shell';
 import { SalesShell } from './layouts/sales-shell';
+import { useLocale } from './localization/locale-context';
+import { LocaleProvider } from './localization/locale-provider';
 import { AdminFoundationPage } from './pages/admin/foundation-page';
 import { SalesFoundationPage } from './pages/sales/foundation-page';
 import { LoginPage } from './pages/auth/login-page';
@@ -90,6 +92,12 @@ const TransferManagementPage = lazy(() =>
         default: module.TransferManagementPage,
     })),
 );
+const TripManagementPage = lazy(() =>
+    import('./pages/admin/trip-management-page').then((module) => ({ default: module.TripManagementPage })),
+);
+const TripDetailPage = lazy(() =>
+    import('./pages/admin/trip-management-page').then((module) => ({ default: module.TripDetailPage })),
+);
 const WarehouseTransferFormPage = lazy(() =>
     import('./pages/admin/transfer-management-page').then((module) => ({
         default: module.WarehouseTransferFormPage,
@@ -133,6 +141,9 @@ const CashWorkspacePage = lazy(() =>
         default: module.CashWorkspacePage,
     })),
 );
+const CurrentTripPage = lazy(() =>
+    import('./pages/sales/current-trip-page').then((module) => ({ default: module.CurrentTripPage })),
+);
 const RepresentativeStockPage = lazy(() =>
     import('./pages/sales/representative-stock-page').then((module) => ({
         default: module.RepresentativeStockPage,
@@ -140,9 +151,6 @@ const RepresentativeStockPage = lazy(() =>
 );
 const ReceivingDetailPage = lazy(() =>
     import('./pages/sales/receiving-detail-page').then((module) => ({ default: module.ReceivingDetailPage })),
-);
-const StockIssueHistoryPage = lazy(() =>
-    import('./pages/sales/stock-issue-history-page').then((module) => ({ default: module.StockIssueHistoryPage })),
 );
 const ProfileSettingsPage = lazy(() =>
     import('./pages/sales/profile-settings-page').then((module) => ({ default: module.ProfileSettingsPage })),
@@ -152,11 +160,6 @@ const SalesCustomerPage = lazy(() =>
 );
 const NewSalesCustomerPage = lazy(() =>
     import('./pages/sales/customer-page').then((module) => ({ default: module.NewSalesCustomerPage })),
-);
-const SalesReportPage = lazy(() =>
-    import('./pages/sales/sales-report-page').then((module) => ({
-        default: module.SalesReportPage,
-    })),
 );
 const NewSalePage = lazy(() =>
     import('./pages/sales/sales-workspace-page').then((module) => ({
@@ -175,10 +178,12 @@ const SaleHistoryDetailPage = lazy(() =>
 );
 
 function RouteLoading() {
+    const { t } = useLocale();
+
     return (
         <div className="ui-loading" role="status">
             <span />
-            Loading workspace…
+            {t('Loading workspace…')}
         </div>
     );
 }
@@ -195,118 +200,132 @@ function RouteSuspense({ children }: { children: ReactNode }) {
 
 export default function Root({ initialUser }: { initialUser?: SessionUser | null }) {
     return (
-        <BrandingProvider>
-            <SessionProvider initialUser={initialUser}>
-                <Routes>
-                    <Route path="/admin/login" element={<LoginPage portal="admin" />} />
-                    <Route path="/sales/login" element={<LoginPage portal="sales" />} />
-                    <Route
-                        path="/admin/*"
-                        element={
-                            <ProtectedPortal portal="admin">
-                                <AdminShell>
-                                    <RouteSuspense>
-                                        <Routes>
-                                            <Route path="dashboard" element={<AdminDashboardPage />} />
-                                            <Route path="reports" element={<ReportsPage />} />
-                                            <Route path="audit-logs" element={<AuditLogPage />} />
-                                            <Route path="inventory" element={<InventoryManagementPage />} />
-                                            <Route path="inventory/imports/new" element={<StockImportFormPage />} />
-                                            <Route
-                                                path="inventory/imports/:importId"
-                                                element={<StockImportDetailPage />}
-                                            />
-                                            <Route
-                                                path="inventory/imports/:importId/edit"
-                                                element={<StockImportFormPage />}
-                                            />
-                                            <Route path="transfers" element={<TransferManagementPage />} />
-                                            <Route
-                                                path="transfers/:transferType/:transferId"
-                                                element={<TransferDetailPage />}
-                                            />
-                                            <Route
-                                                path="transfers/warehouse/new"
-                                                element={<WarehouseTransferFormPage />}
-                                            />
-                                            <Route
-                                                path="transfers/warehouse/:transferId/edit"
-                                                element={<WarehouseTransferFormPage />}
-                                            />
-                                            <Route
-                                                path="transfers/representative/new"
-                                                element={<RepresentativeTransferFormPage />}
-                                            />
-                                            <Route
-                                                path="transfers/representative/:transferId/edit"
-                                                element={<RepresentativeTransferFormPage />}
-                                            />
-                                            <Route
-                                                path="transfers/representative-return/new"
-                                                element={<RepresentativeReturnFormPage />}
-                                            />
-                                            <Route
-                                                path="transfers/representative-return/:returnId/edit"
-                                                element={<RepresentativeReturnFormPage />}
-                                            />
-                                            <Route path="sales" element={<SalesManagementPage />} />
-                                            <Route path="sales/:saleId" element={<AdminSaleDetailPage />} />
-                                            <Route path="cash" element={<FinanceManagementPage />} />
-                                            <Route path="customers" element={<CustomerManagementPage />} />
-                                            <Route path="customers/:customerId" element={<CustomerDetailPage />} />
-                                            <Route path="representatives" element={<RepresentativeManagementPage />} />
-                                            <Route
-                                                path="representatives/:representativeId"
-                                                element={<RepresentativeDetailPage />}
-                                            />
-                                            <Route path="users" element={<AccessManagementPage />} />
-                                            <Route path="products" element={<ProductManagementPage />} />
-                                            <Route path="products/new" element={<ProductFormPage />} />
-                                            <Route path="products/:productId/edit" element={<ProductFormPage />} />
-                                            <Route path="vehicles" element={<VehicleManagementPage />} />
-                                            <Route path="warehouses" element={<WarehouseManagementPage />} />
-                                            <Route
-                                                path="warehouses/:warehouseId/settings"
-                                                element={<WarehouseCoveragePage />}
-                                            />
-                                            <Route path="settings" element={<SettingsPage />} />
-                                            <Route path="*" element={<AdminFoundationPage />} />
-                                        </Routes>
-                                    </RouteSuspense>
-                                </AdminShell>
-                            </ProtectedPortal>
-                        }
-                    />
-                    <Route
-                        path="/sales/*"
-                        element={
-                            <ProtectedPortal portal="sales">
-                                <SalesShell>
-                                    <Suspense fallback={<RouteLoading />}>
-                                        <Routes>
-                                            <Route path="dashboard" element={<RepresentativeDashboardPage />} />
-                                            <Route path="reports" element={<SalesReportPage />} />
-                                            <Route path="my-stock" element={<RepresentativeStockPage />} />
-                                            <Route path="stock-issue-history" element={<StockIssueHistoryPage />} />
-                                            <Route path="profile" element={<ProfileSettingsPage />} />
-                                            <Route path="customers" element={<SalesCustomerPage />} />
-                                            <Route path="customers/new" element={<NewSalesCustomerPage />} />
-                                            <Route path="receivings/:transferId" element={<ReceivingDetailPage />} />
-                                            <Route path="new-sale" element={<NewSalePage />} />
-                                            <Route path="sales-history" element={<SalesHistoryPage />} />
-                                            <Route path="sales-history/:saleId" element={<SaleHistoryDetailPage />} />
-                                            <Route path="cash-hold" element={<CashWorkspacePage />} />
-                                            <Route path="cash-submissions" element={<CashWorkspacePage />} />
-                                            <Route path="*" element={<SalesFoundationPage />} />
-                                        </Routes>
-                                    </Suspense>
-                                </SalesShell>
-                            </ProtectedPortal>
-                        }
-                    />
-                    <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
-                </Routes>
-            </SessionProvider>
-        </BrandingProvider>
+        <LocaleProvider>
+            <BrandingProvider>
+                <SessionProvider initialUser={initialUser}>
+                    <Routes>
+                        <Route path="/admin/login" element={<LoginPage portal="admin" />} />
+                        <Route path="/sales/login" element={<LoginPage portal="sales" />} />
+                        <Route
+                            path="/admin/*"
+                            element={
+                                <ProtectedPortal portal="admin">
+                                    <AdminShell>
+                                        <RouteSuspense>
+                                            <Routes>
+                                                <Route path="dashboard" element={<AdminDashboardPage />} />
+                                                <Route path="reports" element={<ReportsPage />} />
+                                                <Route path="audit-logs" element={<AuditLogPage />} />
+                                                <Route path="inventory" element={<InventoryManagementPage />} />
+                                                <Route path="inventory/imports/new" element={<StockImportFormPage />} />
+                                                <Route
+                                                    path="inventory/imports/:importId"
+                                                    element={<StockImportDetailPage />}
+                                                />
+                                                <Route
+                                                    path="inventory/imports/:importId/edit"
+                                                    element={<StockImportFormPage />}
+                                                />
+                                                <Route path="transfers" element={<TransferManagementPage />} />
+                                                <Route path="trips" element={<TripManagementPage />} />
+                                                <Route path="trips/:tripId" element={<TripDetailPage />} />
+                                                <Route
+                                                    path="transfers/:transferType/:transferId"
+                                                    element={<TransferDetailPage />}
+                                                />
+                                                <Route
+                                                    path="transfers/warehouse/new"
+                                                    element={<WarehouseTransferFormPage />}
+                                                />
+                                                <Route
+                                                    path="transfers/warehouse/:transferId/edit"
+                                                    element={<WarehouseTransferFormPage />}
+                                                />
+                                                <Route
+                                                    path="transfers/representative/new"
+                                                    element={<RepresentativeTransferFormPage />}
+                                                />
+                                                <Route
+                                                    path="transfers/representative/:transferId/edit"
+                                                    element={<RepresentativeTransferFormPage />}
+                                                />
+                                                <Route
+                                                    path="transfers/representative-return/new"
+                                                    element={<RepresentativeReturnFormPage />}
+                                                />
+                                                <Route
+                                                    path="transfers/representative-return/:returnId/edit"
+                                                    element={<RepresentativeReturnFormPage />}
+                                                />
+                                                <Route path="sales" element={<SalesManagementPage />} />
+                                                <Route path="sales/:saleId" element={<AdminSaleDetailPage />} />
+                                                <Route path="cash" element={<FinanceManagementPage />} />
+                                                <Route path="customers" element={<CustomerManagementPage />} />
+                                                <Route path="customers/:customerId" element={<CustomerDetailPage />} />
+                                                <Route
+                                                    path="representatives"
+                                                    element={<RepresentativeManagementPage />}
+                                                />
+                                                <Route
+                                                    path="representatives/:representativeId"
+                                                    element={<RepresentativeDetailPage />}
+                                                />
+                                                <Route path="users" element={<AccessManagementPage />} />
+                                                <Route path="products" element={<ProductManagementPage />} />
+                                                <Route path="products/new" element={<ProductFormPage />} />
+                                                <Route path="products/:productId/edit" element={<ProductFormPage />} />
+                                                <Route path="vehicles" element={<VehicleManagementPage />} />
+                                                <Route path="warehouses" element={<WarehouseManagementPage />} />
+                                                <Route
+                                                    path="warehouses/:warehouseId/settings"
+                                                    element={<WarehouseCoveragePage />}
+                                                />
+                                                <Route path="settings" element={<SettingsPage />} />
+                                                <Route path="*" element={<AdminFoundationPage />} />
+                                            </Routes>
+                                        </RouteSuspense>
+                                    </AdminShell>
+                                </ProtectedPortal>
+                            }
+                        />
+                        <Route
+                            path="/sales/*"
+                            element={
+                                <ProtectedPortal portal="sales">
+                                    <SalesShell>
+                                        <Suspense fallback={<RouteLoading />}>
+                                            <Routes>
+                                                <Route path="dashboard" element={<RepresentativeDashboardPage />} />
+                                                <Route path="trip" element={<CurrentTripPage />} />
+                                                <Route path="reports" element={<Navigate replace to="/sales/sales-history" />} />
+                                                <Route path="my-stock" element={<RepresentativeStockPage />} />
+                                                <Route path="stock-issue-history" element={<Navigate replace to="/sales/my-stock?tab=history" />} />
+                                                <Route path="profile" element={<ProfileSettingsPage />} />
+                                                <Route path="customers" element={<SalesCustomerPage />} />
+                                                <Route path="customers/new" element={<NewSalesCustomerPage />} />
+                                                <Route
+                                                    path="receivings/:transferId"
+                                                    element={<ReceivingDetailPage />}
+                                                />
+                                                <Route path="new-sale" element={<NewSalePage />} />
+                                                <Route path="sales-history" element={<SalesHistoryPage />} />
+                                                <Route
+                                                    path="sales-history/:saleId"
+                                                    element={<SaleHistoryDetailPage />}
+                                                />
+                                                <Route path="cash-hold" element={<CashWorkspacePage />} />
+                                                <Route path="cash-submissions" element={<CashWorkspacePage />} />
+                                                <Route path="*" element={<SalesFoundationPage />} />
+                                            </Routes>
+                                        </Suspense>
+                                    </SalesShell>
+                                </ProtectedPortal>
+                            }
+                        />
+                        <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
+                    </Routes>
+                </SessionProvider>
+            </BrandingProvider>
+        </LocaleProvider>
     );
 }

@@ -60,7 +60,7 @@ class RepresentativeStockController extends Controller
         abort_unless($representative?->is_active, 403);
         $data = $request->validate(['per_page' => ['nullable', 'integer', 'min:10', 'max:100']]);
         $query = RepresentativeTransfer::query()
-            ->with(['sourceWarehouse', 'representative', 'items.product', 'items.unit', 'items.focUnit', 'transit', 'creator', 'dispatcher', 'receiver', 'canceller', 'reverser'])
+            ->with(['trip', 'sourceWarehouse', 'representative', 'items.product', 'items.unit', 'items.focUnit', 'transit', 'creator', 'dispatcher', 'receiver', 'canceller', 'reverser'])
             ->withSum('items as total_quantity', 'quantity')
             ->where('sales_representative_id', $representative->id)
             ->where('direction', 'issue')
@@ -76,7 +76,7 @@ class RepresentativeStockController extends Controller
         abort_unless($representative?->is_active, 403);
         $data = $request->validate(['per_page' => ['nullable', 'integer', 'min:10', 'max:100']]);
         $query = RepresentativeTransfer::query()
-            ->with(['sourceWarehouse', 'representative', 'items.product', 'items.unit', 'items.focUnit', 'transit', 'creator', 'dispatcher', 'receiver', 'canceller', 'reverser'])
+            ->with(['trip', 'sourceWarehouse', 'representative', 'items.product', 'items.unit', 'items.focUnit', 'transit', 'creator', 'dispatcher', 'receiver', 'canceller', 'reverser'])
             ->withSum('items as total_quantity', 'quantity')
             ->where('sales_representative_id', $representative->id)
             ->where('direction', 'issue')
@@ -92,7 +92,7 @@ class RepresentativeStockController extends Controller
         abort_unless($representative?->is_active && $representativeTransfer->sales_representative_id === $representative->id, 403);
         $this->posting->receive($representativeTransfer, $request->user(), $this->idempotencyKey($request), $request);
 
-        return new RepresentativeTransferResource($representativeTransfer->fresh(['sourceWarehouse', 'representative', 'items.product', 'items.unit', 'items.focUnit', 'transit', 'creator', 'dispatcher', 'receiver', 'canceller', 'reverser']));
+        return new RepresentativeTransferResource($representativeTransfer->fresh(['trip', 'sourceWarehouse', 'representative', 'items.product', 'items.unit', 'items.focUnit', 'transit', 'creator', 'dispatcher', 'receiver', 'canceller', 'reverser']));
     }
 
     public function show(Request $request, RepresentativeTransfer $representativeTransfer): RepresentativeTransferResource
@@ -111,6 +111,6 @@ class RepresentativeStockController extends Controller
 
     private function load(RepresentativeTransfer $transfer): RepresentativeTransfer
     {
-        return $transfer->fresh(['sourceWarehouse', 'representative', 'items.product', 'items.unit', 'items.focUnit', 'transit', 'creator', 'dispatcher', 'receiver', 'canceller', 'reverser']);
+        return $transfer->fresh(['trip', 'sourceWarehouse', 'representative', 'items.product', 'items.unit', 'items.focUnit', 'transit', 'creator', 'dispatcher', 'receiver', 'canceller', 'reverser']);
     }
 }

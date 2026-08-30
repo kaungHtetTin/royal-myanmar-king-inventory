@@ -6,19 +6,20 @@ import { Icon, type IconName } from '../ui/icons';
 import { PrintSettingsDialog } from '../ui/invoice-print-dialog';
 import { OfflineBanner } from '../ui/offline-banner';
 import { useOnlineStatus, useUiPreferences } from '../ui/preferences';
+import { useLocale } from '../localization/locale-context';
 
 const salesNavigation: Array<{ icon: IconName; label: string; to: string }> = [
     { icon: 'dashboard', label: 'Home', to: '/sales/dashboard' },
-    { icon: 'box', label: 'My stock', to: '/sales/my-stock' },
+    { icon: 'truck', label: 'Trip', to: '/sales/trip' },
     { icon: 'plus', label: 'New sale', to: '/sales/new-sale' },
-    { icon: 'reports', label: 'Reports', to: '/sales/reports' },
+    { icon: 'sales', label: 'Sales', to: '/sales/sales-history' },
     { icon: 'cash', label: 'Cash', to: '/sales/cash-hold' },
 ];
 
 const salesDesktopNavigation = [
-    ...salesNavigation.slice(0, 3),
-    { icon: 'sales' as const, label: 'Sales history', to: '/sales/sales-history' },
-    ...salesNavigation.slice(3),
+    ...salesNavigation.slice(0, 2),
+    { icon: 'box' as const, label: 'My stock', to: '/sales/my-stock' },
+    ...salesNavigation.slice(2),
 ];
 
 export function SalesShell({ children }: { children: ReactNode }) {
@@ -27,9 +28,10 @@ export function SalesShell({ children }: { children: ReactNode }) {
     const [profileMenuOpen, setProfileMenuOpen] = useState(false);
     const [printSettingsOpen, setPrintSettingsOpen] = useState(false);
     const online = useOnlineStatus();
-    const { density, theme, toggleDensity, toggleTheme } = useUiPreferences();
+    const { density, fontScale, theme, toggleDensity, toggleTheme } = useUiPreferences();
     const { logout, user } = useSession();
     const { branding } = useBranding();
+    const { locale, setLocale, t } = useLocale();
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -60,22 +62,23 @@ export function SalesShell({ children }: { children: ReactNode }) {
             .join('')
             .slice(0, 2)
             .toUpperCase() ?? 'U';
-    const roleLabel = user?.roles[0]?.replaceAll('-', ' ') ?? 'Representative';
+    const roleLabel = user?.roles[0]?.replaceAll('-', ' ') ?? t('Representative');
 
     return (
         <div
             className="sales-root"
             data-density={density}
+            data-font-scale={fontScale}
             data-theme={theme}
-            style={{ '--color-primary': branding.primary_color } as CSSProperties}
+            style={{ '--app-font-scale': fontScale, '--color-primary': branding.primary_color } as CSSProperties}
         >
             <a className="skip-link" href="#sales-content">
-                Skip to content
+                {t('Skip to content')}
             </a>
             <div className="sales-app-frame">
                 <header className="sales-topbar">
                     <Link
-                        aria-label={`${branding.business_name} home`}
+                        aria-label={t('{business} home', { business: branding.business_name })}
                         className="sales-company-brand"
                         to="/sales/dashboard"
                     >
@@ -84,14 +87,14 @@ export function SalesShell({ children }: { children: ReactNode }) {
                         </span>
                         <span className="sales-company-brand__copy">
                             <strong>{branding.business_name}</strong>
-                            <small>Sales workspace</small>
+                            <small>{t('Sales workspace')}</small>
                         </span>
                     </Link>
                     <div className="sales-topbar__end">
                         <div className="sales-topbar__actions">
                             <span className={`connection-state ${online ? 'is-online' : 'is-offline'}`}>
                                 <span aria-hidden="true" />
-                                {online ? 'Online' : 'Offline'}
+                                {t(online ? 'Online' : 'Offline')}
                             </span>
                         </div>
                         <div className="sales-profile-menu" ref={profileMenuRef}>
@@ -99,21 +102,21 @@ export function SalesShell({ children }: { children: ReactNode }) {
                                 aria-controls="sales-profile-dropdown"
                                 aria-expanded={profileMenuOpen}
                                 aria-haspopup="menu"
-                                aria-label="Profile menu"
+                                aria-label={t('Profile menu')}
                                 className="sales-identity sales-profile-trigger"
                                 onClick={() => setProfileMenuOpen((value) => !value)}
                                 type="button"
                             >
                                 <span className="sales-identity__avatar">{initials}</span>
                                 <span className="sales-identity__copy">
-                                    <small>Representative</small>
-                                    <strong>{user?.name ?? 'Representative'}</strong>
+                                    <small>{t('Representative')}</small>
+                                    <strong>{user?.name ?? t('Representative')}</strong>
                                 </span>
                                 <Icon name="chevronDown" size={13} />
                             </button>
                             {profileMenuOpen ? (
                                 <div
-                                    aria-label="Profile options"
+                                    aria-label={t('Profile options')}
                                     className="admin-profile-dropdown sales-profile-dropdown"
                                     id="sales-profile-dropdown"
                                     role="menu"
@@ -121,7 +124,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
                                     <div className="admin-profile-dropdown__identity">
                                         <span className="sales-identity__avatar">{initials}</span>
                                         <span>
-                                            <strong>{user?.name ?? 'Representative'}</strong>
+                                            <strong>{user?.name ?? t('Representative')}</strong>
                                             <small>
                                                 @{user?.username ?? 'user'} · {roleLabel}
                                             </small>
@@ -134,7 +137,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
                                             to="/sales/customers"
                                         >
                                             <Icon name="customers" size={16} />
-                                            <span>Customers</span>
+                                            <span>{t('Customers')}</span>
                                         </Link>
                                         <Link
                                             onClick={() => setProfileMenuOpen(false)}
@@ -142,7 +145,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
                                             to="/sales/profile"
                                         >
                                             <Icon name="users" size={16} />
-                                            <span>Profile &amp; security</span>
+                                            <span>{t('Profile & security')}</span>
                                         </Link>
                                         <button
                                             onClick={() => {
@@ -153,7 +156,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
                                             type="button"
                                         >
                                             <Icon name={theme === 'light' ? 'moon' : 'sun'} size={16} />
-                                            <span>Use {theme === 'light' ? 'dark' : 'light'} theme</span>
+                                            <span>{t(theme === 'light' ? 'Use dark theme' : 'Use light theme')}</span>
                                         </button>
                                         <button
                                             onClick={() => {
@@ -164,7 +167,21 @@ export function SalesShell({ children }: { children: ReactNode }) {
                                             type="button"
                                         >
                                             <Icon name="density" size={16} />
-                                            <span>Use {density === 'compact' ? 'comfortable' : 'compact'} density</span>
+                                            <span>
+                                                {t(
+                                                    density === 'compact'
+                                                        ? 'Use comfortable density'
+                                                        : 'Use compact density',
+                                                )}
+                                            </span>
+                                        </button>
+                                        <button
+                                            onClick={() => setLocale(locale === 'en' ? 'my' : 'en')}
+                                            role="menuitem"
+                                            type="button"
+                                        >
+                                            <Icon name="adjustments" size={16} />
+                                            <span>{locale === 'en' ? 'မြန်မာ' : 'English'}</span>
                                         </button>
                                         <button
                                             onClick={() => {
@@ -175,7 +192,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
                                             type="button"
                                         >
                                             <Icon name="print" size={16} />
-                                            <span>Print settings</span>
+                                            <span>{t('Print settings')}</span>
                                         </button>
                                     </div>
                                     <div className="admin-profile-dropdown__section admin-profile-dropdown__section--signout">
@@ -188,7 +205,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
                                             type="button"
                                         >
                                             <Icon name="logout" size={16} />
-                                            <span>Sign out</span>
+                                            <span>{t('Sign out')}</span>
                                         </button>
                                     </div>
                                 </div>
@@ -199,7 +216,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
 
                 <OfflineBanner />
 
-                <nav className="sales-desktop-nav" aria-label="Representative navigation">
+                <nav className="sales-desktop-nav" aria-label={t('Representative navigation')}>
                     {salesDesktopNavigation.map((item) => {
                         const active =
                             location.pathname === item.to ||
@@ -212,7 +229,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
                                 to={item.to}
                             >
                                 <Icon name={item.icon} size={16} />
-                                {item.label}
+                                {t(item.label)}
                             </Link>
                         );
                     })}
@@ -222,7 +239,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
                     {children}
                 </main>
 
-                <nav className="sales-bottom-nav" aria-label="Representative navigation">
+                <nav className="sales-bottom-nav" aria-label={t('Representative navigation')}>
                     {salesNavigation.map((item) => {
                         const active = location.pathname === item.to;
                         return (
@@ -233,7 +250,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
                                 to={item.to}
                             >
                                 <Icon name={item.icon} size={20} />
-                                <span>{item.label}</span>
+                                <span>{t(item.label)}</span>
                             </Link>
                         );
                     })}

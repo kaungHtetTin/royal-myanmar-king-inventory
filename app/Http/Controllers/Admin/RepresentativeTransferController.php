@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\TransferStatus;
+use App\Enums\TripStatus;
 use App\Exceptions\DomainConflictException;
 use App\Http\Controllers\Concerns\HandlesTransferCommands;
 use App\Http\Controllers\Controller;
@@ -11,6 +12,7 @@ use App\Models\Product;
 use App\Models\ProductUnit;
 use App\Models\RepresentativeTransfer;
 use App\Models\SalesRepresentative;
+use App\Models\Trip;
 use App\Models\Warehouse;
 use App\Services\AuditLogger;
 use App\Services\DocumentReferenceGenerator;
@@ -72,9 +74,11 @@ class RepresentativeTransferController extends Controller
         $data = $request->validate($this->rules());
         $this->assertWarehouse($request, (int) $data['source_warehouse_id']);
         $this->assertRepresentative($request, (int) $data['sales_representative_id']);
+        $this->assertTrip($data, false);
         $transfer = DB::transaction(function () use ($request, $data): RepresentativeTransfer {
             $transfer = RepresentativeTransfer::query()->create([
                 'reference' => $this->references->next('representative_transfer', 'RTR'),
+                'trip_id' => $data['trip_id'],
                 'direction' => 'issue',
                 'source_warehouse_id' => $data['source_warehouse_id'],
                 'sales_representative_id' => $data['sales_representative_id'],
@@ -107,13 +111,14 @@ class RepresentativeTransferController extends Controller
         $data = $request->validate($this->rules());
         $this->assertWarehouse($request, (int) $data['source_warehouse_id']);
         $this->assertRepresentative($request, (int) $data['sales_representative_id']);
+        $this->assertTrip($data, false);
         DB::transaction(function () use ($request, $representativeTransfer, $data): void {
             $representativeTransfer = RepresentativeTransfer::query()->lockForUpdate()->findOrFail($representativeTransfer->id);
             if ($representativeTransfer->status !== TransferStatus::Draft) {
                 throw new DomainConflictException('Dispatched representative transfer lines are immutable.', 'INVALID_DOCUMENT_STATE');
             }
             $old = $representativeTransfer->load('items')->toArray();
-            $representativeTransfer->update(['source_warehouse_id' => $data['source_warehouse_id'], 'sales_representative_id' => $data['sales_representative_id'], 'notes' => $data['notes'] ?? null]);
+            $representativeTransfer->update(['trip_id' => $data['trip_id'], 'source_warehouse_id' => $data['source_warehouse_id'], 'sales_representative_id' => $data['sales_representative_id'], 'notes' => $data['notes'] ?? null]);
             $representativeTransfer->items()->delete();
             $representativeTransfer->items()->createMany($this->preparedItems($data['items']));
             $this->auditLogger->record($request, 'representative_transfer.updated', $request->user(), $representativeTransfer, ['old' => $old, 'new' => $data]);
@@ -153,6 +158,7 @@ class RepresentativeTransferController extends Controller
     private function rules(): array
     {
         return [
+            'trip_id' => ['required', 'integer', 'exists:trips,id'],
             'source_warehouse_id' => ['required', 'integer', Rule::exists('warehouses', 'id')->where('is_active', true)],
             'sales_representative_id' => ['required', 'integer', Rule::exists('sales_representatives', 'id')->where('is_active', true)],
             'notes' => ['nullable', 'string', 'max:2000'],
@@ -195,7 +201,19 @@ class RepresentativeTransferController extends Controller
     /** @return list<string> */
     private function relations(): array
     {
-        return ['sourceWarehouse', 'representative.regions', 'items.product', 'items.unit', 'items.focUnit', 'transit', 'creator', 'dispatcher', 'receiver', 'canceller', 'reverser'];
+        return ['trip', 'sourceWarehouse', 'representative.regions', 'items.product', 'items.unit', 'items.focUnit', 'transit', 'creator', 'dispatcher', 'receiver', 'canceller', 'reverser'];
+    }
+
+    private function assertTrip(array $data, bool $ending): void
+    {
+        $trip = Trip::query()->findOrFail($data['trip_id']);
+        $allowed = $ending ? [TripStatus::Ending] : [TripStatus::Planning, TripStatus::Operation];
+        if (! in_array($trip->status, $allowed, true)) {
+            throw ValidationException::withMessages(['trip_id' => ['The trip is not in a valid state for this stock document.']]);
+        }
+        if ($trip->warehouse_id !== (int) $data['source_warehouse_id'] || $trip->sales_representative_id !== (int) $data['sales_representative_id']) {
+            throw ValidationException::withMessages(['trip_id' => ['Warehouse and representative must match the selected trip.']]);
+        }
     }
 
     private function load(RepresentativeTransfer $transfer): RepresentativeTransfer

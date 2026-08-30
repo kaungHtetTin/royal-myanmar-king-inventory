@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Enums\PermissionName;
 use App\Enums\RoleName;
+use App\Models\Customer;
+use App\Models\SalesRepresentative;
 use App\Models\User;
 use App\Models\Warehouse;
 use Database\Seeders\AccessControlSeeder;
@@ -36,7 +38,6 @@ class WarehouseManagementTest extends TestCase
             ->assertJsonPath('data.users_count', 0);
         $this->assertDatabaseHas('warehouses', ['code' => 'YGN-MAIN', 'name' => 'Yangon Main Warehouse']);
         $this->assertDatabaseCount('regions', 0);
-        $this->assertDatabaseCount('ways', 0);
         $this->assertDatabaseHas('audit_logs', [
             'actor_id' => $admin->id,
             'event' => 'warehouse.created',
@@ -60,19 +61,31 @@ class WarehouseManagementTest extends TestCase
             ->assertJsonPath('meta.total', 1);
     }
 
-    public function test_assigned_user_can_open_a_warehouse_settings_page_with_its_coverage_hierarchy(): void
+    public function test_assigned_user_can_open_a_warehouse_settings_page_with_its_regions(): void
     {
         $admin = $this->officeAdmin();
         $warehouse = Warehouse::factory()->create(['code' => 'YGN']);
         $admin->warehouses()->attach($warehouse, ['assigned_by' => $admin->id]);
         $region = $warehouse->regions()->create(['name' => 'Yangon', 'is_active' => true]);
-        $way = $region->ways()->create(['code' => 'WAY-YGN', 'name' => 'Hlaing', 'is_active' => true]);
+        $activeRepresentative = SalesRepresentative::factory()->create(['primary_warehouse_id' => $warehouse->id, 'is_active' => true]);
+        $inactiveRepresentative = SalesRepresentative::factory()->create(['primary_warehouse_id' => $warehouse->id, 'is_active' => false]);
+        $region->representatives()->sync([$activeRepresentative->id, $inactiveRepresentative->id]);
+        Customer::factory()->create(['warehouse_id' => $warehouse->id, 'region_id' => $region->id, 'is_active' => true]);
+        Customer::factory()->create(['warehouse_id' => $warehouse->id, 'region_id' => $region->id, 'is_active' => false]);
 
         $this->actingAs($admin)->getJson('/api/admin/warehouses/'.$warehouse->id)
             ->assertOk()
             ->assertJsonPath('data.id', $warehouse->id)
             ->assertJsonPath('data.regions.0.id', $region->id)
-            ->assertJsonPath('data.regions.0.ways.0.id', $way->id);
+            ->assertJsonPath('data.sales_representatives_count', 2)
+            ->assertJsonPath('data.customers_count', 2)
+            ->assertJsonPath('data.active_trips_count', 0)
+            ->assertJsonPath('data.regions.0.representatives_count', 2)
+            ->assertJsonPath('data.regions.0.active_representatives_count', 1)
+            ->assertJsonPath('data.regions.0.customers_count', 2)
+            ->assertJsonPath('data.regions.0.active_customers_count', 1)
+            ->assertJsonPath('data.regions.0.active_trips_count', 0)
+            ->assertJsonMissingPath('data.regions.0.ways');
 
         $foreign = Warehouse::factory()->create();
         $this->getJson('/api/admin/warehouses/'.$foreign->id)->assertForbidden();

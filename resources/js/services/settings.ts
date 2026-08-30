@@ -2,6 +2,12 @@ import axios, { AxiosError } from 'axios';
 import type { Branding } from '../branding/branding-context';
 
 export type AdminProfile = { email: string | null; id: number; name: string; username: string };
+export type PaymentMethodSetting = {
+    adds_to_cash_hold: boolean;
+    is_active: boolean;
+    key: string;
+    name: string;
+};
 export type OperationalSettings = {
     business_address: string | null;
     business_email: string | null;
@@ -10,6 +16,7 @@ export type OperationalSettings = {
     invoice_footer: string | null;
     low_stock_threshold: number;
     timezone: string;
+    payment_methods: PaymentMethodSetting[];
 };
 export type ApplicationSettings = {
     branding: Branding;
@@ -70,6 +77,7 @@ export const settingsApi = {
         Object.entries(input).forEach(([key, value]) => {
             if (value instanceof File) data.append(key, value);
             else if (typeof value === 'boolean') data.append(key, value ? '1' : '0');
+            else if (Array.isArray(value)) data.append(key, JSON.stringify(value));
             else if (value !== null) data.append(key, String(value));
         });
         return request<{ branding: Branding; operations: OperationalSettings }>(() =>

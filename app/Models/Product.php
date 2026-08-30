@@ -18,6 +18,7 @@ class Product extends Model
         'category',
         'unit',
         'selling_price',
+        'discount_percentage',
         'barcode',
         'description',
         'is_active',
@@ -27,6 +28,7 @@ class Product extends Model
     {
         return [
             'selling_price' => 'integer',
+            'discount_percentage' => 'decimal:2',
             'is_active' => 'boolean',
         ];
     }

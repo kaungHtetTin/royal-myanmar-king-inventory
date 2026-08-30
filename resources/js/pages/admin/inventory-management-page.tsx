@@ -18,6 +18,7 @@ import {
 import { Icon, type IconName } from '../../ui/icons';
 import { editableNumber } from '../../ui/form-values';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
+import { useLocale, type LocaleContextValue } from '../../localization/locale-context';
 
 type Tab = 'stock' | 'imports' | 'adjustments' | 'movements';
 const emptyMeta: PaginationMeta = {
@@ -47,25 +48,15 @@ const tabIcons: Record<Tab, IconName> = {
     movements: 'transfer',
 };
 
-function errorMessage(error: unknown) {
-    return error instanceof Error ? error.message : 'Unable to complete the request.';
-}
-function number(value: number) {
-    return new Intl.NumberFormat('en-US').format(value);
-}
-function money(value: number) {
-    return `${number(value)} MMK`;
-}
-function dateTime(value: string | null) {
-    return value
-        ? new Intl.DateTimeFormat(undefined, {
-              dateStyle: 'medium',
-              timeStyle: 'short',
-          }).format(new Date(value))
-        : '—';
+function errorMessage(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback;
 }
 
-function stockUnits(row: InventoryBalance) {
+function stockUnits(
+    row: InventoryBalance,
+    formatNumber: LocaleContextValue['formatNumber'],
+    t: LocaleContextValue['t'],
+) {
     const baseName = row.product.base_unit?.name ?? row.product.unit;
     const sellingUnit = row.product.default_selling_unit;
     const conversion = sellingUnit?.conversion_factor ?? 1;
@@ -73,8 +64,8 @@ function stockUnits(row: InventoryBalance) {
     if (!sellingUnit || conversion <= 1 || sellingUnit.name === baseName) {
         return {
             baseName,
-            equivalent: `${number(row.quantity)} ${baseName}`,
-            conversion: `${sellingUnit?.name ?? baseName} is the base unit`,
+            equivalent: `${formatNumber(row.quantity)} ${baseName}`,
+            conversion: t('{unit} is the base unit', { unit: sellingUnit?.name ?? baseName }),
         };
     }
 
@@ -83,8 +74,12 @@ function stockUnits(row: InventoryBalance) {
 
     return {
         baseName,
-        equivalent: `${number(sellingQuantity)} ${sellingUnit.name}${remainder ? ` + ${number(remainder)} ${baseName}` : ''}`,
-        conversion: `1 ${sellingUnit.name} = ${number(conversion)} ${baseName}`,
+        equivalent: `${formatNumber(sellingQuantity)} ${sellingUnit.name}${remainder ? ` + ${formatNumber(remainder)} ${baseName}` : ''}`,
+        conversion: t('1 {sellingUnit} = {conversion} {baseUnit}', {
+            sellingUnit: sellingUnit.name,
+            conversion: formatNumber(conversion),
+            baseUnit: baseName,
+        }),
     };
 }
 function badge(status: string) {
@@ -94,6 +89,7 @@ function badge(status: string) {
 export function InventoryManagementPage() {
     const { user } = useSession();
     const navigate = useNavigate();
+    const { formatNumber, t } = useLocale();
     const isSuper = user?.roles.includes('super-admin');
     const canImport = Boolean(isSuper || user?.permissions.includes('inventory.import'));
     const canAdjust = Boolean(isSuper || user?.permissions.includes('inventory.adjust'));
@@ -136,11 +132,11 @@ export function InventoryManagementPage() {
             setSummary(response.summary ?? emptySummary);
             setOptions(available);
         } catch (requestError) {
-            setError(errorMessage(requestError));
+            setError(errorMessage(requestError, t('Unable to complete the request.')));
         } finally {
             setLoading(false);
         }
-    }, [filters, tab]);
+    }, [filters, tab, t]);
 
     useEffect(() => {
         let active = true;
@@ -162,7 +158,7 @@ export function InventoryManagementPage() {
                 setError('');
             })
             .catch((requestError) => {
-                if (active) setError(errorMessage(requestError));
+                if (active) setError(errorMessage(requestError, t('Unable to complete the request.')));
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -170,7 +166,7 @@ export function InventoryManagementPage() {
         return () => {
             active = false;
         };
-    }, [filters, tab]);
+    }, [filters, tab, t]);
     const showNotice = (message: string) => {
         setNotice(message);
         window.setTimeout(() => setNotice(''), 4000);
@@ -190,7 +186,7 @@ export function InventoryManagementPage() {
             await load();
             showNotice(message);
         } catch (requestError) {
-            setError(errorMessage(requestError));
+            setError(errorMessage(requestError, t('Unable to complete the request.')));
             setLoading(false);
         }
     };
@@ -208,7 +204,7 @@ export function InventoryManagementPage() {
             link.remove();
             URL.revokeObjectURL(url);
         } catch (requestError) {
-            setError(errorMessage(requestError));
+            setError(errorMessage(requestError, t('Unable to complete the request.')));
         } finally {
             setExporting(false);
         }
@@ -217,14 +213,14 @@ export function InventoryManagementPage() {
         <div className="admin-page inventory-management">
             <header className="page-heading">
                 <div>
-                    <p className="ui-eyebrow">Inventory control</p>
-                    <h1>Warehouse inventory</h1>
-                    <p>Post controlled stock changes and trace every unit back to its source document.</p>
+                    <p className="ui-eyebrow">{t('Inventory control')}</p>
+                    <h1>{t('Warehouse inventory')}</h1>
+                    <p>{t('Post controlled stock changes and trace every unit back to its source document.')}</p>
                 </div>
                 <div className="page-heading__actions">
                     {canAdjust ? (
                         <Button icon="adjustments" onClick={() => setAdjustDialog(null)} requiresOnline>
-                            New adjustment
+                            {t('New adjustment')}
                         </Button>
                     ) : null}
                     {canImport ? (
@@ -234,35 +230,35 @@ export function InventoryManagementPage() {
                             requiresOnline
                             tone="primary"
                         >
-                            New import
+                            {t('New import')}
                         </Button>
                     ) : null}
                 </div>
             </header>
             <div className="metric-grid access-metrics">
                 <MetricCard
-                    hint="Matching current filters"
+                    hint={t('Matching current filters')}
                     icon="box"
-                    label={tabLabels[tab]}
-                    value={number(summary.total)}
+                    label={t(tabLabels[tab])}
+                    value={formatNumber(summary.total)}
                 />
                 <MetricCard
-                    hint="Matching current filters"
+                    hint={t('Matching current filters')}
                     icon="warehouse"
-                    label="Base units"
-                    value={number(summary.units)}
+                    label={t('Base units')}
+                    value={formatNumber(summary.units)}
                 />
                 <MetricCard
-                    hint="Matching current filters"
+                    hint={t('Matching current filters')}
                     icon="building"
-                    label="Warehouses"
-                    value={number(summary.warehouses)}
+                    label={t('Warehouses')}
+                    value={formatNumber(summary.warehouses)}
                 />
                 <MetricCard
-                    hint="Matching current filters"
+                    hint={t('Matching current filters')}
                     icon="reports"
-                    label="Products"
-                    value={number(summary.products)}
+                    label={t('Products')}
+                    value={formatNumber(summary.products)}
                 />
             </div>
             {notice ? (
@@ -276,7 +272,7 @@ export function InventoryManagementPage() {
                     <Icon name="x" size={15} />
                     {error}
                     <button onClick={() => void load()} type="button">
-                        Retry
+                        {t('Retry')}
                     </button>
                 </div>
             ) : null}
@@ -290,16 +286,16 @@ export function InventoryManagementPage() {
                             onClick={() => void exportOnHand()}
                             requiresOnline
                         >
-                            {exporting ? 'Exporting…' : 'Export CSV'}
+                            {exporting ? t('Exporting…') : t('Export CSV')}
                         </Button>
                     ) : null
                 }
                 className="inventory-panel"
-                eyebrow="Warehouse ledger"
-                title={tabLabels[tab]}
+                eyebrow={t('Warehouse ledger')}
+                title={t(tabLabels[tab])}
             >
                 <div
-                    aria-label="Inventory sections"
+                    aria-label={t('Inventory sections')}
                     className="section-tabs section-tabs--4 inventory-tabs"
                     role="tablist"
                 >
@@ -312,8 +308,10 @@ export function InventoryManagementPage() {
                             type="button"
                         >
                             <Icon name={tabIcons[value]} size={15} />
-                            <span>{tabLabels[value]}</span>
-                            {value === tab ? <span className="section-tab-count">{meta.total}</span> : null}
+                            <span>{t(tabLabels[value])}</span>
+                            {value === tab ? (
+                                <span className="section-tab-count">{formatNumber(meta.total)}</span>
+                            ) : null}
                         </button>
                     ))}
                 </div>
@@ -342,7 +340,7 @@ export function InventoryManagementPage() {
                     }}
                 >
                     <label className="filter-search">
-                        <span className="sr-only">Search</span>
+                        <span className="sr-only">{t('Search')}</span>
                         <Icon name="search" size={15} />
                         <input
                             onChange={(event) =>
@@ -353,17 +351,17 @@ export function InventoryManagementPage() {
                             }
                             placeholder={
                                 tab === 'movements'
-                                    ? 'Reference'
+                                    ? t('Reference')
                                     : tab === 'stock'
-                                      ? 'SKU or product'
-                                      : 'Reference or reason'
+                                      ? t('SKU or product')
+                                      : t('Reference or reason')
                             }
                             type="search"
                             value={draft.search}
                         />
                     </label>
                     <select
-                        aria-label="Warehouse"
+                        aria-label={t('Warehouse')}
                         onChange={(event) =>
                             setDraft((value) => ({
                                 ...value,
@@ -372,7 +370,7 @@ export function InventoryManagementPage() {
                         }
                         value={draft.warehouse_id}
                     >
-                        <option value="">All warehouses</option>
+                        <option value="">{t('All warehouses')}</option>
                         {options.warehouses.map((warehouse) => (
                             <option key={warehouse.id} value={warehouse.id}>
                                 {warehouse.code} · {warehouse.name}
@@ -381,7 +379,7 @@ export function InventoryManagementPage() {
                     </select>
                     {tab === 'adjustments' || tab === 'movements' ? (
                         <select
-                            aria-label="Product"
+                            aria-label={t('Product')}
                             onChange={(event) =>
                                 setDraft((value) => ({
                                     ...value,
@@ -390,7 +388,7 @@ export function InventoryManagementPage() {
                             }
                             value={draft.product_id}
                         >
-                            <option value="">All products</option>
+                            <option value="">{t('All products')}</option>
                             {options.products.map((product) => (
                                 <option key={product.id} value={product.id}>
                                     {product.sku} · {product.name}
@@ -400,18 +398,18 @@ export function InventoryManagementPage() {
                     ) : null}
                     <SubtypeFilter draft={draft.subtype} options={options} setDraft={setDraft} tab={tab} />
                     <Button icon="search" type="submit">
-                        Apply
+                        {t('Apply')}
                     </Button>
                 </form>
                 {loading ? (
                     <div className="ui-loading" role="status">
                         <span />
-                        Loading inventory…
+                        {t('Loading inventory…')}
                     </div>
                 ) : rows.length === 0 ? (
                     <EmptyState
-                        description="No records match the current section and filters."
-                        title={`No ${tabLabels[tab].toLowerCase()} found`}
+                        description={t('No records match the current section and filters.')}
+                        title={t('No {section} found', { section: t(tabLabels[tab]) })}
                     />
                 ) : (
                     <InventoryTable
@@ -426,7 +424,11 @@ export function InventoryManagementPage() {
                 )}
                 <footer className="table-footer">
                     <span>
-                        {meta.from ?? 0}–{meta.to ?? 0} of {meta.total}
+                        {t('{from}–{to} of {total}', {
+                            from: formatNumber(meta.from ?? 0),
+                            to: formatNumber(meta.to ?? 0),
+                            total: formatNumber(meta.total),
+                        })}
                     </span>
                     <button
                         disabled={meta.current_page <= 1 || loading}
@@ -438,10 +440,13 @@ export function InventoryManagementPage() {
                         }
                         type="button"
                     >
-                        Previous
+                        {t('Previous')}
                     </button>
                     <strong>
-                        Page {meta.current_page} of {meta.last_page}
+                        {t('Page {current} of {total}', {
+                            current: formatNumber(meta.current_page),
+                            total: formatNumber(meta.last_page),
+                        })}
                     </strong>
                     <button
                         disabled={meta.current_page >= meta.last_page || loading}
@@ -453,7 +458,7 @@ export function InventoryManagementPage() {
                         }
                         type="button"
                     >
-                        Next
+                        {t('Next')}
                     </button>
                 </footer>
             </Panel>
@@ -490,6 +495,7 @@ function SubtypeFilter({
     >;
     tab: Tab;
 }) {
+    const { t } = useLocale();
     const values =
         tab === 'stock'
             ? [
@@ -516,13 +522,13 @@ function SubtypeFilter({
                   ];
     return (
         <select
-            aria-label="Type filter"
+            aria-label={t('Type filter')}
             onChange={(event) => setDraft((value) => ({ ...value, subtype: event.target.value }))}
             value={draft || (tab === 'stock' ? 'all' : '')}
         >
             {values.map(([value, label]) => (
                 <option key={value} value={value}>
-                    {label}
+                    {t(label)}
                 </option>
             ))}
         </select>
@@ -546,21 +552,24 @@ function InventoryTable({
     rows: (InventoryBalance | StockImport | StockAdjustment | StockMovement)[];
     tab: Tab;
 }) {
+    const { formatDateTime, formatNumber, t } = useLocale();
+    const dateTime = (value: string | null) => (value ? formatDateTime(value) : '—');
+
     if (tab === 'stock')
         return (
             <div className="ui-table-wrap">
                 <table className="ui-table inventory-on-hand-table">
                     <thead>
                         <tr>
-                            <th>Product</th>
-                            <th className="is-numeric">Base-unit stock</th>
-                            <th>Selling-unit equivalent</th>
-                            <th>Last changed</th>
+                            <th>{t('Product')}</th>
+                            <th className="is-numeric">{t('Base-unit stock')}</th>
+                            <th>{t('Selling-unit equivalent')}</th>
+                            <th>{t('Last changed')}</th>
                         </tr>
                     </thead>
                     <tbody>
                         {(rows as InventoryBalance[]).map((row) => {
-                            const units = stockUnits(row);
+                            const units = stockUnits(row, formatNumber, t);
                             return (
                                 <tr key={row.id}>
                                     <td>
@@ -568,8 +577,8 @@ function InventoryTable({
                                         <small>{row.product.sku}</small>
                                     </td>
                                     <td className="is-numeric">
-                                        <strong className="stock-number">{number(row.quantity)}</strong>
-                                        <small>{units.baseName} · stored quantity</small>
+                                        <strong className="stock-number">{formatNumber(row.quantity)}</strong>
+                                        <small>{t('{unit} · stored quantity', { unit: units.baseName })}</small>
                                     </td>
                                     <td>
                                         <strong>{units.equivalent}</strong>
@@ -589,12 +598,12 @@ function InventoryTable({
                 <table className="ui-table">
                     <thead>
                         <tr>
-                            <th>Reference</th>
-                            <th>Warehouse</th>
-                            <th className="is-numeric">Items / units</th>
-                            <th>Status</th>
-                            <th>Created</th>
-                            {canImport ? <th className="ui-table__actions">Actions</th> : null}
+                            <th>{t('Reference')}</th>
+                            <th>{t('Warehouse')}</th>
+                            <th className="is-numeric">{t('Items / units')}</th>
+                            <th>{t('Status')}</th>
+                            <th>{t('Created')}</th>
+                            {canImport ? <th className="ui-table__actions">{t('Actions')}</th> : null}
                         </tr>
                     </thead>
                     <tbody>
@@ -617,12 +626,12 @@ function InventoryTable({
                                 </td>
                                 <td className="is-numeric">
                                     <strong>
-                                        {row.items.length} / {number(row.total_quantity)}
+                                        {formatNumber(row.items.length)} / {formatNumber(row.total_quantity)}
                                     </strong>
                                     <small>{row.items.map((item) => item.product.sku).join(', ')}</small>
                                 </td>
                                 <td>
-                                    <StatusBadge tone={badge(row.status)}>{row.status}</StatusBadge>
+                                    <StatusBadge tone={badge(row.status)}>{t(row.status)}</StatusBadge>
                                     {row.void_reason ? <small>{row.void_reason}</small> : null}
                                 </td>
                                 <td>{dateTime(row.created_at)}</td>
@@ -633,17 +642,17 @@ function InventoryTable({
                                                 <>
                                                     <IconButton
                                                         icon="edit"
-                                                        label={`Edit ${row.reference}`}
+                                                        label={t('Edit {name}', { name: row.reference })}
                                                         onClick={() => onImportEdit(row)}
                                                     />
                                                     <IconButton
                                                         icon="check"
-                                                        label={`Post ${row.reference}`}
+                                                        label={t('Post {reference}', { reference: row.reference })}
                                                         requiresOnline
                                                         onClick={() =>
                                                             void onCommand(
                                                                 () => inventoryApi.postImport(row.id),
-                                                                `${row.reference} posted.`,
+                                                                t('{reference} posted.', { reference: row.reference }),
                                                             )
                                                         }
                                                         tone="primary"
@@ -653,16 +662,20 @@ function InventoryTable({
                                             {row.status === 'posted' ? (
                                                 <IconButton
                                                     icon="reverse"
-                                                    label={`Void ${row.reference}`}
+                                                    label={t('Void {reference}', { reference: row.reference })}
                                                     requiresOnline
                                                     onClick={() => {
                                                         const reason = window.prompt(
-                                                            `Reason for voiding ${row.reference}`,
+                                                            t('Reason for voiding {reference}', {
+                                                                reference: row.reference,
+                                                            }),
                                                         );
                                                         if (reason?.trim())
                                                             void onCommand(
                                                                 () => inventoryApi.voidImport(row.id, reason.trim()),
-                                                                `${row.reference} reversed.`,
+                                                                t('{reference} reversed.', {
+                                                                    reference: row.reference,
+                                                                }),
                                                             );
                                                     }}
                                                     tone="danger"
@@ -683,13 +696,13 @@ function InventoryTable({
                 <table className="ui-table">
                     <thead>
                         <tr>
-                            <th>Reference</th>
-                            <th>Product / warehouse</th>
-                            <th>Direction</th>
-                            <th className="is-numeric">Quantity</th>
-                            <th>Reason</th>
-                            <th>Status</th>
-                            {canAdjust ? <th className="ui-table__actions">Actions</th> : null}
+                            <th>{t('Reference')}</th>
+                            <th>{t('Product / warehouse')}</th>
+                            <th>{t('Direction')}</th>
+                            <th className="is-numeric">{t('Quantity')}</th>
+                            <th>{t('Reason')}</th>
+                            <th>{t('Status')}</th>
+                            {canAdjust ? <th className="ui-table__actions">{t('Actions')}</th> : null}
                         </tr>
                     </thead>
                     <tbody>
@@ -707,11 +720,11 @@ function InventoryTable({
                                 </td>
                                 <td>
                                     <StatusBadge tone={row.adjustment_type === 'increase' ? 'success' : 'warning'}>
-                                        {row.adjustment_type}
+                                        {t(row.adjustment_type)}
                                     </StatusBadge>
                                 </td>
                                 <td className="is-numeric">
-                                    <strong>{number(row.quantity)}</strong>
+                                    <strong>{formatNumber(row.quantity)}</strong>
                                     <small>{row.product.unit}</small>
                                 </td>
                                 <td>
@@ -719,7 +732,7 @@ function InventoryTable({
                                     <small>{row.created_by.name}</small>
                                 </td>
                                 <td>
-                                    <StatusBadge tone={badge(row.status)}>{row.status}</StatusBadge>
+                                    <StatusBadge tone={badge(row.status)}>{t(row.status)}</StatusBadge>
                                 </td>
                                 {canAdjust ? (
                                     <td className="ui-table__actions">
@@ -728,17 +741,17 @@ function InventoryTable({
                                                 <>
                                                     <IconButton
                                                         icon="edit"
-                                                        label={`Edit ${row.reference}`}
+                                                        label={t('Edit {name}', { name: row.reference })}
                                                         onClick={() => onAdjustEdit(row)}
                                                     />
                                                     <IconButton
                                                         icon="check"
-                                                        label={`Post ${row.reference}`}
+                                                        label={t('Post {reference}', { reference: row.reference })}
                                                         requiresOnline
                                                         onClick={() =>
                                                             void onCommand(
                                                                 () => inventoryApi.postAdjustment(row.id),
-                                                                `${row.reference} posted.`,
+                                                                t('{reference} posted.', { reference: row.reference }),
                                                             )
                                                         }
                                                         tone="primary"
@@ -759,12 +772,12 @@ function InventoryTable({
             <table className="ui-table">
                 <thead>
                     <tr>
-                        <th>When / reference</th>
-                        <th>Movement</th>
-                        <th>Product</th>
-                        <th className="is-numeric">Quantity</th>
-                        <th>Source / actor</th>
-                        <th>Notes</th>
+                        <th>{t('When / reference')}</th>
+                        <th>{t('Movement')}</th>
+                        <th>{t('Product')}</th>
+                        <th className="is-numeric">{t('Quantity')}</th>
+                        <th>{t('Source / actor')}</th>
+                        <th>{t('Notes')}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -776,7 +789,7 @@ function InventoryTable({
                             </td>
                             <td>
                                 <StatusBadge tone={row.movement_type.endsWith('_IN') ? 'success' : 'warning'}>
-                                    {row.movement_type.replaceAll('_', ' ')}
+                                    {t(row.movement_type.replaceAll('_', ' '))}
                                 </StatusBadge>
                             </td>
                             <td>
@@ -786,13 +799,13 @@ function InventoryTable({
                             <td className="is-numeric">
                                 <strong>
                                     {row.movement_type.endsWith('_IN') ? '+' : '−'}
-                                    {number(row.quantity)}
+                                    {formatNumber(row.quantity)}
                                 </strong>
                                 <small>{row.product.unit}</small>
                             </td>
                             <td>
                                 <span className="table-primary">
-                                    {row.source.type.replaceAll('_', ' ')} #{row.source.id}
+                                    {t(row.source.type.replaceAll('_', ' '))} #{formatNumber(row.source.id)}
                                 </span>
                                 <small>{row.actor.name}</small>
                             </td>
@@ -811,6 +824,7 @@ function FieldError({ errors, name }: { errors: Record<string, string[]>; name: 
 
 export function StockImportFormPage() {
     const navigate = useNavigate();
+    const { t } = useLocale();
     const { importId } = useParams();
     const [options, setOptions] = useState(emptyOptions);
     const [importRecord, setImportRecord] = useState<StockImport | null>(null);
@@ -830,7 +844,7 @@ export function StockImportFormPage() {
                 setImportRecord(response?.data ?? null);
             })
             .catch((requestError) => {
-                if (active) setError(errorMessage(requestError));
+                if (active) setError(errorMessage(requestError, t('Unable to complete the request.')));
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -838,18 +852,20 @@ export function StockImportFormPage() {
         return () => {
             active = false;
         };
-    }, [importId]);
+    }, [importId, t]);
 
     return (
         <div className="admin-page stock-import-form-page">
             <header className="page-heading">
                 <div>
-                    <p className="ui-eyebrow">Inventory control</p>
-                    <h1>{importRecord ? `Edit ${importRecord.reference}` : 'Create stock import'}</h1>
-                    <p>Build and save a receiving draft before posting it from the import register.</p>
+                    <p className="ui-eyebrow">{t('Inventory control')}</p>
+                    <h1>
+                        {importRecord ? t('Edit {name}', { name: importRecord.reference }) : t('Create stock import')}
+                    </h1>
+                    <p>{t('Build and save a receiving draft before posting it from the import register.')}</p>
                 </div>
                 <Button icon="chevronLeft" onClick={() => navigate('/admin/inventory')}>
-                    Back to inventory
+                    {t('Back to inventory')}
                 </Button>
             </header>
             {notice ? <div className="ui-flash ui-flash--success">{notice}</div> : null}
@@ -857,7 +873,7 @@ export function StockImportFormPage() {
             {loading ? (
                 <div className="ui-loading" role="status">
                     <span />
-                    Loading import form…
+                    {t('Loading import form…')}
                 </div>
             ) : (
                 <StockImportForm
@@ -888,6 +904,7 @@ function StockImportForm({
     onSaved: (record: StockImport, message: string) => void;
     options: InventoryOptions;
 }) {
+    const { formatNumber, t } = useLocale();
     const [form, setForm] = useState<ImportInput>(() =>
         importRecord
             ? {
@@ -922,18 +939,18 @@ function StockImportForm({
     }, [options.products, productQuery]);
     const next = () => {
         const nextErrors: Record<string, string[]> = {};
-        if (step === 1 && !form.warehouse_id) nextErrors.warehouse_id = ['Select a destination warehouse.'];
+        if (step === 1 && !form.warehouse_id) nextErrors.warehouse_id = [t('Select a destination warehouse.')];
         if (step === 2) {
-            if (!form.items.length) nextErrors.items = ['Select at least one product.'];
+            if (!form.items.length) nextErrors.items = [t('Select at least one product.')];
             form.items.forEach((item, index) => {
-                if (!item.product_id) nextErrors[`items.${index}.product_id`] = ['Select a product.'];
+                if (!item.product_id) nextErrors[`items.${index}.product_id`] = [t('Select a product.')];
             });
         }
         if (step === 3) {
             form.items.forEach((item, index) => {
-                if (!item.product_unit_id) nextErrors[`items.${index}.product_unit_id`] = ['Select a product unit.'];
+                if (!item.product_unit_id) nextErrors[`items.${index}.product_unit_id`] = [t('Select a product unit.')];
                 if (!Number.isInteger(item.quantity) || item.quantity < 1)
-                    nextErrors[`items.${index}.quantity`] = ['Enter a whole quantity of at least 1.'];
+                    nextErrors[`items.${index}.quantity`] = [t('Enter a whole quantity of at least 1.')];
             });
         }
         setErrors(nextErrors);
@@ -941,12 +958,12 @@ function StockImportForm({
     };
     const saveDraft = async (): Promise<StockImport | null> => {
         const nextErrors: Record<string, string[]> = {};
-        if (!form.warehouse_id) nextErrors.warehouse_id = ['Select a destination warehouse.'];
-        if (!form.items.length) nextErrors.items = ['Select at least one product.'];
+        if (!form.warehouse_id) nextErrors.warehouse_id = [t('Select a destination warehouse.')];
+        if (!form.items.length) nextErrors.items = [t('Select at least one product.')];
         form.items.forEach((item, index) => {
-            if (!item.product_unit_id) nextErrors[`items.${index}.product_unit_id`] = ['Select a product unit.'];
+            if (!item.product_unit_id) nextErrors[`items.${index}.product_unit_id`] = [t('Select a product unit.')];
             if (!Number.isInteger(item.quantity) || item.quantity < 1)
-                nextErrors[`items.${index}.quantity`] = ['Enter a whole quantity of at least 1.'];
+                nextErrors[`items.${index}.quantity`] = [t('Enter a whole quantity of at least 1.')];
         });
         if (Object.keys(nextErrors).length) {
             setErrors(nextErrors);
@@ -958,13 +975,13 @@ function StockImportForm({
             const response = importRecord
                 ? await inventoryApi.updateImport(importRecord.id, form)
                 : await inventoryApi.createImport(form);
-            onSaved(response.data, importRecord ? 'Import draft updated.' : 'Import draft created.');
+            onSaved(response.data, t(importRecord ? 'Import draft updated.' : 'Import draft created.'));
             return response.data;
         } catch (requestError) {
             if (requestError instanceof InventoryApiError) setErrors(requestError.fields);
             setErrors((value) => ({
                 ...value,
-                form: [errorMessage(requestError)],
+                form: [errorMessage(requestError, t('Unable to complete the request.'))],
             }));
         } finally {
             setSaving(false);
@@ -974,14 +991,19 @@ function StockImportForm({
     const postImport = async () => {
         const record = await saveDraft();
         if (!record) return;
-        if (!window.confirm(`Post ${record.reference}? Warehouse stock will update immediately.`)) return;
+        if (
+            !window.confirm(
+                t('Post {reference}? Warehouse stock will update immediately.', { reference: record.reference }),
+            )
+        )
+            return;
         setSaving(true);
         setErrors({});
         try {
             await inventoryApi.postImport(record.id);
             onPosted();
         } catch (requestError) {
-            setErrors({ form: [errorMessage(requestError)] });
+            setErrors({ form: [errorMessage(requestError, t('Unable to complete the request.'))] });
         } finally {
             setSaving(false);
         }
@@ -993,7 +1015,7 @@ function StockImportForm({
     return (
         <section className="stock-import-form-page__panel">
             <form className="management-form" id="stock-import-form" onSubmit={submit}>
-                <ol aria-label="Import progress" className="form-stepper">
+                <ol aria-label={t('Import progress')} className="form-stepper">
                     {['Basic information', 'Product selection', 'Unit & quantity', 'Review & submit'].map(
                         (label, index) => (
                             <li
@@ -1001,8 +1023,8 @@ function StockImportForm({
                                 className={step >= index + 1 ? 'is-active' : ''}
                                 key={label}
                             >
-                                <span>{index + 1}</span>
-                                <strong>{label}</strong>
+                                <span>{formatNumber(index + 1)}</span>
+                                <strong>{t(label)}</strong>
                             </li>
                         ),
                     )}
@@ -1011,7 +1033,7 @@ function StockImportForm({
                 {step === 1 ? (
                     <div className="form-grid">
                         <label className="ui-field">
-                            <span>Destination warehouse</span>
+                            <span>{t('Destination warehouse')}</span>
                             <select
                                 onChange={(event) =>
                                     setForm((value) => ({
@@ -1031,7 +1053,7 @@ function StockImportForm({
                             <FieldError errors={errors} name="warehouse_id" />
                         </label>
                         <label className="ui-field">
-                            <span>Notes</span>
+                            <span>{t('Notes')}</span>
                             <input
                                 maxLength={2000}
                                 onChange={(event) =>
@@ -1040,7 +1062,7 @@ function StockImportForm({
                                         notes: event.target.value,
                                     }))
                                 }
-                                placeholder="Supplier, delivery, or receiving note"
+                                placeholder={t('Supplier, delivery, or receiving note')}
                                 value={form.notes}
                             />
                         </label>
@@ -1049,21 +1071,23 @@ function StockImportForm({
                 {step === 2 ? (
                     <div className="stock-import-products">
                         <div className="import-lines__heading">
-                            <strong>Select products</strong>
-                            <small>Choose every product included in this delivery.</small>
+                            <strong>{t('Select products')}</strong>
+                            <small>{t('Choose every product included in this delivery.')}</small>
                         </div>
                         <div className="stock-import-products__toolbar">
                             <label className="stock-import-products__search">
-                                <span className="sr-only">Search import products</span>
+                                <span className="sr-only">{t('Search import products')}</span>
                                 <Icon name="search" size={16} />
                                 <input
                                     onChange={(event) => setProductQuery(event.target.value)}
-                                    placeholder="Search product name or SKU"
+                                    placeholder={t('Search product name or SKU')}
                                     type="search"
                                     value={productQuery}
                                 />
                             </label>
-                            <strong aria-live="polite">{form.items.length} selected</strong>
+                            <strong aria-live="polite">
+                                {t('{count} selected', { count: formatNumber(form.items.length) })}
+                            </strong>
                             {form.items.length ? (
                                 <Button
                                     onClick={() => {
@@ -1072,7 +1096,7 @@ function StockImportForm({
                                     }}
                                     tone="ghost"
                                 >
-                                    Clear selection
+                                    {t('Clear selection')}
                                 </Button>
                             ) : null}
                         </div>
@@ -1085,7 +1109,7 @@ function StockImportForm({
                                         key={product.id}
                                     >
                                         <input
-                                            aria-label={`Select ${product.name}`}
+                                            aria-label={t('Select {name}', { name: product.name })}
                                             checked={selected}
                                             onChange={() => {
                                                 setForm((value) => ({
@@ -1117,13 +1141,13 @@ function StockImportForm({
                                                 {product.sku} · {product.unit}
                                             </small>
                                         </span>
-                                        <strong>{money(product.selling_price)}</strong>
+                                        <strong>{formatNumber(product.selling_price)} MMK</strong>
                                     </label>
                                 );
                             })}
                         </div>
                         {filteredProducts.length === 0 ? (
-                            <div className="stock-import-products__empty">No products match your search.</div>
+                            <div className="stock-import-products__empty">{t('No products match your search.')}</div>
                         ) : null}
                         <FieldError errors={errors} name="items" />
                     </div>
@@ -1131,8 +1155,8 @@ function StockImportForm({
                 {step === 3 ? (
                     <div className="import-lines">
                         <div className="import-lines__heading">
-                            <strong>Units and quantities</strong>
-                            <small>Select how each product is packaged in this delivery.</small>
+                            <strong>{t('Units and quantities')}</strong>
+                            <small>{t('Select how each product is packaged in this delivery.')}</small>
                         </div>
                         {form.items.map((item, index) => {
                             const selectedProduct = options.products.find((product) => product.id === item.product_id);
@@ -1144,7 +1168,7 @@ function StockImportForm({
                                         <small>{selectedProduct?.sku}</small>
                                     </div>
                                     <label className="ui-field">
-                                        <span>Unit</span>
+                                        <span>{t('Unit')}</span>
                                         <select
                                             onChange={(event) =>
                                                 setForm((value) => ({
@@ -1163,21 +1187,21 @@ function StockImportForm({
                                             value={item.product_unit_id || ''}
                                         >
                                             <option disabled value="">
-                                                Select unit
+                                                {t('Select unit')}
                                             </option>
                                             {(selectedProduct?.units ?? []).map((unit) => (
                                                 <option key={unit.id} value={unit.id}>
                                                     {unit.name}
                                                     {unit.is_base
-                                                        ? ' (base unit)'
-                                                        : ` (${number(unit.conversion_factor)} ${baseUnit?.name ?? 'base units'})`}
+                                                        ? ` (${t('base unit')})`
+                                                        : ` (${formatNumber(unit.conversion_factor)} ${baseUnit?.name ?? t('base units')})`}
                                                 </option>
                                             ))}
                                         </select>
                                         <FieldError errors={errors} name={`items.${index}.product_unit_id`} />
                                     </label>
                                     <label className="ui-field">
-                                        <span>Import quantity</span>
+                                        <span>{t('Import quantity')}</span>
                                         <input
                                             min={1}
                                             onChange={(event) =>
@@ -1205,19 +1229,19 @@ function StockImportForm({
                 {step === 4 ? (
                     <div className="import-review">
                         <section>
-                            <p className="ui-eyebrow">Basic information</p>
+                            <p className="ui-eyebrow">{t('Basic information')}</p>
                             <strong>
                                 {options.warehouses.find((warehouse) => warehouse.id === form.warehouse_id)?.name}
                             </strong>
-                            <small>{form.notes || 'No receiving note'}</small>
+                            <small>{form.notes || t('No receiving note')}</small>
                         </section>
                         <div className="ui-table-wrap">
                             <table className="ui-table">
                                 <thead>
                                     <tr>
-                                        <th>Product</th>
-                                        <th>Unit</th>
-                                        <th className="is-numeric">Quantity</th>
+                                        <th>{t('Product')}</th>
+                                        <th>{t('Unit')}</th>
+                                        <th className="is-numeric">{t('Quantity')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1233,22 +1257,32 @@ function StockImportForm({
                                                 <td>
                                                     <strong>{selectedProduct?.name}</strong>
                                                     <small>
-                                                        {selectedProduct?.sku} · Base unit:{' '}
-                                                        {selectedProduct?.units?.find((unit) => unit.is_base)?.name ??
-                                                            selectedProduct?.unit}
+                                                        {t('{sku} · Base unit: {unit}', {
+                                                            sku: selectedProduct?.sku ?? '',
+                                                            unit:
+                                                                selectedProduct?.units?.find((unit) => unit.is_base)
+                                                                    ?.name ??
+                                                                selectedProduct?.unit ??
+                                                                '',
+                                                        })}
                                                     </small>
                                                 </td>
                                                 <td>
-                                                    <strong>{selectedUnit?.name ?? 'Not selected'}</strong>
+                                                    <strong>{selectedUnit?.name ?? t('Not selected')}</strong>
                                                     <small>
-                                                        {number(selectedUnit?.conversion_factor ?? 0)} base units each
+                                                        {t('{count} base units each', {
+                                                            count: formatNumber(selectedUnit?.conversion_factor ?? 0),
+                                                        })}
                                                     </small>
                                                 </td>
                                                 <td className="is-numeric">
-                                                    <strong>{number(item.quantity)}</strong>
+                                                    <strong>{formatNumber(item.quantity)}</strong>
                                                     <small>
-                                                        {number(item.quantity * (selectedUnit?.conversion_factor ?? 0))}{' '}
-                                                        base units
+                                                        {t('{count} base units', {
+                                                            count: formatNumber(
+                                                                item.quantity * (selectedUnit?.conversion_factor ?? 0),
+                                                            ),
+                                                        })}
                                                     </small>
                                                 </td>
                                             </tr>
@@ -1258,20 +1292,21 @@ function StockImportForm({
                             </table>
                         </div>
                         <div className="import-review__total">
-                            <span>{form.items.length} products</span>
+                            <span>{t('{count} products', { count: formatNumber(form.items.length) })}</span>
                             <strong>
-                                {number(
-                                    form.items.reduce((sum, item) => {
-                                        const product = options.products.find(
-                                            (option) => option.id === item.product_id,
-                                        );
-                                        const unit = product?.units?.find(
-                                            (option) => option.id === item.product_unit_id,
-                                        );
-                                        return sum + item.quantity * (unit?.conversion_factor ?? 0);
-                                    }, 0),
-                                )}{' '}
-                                total base units
+                                {t('{count} total base units', {
+                                    count: formatNumber(
+                                        form.items.reduce((sum, item) => {
+                                            const product = options.products.find(
+                                                (option) => option.id === item.product_id,
+                                            );
+                                            const unit = product?.units?.find(
+                                                (option) => option.id === item.product_unit_id,
+                                            );
+                                            return sum + item.quantity * (unit?.conversion_factor ?? 0);
+                                        }, 0),
+                                    ),
+                                })}
                             </strong>
                         </div>
                     </div>
@@ -1279,25 +1314,25 @@ function StockImportForm({
             </form>
             <footer className="stock-import-form-page__actions">
                 <Button disabled={saving} onClick={onCancel}>
-                    Cancel
+                    {t('Cancel')}
                 </Button>
                 {step > 1 ? (
                     <Button disabled={saving} onClick={() => setStep((value) => value - 1)}>
-                        Back
+                        {t('Back')}
                     </Button>
                 ) : null}
                 {step === 3 ? (
                     <Button disabled={saving} onClick={() => void saveDraft()} requiresOnline>
-                        {saving ? 'Saving…' : 'Save draft'}
+                        {saving ? t('Saving…') : t('Save draft')}
                     </Button>
                 ) : null}
                 {step < 4 ? (
                     <Button disabled={saving} onClick={next} tone="primary">
-                        {step === 3 ? 'Review' : 'Next'}
+                        {t(step === 3 ? 'Review' : 'Next')}
                     </Button>
                 ) : (
                     <Button disabled={saving} onClick={() => void postImport()} requiresOnline tone="primary">
-                        {saving ? 'Posting…' : 'Post import'}
+                        {saving ? t('Posting…') : t('Post import')}
                     </Button>
                 )}
             </footer>
@@ -1318,6 +1353,7 @@ function AdjustmentDialog({
     open: boolean;
     options: InventoryOptions;
 }) {
+    const { t } = useLocale();
     const [form, setForm] = useState<AdjustmentInput>({
         adjustment_type: 'increase',
         notes: '',
@@ -1359,12 +1395,12 @@ function AdjustmentDialog({
         try {
             if (adjustment) await inventoryApi.updateAdjustment(adjustment.id, form);
             else await inventoryApi.createAdjustment(form);
-            await onSaved(adjustment ? 'Adjustment draft updated.' : 'Adjustment draft created.');
+            await onSaved(t(adjustment ? 'Adjustment draft updated.' : 'Adjustment draft created.'));
         } catch (requestError) {
             if (requestError instanceof InventoryApiError) setErrors(requestError.fields);
             setErrors((value) => ({
                 ...value,
-                form: [errorMessage(requestError)],
+                form: [errorMessage(requestError, t('Unable to complete the request.'))],
             }));
         } finally {
             setSaving(false);
@@ -1372,26 +1408,30 @@ function AdjustmentDialog({
     };
     return (
         <Dialog
-            description="A reason is mandatory. Decreases are checked against locked on-hand stock when posted."
+            description={t('A reason is mandatory. Decreases are checked against locked on-hand stock when posted.')}
             footer={
                 <>
                     <Button disabled={saving} onClick={onClose}>
-                        Cancel
+                        {t('Cancel')}
                     </Button>
                     <Button disabled={saving} form="stock-adjustment-form" requiresOnline tone="primary" type="submit">
-                        {saving ? 'Saving…' : 'Save draft'}
+                        {saving ? t('Saving…') : t('Save draft')}
                     </Button>
                 </>
             }
             onClose={onClose}
             open={open}
-            title={adjustment ? `Edit adjustment · ${adjustment.reference}` : 'Create stock adjustment'}
+            title={
+                adjustment
+                    ? t('Edit adjustment · {reference}', { reference: adjustment.reference })
+                    : t('Create stock adjustment')
+            }
         >
             <form className="management-form" id="stock-adjustment-form" onSubmit={submit}>
                 {errors.form?.[0] ? <div className="ui-form-error">{errors.form[0]}</div> : null}
                 <div className="form-grid">
                     <label className="ui-field">
-                        <span>Warehouse</span>
+                        <span>{t('Warehouse')}</span>
                         <select
                             onChange={(event) => change('warehouse_id', Number(event.target.value))}
                             required
@@ -1406,7 +1446,7 @@ function AdjustmentDialog({
                         <FieldError errors={errors} name="warehouse_id" />
                     </label>
                     <label className="ui-field">
-                        <span>Product</span>
+                        <span>{t('Product')}</span>
                         <select
                             onChange={(event) => change('product_id', Number(event.target.value))}
                             required
@@ -1421,19 +1461,19 @@ function AdjustmentDialog({
                         <FieldError errors={errors} name="product_id" />
                     </label>
                     <label className="ui-field">
-                        <span>Direction</span>
+                        <span>{t('Direction')}</span>
                         <select
                             onChange={(event) =>
                                 change('adjustment_type', event.target.value as 'increase' | 'decrease')
                             }
                             value={form.adjustment_type}
                         >
-                            <option value="increase">Increase stock</option>
-                            <option value="decrease">Decrease stock</option>
+                            <option value="increase">{t('Increase stock')}</option>
+                            <option value="decrease">{t('Decrease stock')}</option>
                         </select>
                     </label>
                     <label className="ui-field">
-                        <span>Quantity</span>
+                        <span>{t('Quantity')}</span>
                         <input
                             min={1}
                             onChange={(event) => change('quantity', editableNumber(event.target.value))}
@@ -1445,19 +1485,19 @@ function AdjustmentDialog({
                         <FieldError errors={errors} name="quantity" />
                     </label>
                     <label className="ui-field form-grid__wide">
-                        <span>Reason</span>
+                        <span>{t('Reason')}</span>
                         <input
                             autoFocus
                             maxLength={500}
                             onChange={(event) => change('reason', event.target.value)}
-                            placeholder="Verified physical count difference"
+                            placeholder={t('Verified physical count difference')}
                             required
                             value={form.reason}
                         />
                         <FieldError errors={errors} name="reason" />
                     </label>
                     <label className="ui-field form-grid__wide">
-                        <span>Notes</span>
+                        <span>{t('Notes')}</span>
                         <textarea
                             maxLength={2000}
                             onChange={(event) => change('notes', event.target.value)}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useSession } from '../../auth/session-context';
 import type { PaginationMeta } from '../../services/administration';
 import {
@@ -19,6 +19,7 @@ import {
 import { Icon, type IconName } from '../../ui/icons';
 import { editableNumber } from '../../ui/form-values';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
+import { useLocale } from '../../localization/locale-context';
 
 type Tab = 'warehouse' | 'representative' | 'return' | 'stock';
 const emptyMeta: PaginationMeta = {
@@ -52,19 +53,8 @@ const tabIcons: Record<Tab, IconName> = {
     return: 'reverse',
     stock: 'box',
 };
-function message(error: unknown) {
-    return error instanceof Error ? error.message : 'Unable to complete the request.';
-}
-function number(value: number) {
-    return new Intl.NumberFormat('en-US').format(value);
-}
-function dateTime(value: string | null) {
-    return value
-        ? new Intl.DateTimeFormat(undefined, {
-              dateStyle: 'medium',
-              timeStyle: 'short',
-          }).format(new Date(value))
-        : '—';
+function message(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback;
 }
 function tone(status: string) {
     return status === 'received'
@@ -80,6 +70,7 @@ function tone(status: string) {
 
 export function TransferManagementPage() {
     const navigate = useNavigate();
+    const { formatNumber, t } = useLocale();
     const { user } = useSession();
     const superAdmin = user?.roles.includes('super-admin');
     const allowed = (permission: string) => Boolean(superAdmin || user?.permissions.includes(permission));
@@ -158,11 +149,11 @@ export function TransferManagementPage() {
                 setRepresentativeOptions(options);
             }
         } catch (requestError) {
-            setError(message(requestError));
+            setError(message(requestError, t('Unable to complete the request.')));
         } finally {
             setLoading(false);
         }
-    }, [filters, tab]);
+    }, [filters, tab, t]);
 
     useEffect(() => {
         let active = true;
@@ -188,7 +179,7 @@ export function TransferManagementPage() {
                 setError('');
             })
             .catch((requestError) => {
-                if (active) setError(message(requestError));
+                if (active) setError(message(requestError, t('Unable to complete the request.')));
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -196,7 +187,7 @@ export function TransferManagementPage() {
         return () => {
             active = false;
         };
-    }, [filters, tab]);
+    }, [filters, tab, t]);
 
     const showNotice = (value: string) => {
         setNotice(value);
@@ -210,7 +201,7 @@ export function TransferManagementPage() {
             await load();
             showNotice(value);
         } catch (requestError) {
-            setError(message(requestError));
+            setError(message(requestError, t('Unable to complete the request.')));
             setLoading(false);
         }
     };
@@ -225,58 +216,51 @@ export function TransferManagementPage() {
         <div className="admin-page transfer-management">
             <header className="page-heading">
                 <div>
-                    <p className="ui-eyebrow">Stock movement</p>
-                    <h1>Transfers</h1>
+                    <p className="ui-eyebrow">{t('Stock movement')}</p>
+                    <h1>{t('Transfers')}</h1>
                     <p>
-                        Move stock through dispatch, in transit, receipt, and controlled reversal without losing custody
-                        history.
+                        {t(
+                            'Move stock through dispatch, in transit, receipt, and controlled reversal without losing custody history.',
+                        )}
                     </p>
                 </div>
                 <div className="page-heading__actions">
                     {tab === 'warehouse' && canCreateWarehouse ? (
                         <Button icon="plus" onClick={() => navigate('/admin/transfers/warehouse/new')} tone="primary">
-                            New warehouse transfer
-                        </Button>
-                    ) : null}
-                    {tab === 'representative' && canIssue ? (
-                        <Button
-                            icon="plus"
-                            onClick={() => navigate('/admin/transfers/representative/new')}
-                            tone="primary"
-                        >
-                            New representative issue
+                            {t('New warehouse transfer')}
                         </Button>
                     ) : null}
                     {tab === 'return' && canIssue ? (
-                        <Button
-                            icon="plus"
-                            onClick={() => navigate('/admin/transfers/representative-return/new')}
-                            tone="primary"
-                        >
-                            New representative return
+                        <Button icon="reverse" onClick={() => navigate('/admin/transfers/representative-return/new')} tone="primary">
+                            {t('Authorize stock return')}
                         </Button>
                     ) : null}
                 </div>
             </header>
             <div className="metric-grid access-metrics">
                 <MetricCard
-                    hint="Matching current filters"
+                    hint={t('Matching current filters')}
                     icon="transfer"
-                    label={labels[tab]}
-                    value={number(summary.total)}
+                    label={t(labels[tab])}
+                    value={formatNumber(summary.total)}
                 />
-                <MetricCard hint="Matching current filters" icon="box" label="Units" value={number(summary.units)} />
                 <MetricCard
-                    hint="Matching current filters"
+                    hint={t('Matching current filters')}
+                    icon="box"
+                    label={t('Units')}
+                    value={formatNumber(summary.units)}
+                />
+                <MetricCard
+                    hint={t('Matching current filters')}
                     icon="reports"
-                    label="Products"
-                    value={number(summary.products)}
+                    label={t('Products')}
+                    value={formatNumber(summary.products)}
                 />
                 <MetricCard
-                    hint="Matching current filters"
+                    hint={t('Matching current filters')}
                     icon="truck"
-                    label="In transit rows"
-                    value={String(summary.in_transit)}
+                    label={t('In transit rows')}
+                    value={formatNumber(summary.in_transit)}
                 />
             </div>
             {notice ? (
@@ -290,11 +274,11 @@ export function TransferManagementPage() {
                     <Icon name="x" size={15} />
                     {error}
                     <button onClick={() => void load()} type="button">
-                        Retry
+                        {t('Retry')}
                     </button>
                 </div>
             ) : null}
-            <Panel className="transfer-panel" eyebrow="Custody register" title={labels[tab]}>
+            <Panel className="transfer-panel" eyebrow={t('Custody register')} title={t(labels[tab])}>
                 <div className={`section-tabs section-tabs--${availableTabs.length} transfer-tabs`} role="tablist">
                     {availableTabs.map((value) => (
                         <button
@@ -305,8 +289,10 @@ export function TransferManagementPage() {
                             type="button"
                         >
                             <Icon name={tabIcons[value]} size={15} />
-                            <span>{labels[value]}</span>
-                            {tab === value ? <span className="section-tab-count">{meta.total}</span> : null}
+                            <span>{t(labels[value])}</span>
+                            {tab === value ? (
+                                <span className="section-tab-count">{formatNumber(meta.total)}</span>
+                            ) : null}
                         </button>
                     ))}
                 </div>
@@ -325,21 +311,21 @@ export function TransferManagementPage() {
                     <label className="filter-search">
                         <Icon name="search" size={15} />
                         <input
-                            aria-label="Search transfers"
+                            aria-label={t('Search transfers')}
                             onChange={(event) =>
                                 setDraft((value) => ({
                                     ...value,
                                     search: event.target.value,
                                 }))
                             }
-                            placeholder={tab === 'stock' ? 'Product or SKU' : 'Transfer reference'}
+                            placeholder={t(tab === 'stock' ? 'Product or SKU' : 'Transfer reference')}
                             type="search"
                             value={draft.search}
                         />
                     </label>
                     {tab !== 'stock' ? (
                         <select
-                            aria-label="Transfer status"
+                            aria-label={t('Transfer status')}
                             onChange={(event) =>
                                 setDraft((value) => ({
                                     ...value,
@@ -348,27 +334,27 @@ export function TransferManagementPage() {
                             }
                             value={draft.status}
                         >
-                            <option value="">All statuses</option>
-                            <option value="draft">Draft</option>
-                            <option value="dispatched">Dispatched</option>
-                            <option value="received">Received</option>
-                            <option value="cancelled">Cancelled</option>
-                            <option value="reversed">Reversed</option>
+                            <option value="">{t('All statuses')}</option>
+                            <option value="draft">{t('Draft')}</option>
+                            <option value="dispatched">{t('Dispatched')}</option>
+                            <option value="received">{t('Received')}</option>
+                            <option value="cancelled">{t('Cancelled')}</option>
+                            <option value="reversed">{t('Reversed')}</option>
                         </select>
                     ) : null}
                     <Button icon="search" type="submit">
-                        Apply
+                        {t('Apply')}
                     </Button>
                 </form>
                 {loading ? (
                     <div className="ui-loading">
                         <span />
-                        Loading transfers…
+                        {t('Loading transfers…')}
                     </div>
                 ) : rows.length === 0 ? (
                     <EmptyState
-                        description="No records match the selected workflow and filters."
-                        title={`No ${labels[tab].toLowerCase()} found`}
+                        description={t('No records match the selected workflow and filters.')}
+                        title={t('No {section} found', { section: t(labels[tab]) })}
                     />
                 ) : tab === 'warehouse' ? (
                     <WarehouseTable
@@ -407,7 +393,11 @@ export function TransferManagementPage() {
                 )}
                 <footer className="table-footer">
                     <span>
-                        {meta.from ?? 0}–{meta.to ?? 0} of {meta.total}
+                        {t('{from}–{to} of {total}', {
+                            from: formatNumber(meta.from ?? 0),
+                            to: formatNumber(meta.to ?? 0),
+                            total: formatNumber(meta.total),
+                        })}
                     </span>
                     <button
                         disabled={meta.current_page <= 1 || loading}
@@ -418,10 +408,13 @@ export function TransferManagementPage() {
                             }))
                         }
                     >
-                        Previous
+                        {t('Previous')}
                     </button>
                     <strong>
-                        Page {meta.current_page} of {meta.last_page}
+                        {t('Page {current} of {total}', {
+                            current: formatNumber(meta.current_page),
+                            total: formatNumber(meta.last_page),
+                        })}
                     </strong>
                     <button
                         disabled={meta.current_page >= meta.last_page || loading}
@@ -432,16 +425,16 @@ export function TransferManagementPage() {
                             }))
                         }
                     >
-                        Next
+                        {t('Next')}
                     </button>
                 </footer>
             </Panel>
             <Dialog
-                description="Enter a reason for this state change. It will be saved in the audit trail."
+                description={t('Enter a reason for this state change. It will be saved in the audit trail.')}
                 footer={
                     <>
                         <Button onClick={() => setRepresentativeReasonAction(null)}>
-                            Keep {tab === 'return' ? 'return' : 'issue'}
+                            {t('Keep {type}', { type: t(tab === 'return' ? 'return' : 'issue') })}
                         </Button>
                         <Button
                             disabled={loading || !representativeReason.trim()}
@@ -461,7 +454,10 @@ export function TransferManagementPage() {
                                                   current.action,
                                                   representativeReason.trim(),
                                               ),
-                                    `${current.reference} ${current.action === 'cancel' ? 'cancelled' : 'reversed'}.`,
+                                    t('{reference} {status}.', {
+                                        reference: current.reference,
+                                        status: t(current.action === 'cancel' ? 'cancelled' : 'reversed'),
+                                    }),
                                 ).then(() => {
                                     setRepresentativeReasonAction(null);
                                     setRepresentativeReason('');
@@ -471,10 +467,10 @@ export function TransferManagementPage() {
                             tone="danger"
                         >
                             {loading
-                                ? 'Working…'
+                                ? t('Working…')
                                 : representativeReasonAction?.action === 'reverse'
-                                  ? `Reverse ${tab === 'return' ? 'return' : 'issue'}`
-                                  : `Cancel ${tab === 'return' ? 'return' : 'issue'}`}
+                                  ? t('Reverse {type}', { type: t(tab === 'return' ? 'return' : 'issue') })
+                                  : t('Cancel {type}', { type: t(tab === 'return' ? 'return' : 'issue') })}
                         </Button>
                     </>
                 }
@@ -483,16 +479,23 @@ export function TransferManagementPage() {
                     setRepresentativeReason('');
                 }}
                 open={representativeReasonAction !== null}
-                title={`${representativeReasonAction?.action === 'reverse' ? 'Reverse' : 'Cancel'} ${representativeReasonAction?.reference ?? `representative ${tab === 'return' ? 'return' : 'issue'}`}?`}
+                title={t('{action} {reference}?', {
+                    action: t(representativeReasonAction?.action === 'reverse' ? 'Reverse' : 'Cancel'),
+                    reference:
+                        representativeReasonAction?.reference ??
+                        t('representative {type}', { type: t(tab === 'return' ? 'return' : 'issue') }),
+                })}
                 width="compact"
             >
                 <label className="ui-field">
-                    <span>Reason</span>
+                    <span>{t('Reason')}</span>
                     <textarea
                         autoFocus
                         maxLength={500}
                         onChange={(event) => setRepresentativeReason(event.target.value)}
-                        placeholder={`Explain why this ${tab === 'return' ? 'return' : 'issue'} must change state`}
+                        placeholder={t('Explain why this {type} must change state', {
+                            type: t(tab === 'return' ? 'return' : 'issue'),
+                        })}
                         rows={4}
                         value={representativeReason}
                     />
@@ -519,18 +522,19 @@ function WarehouseTable({
     edit: (row: WarehouseTransfer) => void;
     rows: WarehouseTransfer[];
 }) {
+    const { formatDateTime, formatNumber, t } = useLocale();
     return (
         <div className="ui-table-wrap">
             <table className="ui-table transfer-table">
                 <thead>
                     <tr>
-                        <th>Reference</th>
-                        <th>Route</th>
-                        <th>Products / units</th>
-                        <th>Custody</th>
-                        <th>Status</th>
-                        <th>Created</th>
-                        <th className="ui-table__actions">Actions</th>
+                        <th>{t('Reference')}</th>
+                        <th>{t('Route')}</th>
+                        <th>{t('Products / units')}</th>
+                        <th>{t('Custody')}</th>
+                        <th>{t('Status')}</th>
+                        <th>{t('Created')}</th>
+                        <th className="ui-table__actions">{t('Actions')}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -552,47 +556,56 @@ function WarehouseTable({
                                     {row.source_warehouse.code} → {row.destination_warehouse.code}
                                 </span>
                                 <small>
-                                    {row.source_warehouse.name} to {row.destination_warehouse.name}
+                                    {t('{source} to {destination}', {
+                                        source: row.source_warehouse.name,
+                                        destination: row.destination_warehouse.name,
+                                    })}
                                 </small>
                             </td>
                             <td>
                                 <strong>
-                                    {row.items.length} / {number(row.total_quantity)}
+                                    {formatNumber(row.items.length)} / {formatNumber(row.total_quantity)}
                                 </strong>
                                 <small>{row.items.map((item) => item.product.sku).join(', ')}</small>
                             </td>
                             <td>
                                 <span className="table-primary">
                                     {row.status === 'dispatched'
-                                        ? `${number(row.items.reduce((sum, item) => sum + item.in_transit_quantity, 0))} in transit`
+                                        ? t('{count} in transit', {
+                                              count: formatNumber(
+                                                  row.items.reduce((sum, item) => sum + item.in_transit_quantity, 0),
+                                              ),
+                                          })
                                         : row.status === 'received'
-                                          ? 'At destination'
+                                          ? t('At destination')
                                           : row.status === 'reversed'
-                                            ? 'Returned'
-                                            : 'No stock effect'}
+                                            ? t('Returned')
+                                            : t('No stock effect')}
                                 </span>
-                                <small>{row.notes || 'No notes'}</small>
+                                <small>{row.notes || t('No notes')}</small>
                             </td>
                             <td>
-                                <StatusBadge tone={tone(row.status)}>{row.status}</StatusBadge>
+                                <StatusBadge tone={tone(row.status)}>{t(row.status)}</StatusBadge>
                             </td>
-                            <td>{dateTime(row.created_at)}</td>
+                            <td>{row.created_at ? formatDateTime(row.created_at) : '—'}</td>
                             <td className="ui-table__actions">
                                 <div className="row-actions">
                                     {row.status === 'draft' && canCreate ? (
                                         <>
                                             <IconButton
                                                 icon="edit"
-                                                label={`Edit ${row.reference}`}
+                                                label={t('Edit {name}', { name: row.reference })}
                                                 onClick={() => edit(row)}
                                             />
                                             <IconButton
                                                 icon="x"
-                                                label={`Cancel ${row.reference}`}
+                                                label={t('Cancel {reference}', { reference: row.reference })}
                                                 requiresOnline
                                                 onClick={() => {
                                                     const reason = window.prompt(
-                                                        `Reason for cancelling ${row.reference}`,
+                                                        t('Reason for cancelling {reference}', {
+                                                            reference: row.reference,
+                                                        }),
                                                     );
                                                     if (reason?.trim())
                                                         void command(
@@ -602,7 +615,7 @@ function WarehouseTable({
                                                                     'cancel',
                                                                     reason.trim(),
                                                                 ),
-                                                            `${row.reference} cancelled.`,
+                                                            t('{reference} cancelled.', { reference: row.reference }),
                                                         );
                                                 }}
                                             />
@@ -611,12 +624,12 @@ function WarehouseTable({
                                     {row.status === 'draft' && canDispatch ? (
                                         <IconButton
                                             icon="truck"
-                                            label={`Dispatch ${row.reference}`}
+                                            label={t('Dispatch {reference}', { reference: row.reference })}
                                             requiresOnline
                                             onClick={() =>
                                                 void command(
                                                     () => transferApi.warehouseCommand(row.id, 'dispatch'),
-                                                    `${row.reference} dispatched.`,
+                                                    t('{reference} dispatched.', { reference: row.reference }),
                                                 )
                                             }
                                             tone="primary"
@@ -625,12 +638,12 @@ function WarehouseTable({
                                     {row.status === 'dispatched' && canReceive ? (
                                         <IconButton
                                             icon="check"
-                                            label={`Receive ${row.reference}`}
+                                            label={t('Receive {reference}', { reference: row.reference })}
                                             requiresOnline
                                             onClick={() =>
                                                 void command(
                                                     () => transferApi.warehouseCommand(row.id, 'receive'),
-                                                    `${row.reference} received.`,
+                                                    t('{reference} received.', { reference: row.reference }),
                                                 )
                                             }
                                             tone="primary"
@@ -639,10 +652,12 @@ function WarehouseTable({
                                     {['dispatched', 'received'].includes(row.status) && canReverse ? (
                                         <IconButton
                                             icon="reverse"
-                                            label={`Reverse ${row.reference}`}
+                                            label={t('Reverse {reference}', { reference: row.reference })}
                                             requiresOnline
                                             onClick={() => {
-                                                const reason = window.prompt(`Reason for reversing ${row.reference}`);
+                                                const reason = window.prompt(
+                                                    t('Reason for reversing {reference}', { reference: row.reference }),
+                                                );
                                                 if (reason?.trim())
                                                     void command(
                                                         () =>
@@ -651,7 +666,7 @@ function WarehouseTable({
                                                                 'reverse',
                                                                 reason.trim(),
                                                             ),
-                                                        `${row.reference} reversed.`,
+                                                        t('{reference} reversed.', { reference: row.reference }),
                                                     );
                                             }}
                                             tone="danger"
@@ -679,18 +694,19 @@ function RepresentativeTable({
     requestReason: (row: RepresentativeTransfer, action: 'cancel' | 'reverse') => void;
     rows: RepresentativeTransfer[];
 }) {
+    const { formatDateTime, formatNumber, t } = useLocale();
     return (
         <div className="ui-table-wrap">
             <table className="ui-table transfer-table">
                 <thead>
                     <tr>
-                        <th>Reference</th>
-                        <th>Representative</th>
-                        <th>Source</th>
-                        <th>Products / units</th>
-                        <th>Custody</th>
-                        <th>Status</th>
-                        <th className="ui-table__actions">Actions</th>
+                        <th>{t('Reference')}</th>
+                        <th>{t('Representative')}</th>
+                        <th>{t('Source')}</th>
+                        <th>{t('Products / units')}</th>
+                        <th>{t('Custody')}</th>
+                        <th>{t('Status')}</th>
+                        <th className="ui-table__actions">{t('Actions')}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -705,7 +721,7 @@ function RepresentativeTable({
                                         {row.reference}
                                     </Link>
                                 </strong>
-                                <small>{dateTime(row.created_at)}</small>
+                                <small>{row.created_at ? formatDateTime(row.created_at) : '—'}</small>
                             </td>
                             <td>
                                 <span className="table-primary">{row.representative.name}</span>
@@ -717,24 +733,24 @@ function RepresentativeTable({
                             </td>
                             <td>
                                 <strong>
-                                    {row.items.length} / {number(row.total_quantity)}
+                                    {formatNumber(row.items.length)} / {formatNumber(row.total_quantity)}
                                 </strong>
                                 <small>{row.items.map((item) => item.product.sku).join(', ')}</small>
                             </td>
                             <td>
                                 <span className="table-primary">
                                     {row.status === 'dispatched'
-                                        ? 'Awaiting representative'
+                                        ? t('Awaiting representative')
                                         : row.status === 'received'
-                                          ? 'Representative stock'
+                                          ? t('Representative stock')
                                           : row.status === 'reversed'
-                                            ? 'Returned'
-                                            : 'No stock effect'}
+                                            ? t('Returned')
+                                            : t('No stock effect')}
                                 </span>
                                 <small>{row.received_by?.name || row.notes || '—'}</small>
                             </td>
                             <td>
-                                <StatusBadge tone={tone(row.status)}>{row.status}</StatusBadge>
+                                <StatusBadge tone={tone(row.status)}>{t(row.status)}</StatusBadge>
                             </td>
                             <td className="ui-table__actions">
                                 <div className="row-actions">
@@ -742,23 +758,23 @@ function RepresentativeTable({
                                         <>
                                             <IconButton
                                                 icon="edit"
-                                                label={`Edit ${row.reference}`}
+                                                label={t('Edit {name}', { name: row.reference })}
                                                 onClick={() => edit(row)}
                                             />
                                             <IconButton
                                                 icon="x"
-                                                label={`Cancel ${row.reference}`}
+                                                label={t('Cancel {reference}', { reference: row.reference })}
                                                 requiresOnline
                                                 onClick={() => requestReason(row, 'cancel')}
                                             />
                                             <IconButton
                                                 icon="truck"
-                                                label={`Dispatch ${row.reference}`}
+                                                label={t('Dispatch {reference}', { reference: row.reference })}
                                                 requiresOnline
                                                 onClick={() =>
                                                     void command(
                                                         () => transferApi.representativeCommand(row.id, 'dispatch'),
-                                                        `${row.reference} dispatched.`,
+                                                        t('{reference} dispatched.', { reference: row.reference }),
                                                     )
                                                 }
                                                 tone="primary"
@@ -768,7 +784,7 @@ function RepresentativeTable({
                                     {['dispatched', 'received'].includes(row.status) && canIssue ? (
                                         <IconButton
                                             icon="reverse"
-                                            label={`Reverse ${row.reference}`}
+                                            label={t('Reverse {reference}', { reference: row.reference })}
                                             requiresOnline
                                             onClick={() => requestReason(row, 'reverse')}
                                             tone="danger"
@@ -796,18 +812,19 @@ function RepresentativeReturnTable({
     requestReason: (row: RepresentativeTransfer, action: 'cancel' | 'reverse') => void;
     rows: RepresentativeTransfer[];
 }) {
+    const { formatDateTime, formatNumber, t } = useLocale();
     return (
         <div className="ui-table-wrap">
             <table className="ui-table transfer-table">
                 <thead>
                     <tr>
-                        <th>Reference</th>
-                        <th>Representative</th>
-                        <th>Target warehouse</th>
-                        <th>Products / units</th>
-                        <th>Custody</th>
-                        <th>Status</th>
-                        <th className="ui-table__actions">Actions</th>
+                        <th>{t('Reference')}</th>
+                        <th>{t('Representative')}</th>
+                        <th>{t('Target warehouse')}</th>
+                        <th>{t('Products / units')}</th>
+                        <th>{t('Custody')}</th>
+                        <th>{t('Status')}</th>
+                        <th className="ui-table__actions">{t('Actions')}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -822,7 +839,7 @@ function RepresentativeReturnTable({
                                         {row.reference}
                                     </Link>
                                 </strong>
-                                <small>{dateTime(row.created_at)}</small>
+                                <small>{row.created_at ? formatDateTime(row.created_at) : '—'}</small>
                             </td>
                             <td>
                                 <span className="table-primary">{row.representative.name}</span>
@@ -834,22 +851,22 @@ function RepresentativeReturnTable({
                             </td>
                             <td>
                                 <strong>
-                                    {row.items.length} / {number(row.total_quantity)}
+                                    {formatNumber(row.items.length)} / {formatNumber(row.total_quantity)}
                                 </strong>
                                 <small>{row.items.map((item) => item.product.sku).join(', ')}</small>
                             </td>
                             <td>
                                 <span className="table-primary">
                                     {row.status === 'received'
-                                        ? 'Warehouse stock'
+                                        ? t('Warehouse stock')
                                         : row.status === 'reversed'
-                                          ? 'Representative stock'
-                                          : 'No stock effect'}
+                                          ? t('Representative stock')
+                                          : t('No stock effect')}
                                 </span>
                                 <small>{row.received_by?.name || row.notes || '—'}</small>
                             </td>
                             <td>
-                                <StatusBadge tone={tone(row.status)}>{row.status}</StatusBadge>
+                                <StatusBadge tone={tone(row.status)}>{t(row.status)}</StatusBadge>
                             </td>
                             <td className="ui-table__actions">
                                 <div className="row-actions">
@@ -857,22 +874,22 @@ function RepresentativeReturnTable({
                                         <>
                                             <IconButton
                                                 icon="edit"
-                                                label={`Edit ${row.reference}`}
+                                                label={t('Edit {name}', { name: row.reference })}
                                                 onClick={() => edit(row)}
                                             />
                                             <IconButton
                                                 icon="x"
-                                                label={`Cancel ${row.reference}`}
+                                                label={t('Cancel {reference}', { reference: row.reference })}
                                                 onClick={() => requestReason(row, 'cancel')}
                                                 requiresOnline
                                             />
                                             <IconButton
                                                 icon="check"
-                                                label={`Post ${row.reference}`}
+                                                label={t('Post {reference}', { reference: row.reference })}
                                                 onClick={() =>
                                                     void command(
                                                         () => transferApi.representativeReturnCommand(row.id, 'post'),
-                                                        `${row.reference} posted.`,
+                                                        t('{reference} posted.', { reference: row.reference }),
                                                     )
                                                 }
                                                 requiresOnline
@@ -883,7 +900,7 @@ function RepresentativeReturnTable({
                                     {row.status === 'received' && canReturn ? (
                                         <IconButton
                                             icon="reverse"
-                                            label={`Reverse ${row.reference}`}
+                                            label={t('Reverse {reference}', { reference: row.reference })}
                                             onClick={() => requestReason(row, 'reverse')}
                                             requiresOnline
                                             tone="danger"
@@ -899,17 +916,18 @@ function RepresentativeReturnTable({
     );
 }
 function StockTable({ rows }: { rows: RepresentativeInventory[] }) {
+    const { formatDateTime, formatNumber, t } = useLocale();
     return (
         <div className="ui-table-wrap">
             <table className="ui-table">
                 <thead>
                     <tr>
-                        <th>Representative</th>
-                        <th>Product</th>
-                        <th className="is-numeric">On hand</th>
-                        <th className="is-numeric">Incoming</th>
-                        <th className="is-numeric">Capacity left</th>
-                        <th>Updated</th>
+                        <th>{t('Representative')}</th>
+                        <th>{t('Product')}</th>
+                        <th className="is-numeric">{t('On hand')}</th>
+                        <th className="is-numeric">{t('Incoming')}</th>
+                        <th className="is-numeric">{t('Capacity left')}</th>
+                        <th>{t('Updated')}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -926,16 +944,16 @@ function StockTable({ rows }: { rows: RepresentativeInventory[] }) {
                                 </small>
                             </td>
                             <td className="is-numeric">
-                                <strong>{row.quantity}</strong>
+                                <strong>{formatNumber(row.quantity)}</strong>
                             </td>
                             <td className="is-numeric">
-                                <strong>{row.pending_quantity}</strong>
+                                <strong>{formatNumber(row.pending_quantity)}</strong>
                             </td>
                             <td className="is-numeric">
-                                <strong>{row.foc_quantity}</strong>
-                                <small>FOC base units</small>
+                                <strong>{formatNumber(row.foc_quantity)}</strong>
+                                <small>{t('FOC base units')}</small>
                             </td>
-                            <td>{dateTime(row.updated_at)}</td>
+                            <td>{row.updated_at ? formatDateTime(row.updated_at) : '—'}</td>
                         </tr>
                     ))}
                 </tbody>
@@ -960,10 +978,11 @@ function Lines({
     setItems: (items: { product_id: number; quantity: number }[]) => void;
     max?: number;
 }) {
+    const { formatNumber, t } = useLocale();
     return (
         <div className="import-lines">
             <div className="import-lines__heading">
-                <strong>Products</strong>
+                <strong>{t('Products')}</strong>
                 <Button
                     icon="plus"
                     onClick={() =>
@@ -978,13 +997,13 @@ function Lines({
                         ])
                     }
                 >
-                    Add line
+                    {t('Add line')}
                 </Button>
             </div>
             {items.map((item, index) => (
                 <div className="import-line" key={index}>
                     <label className="ui-field">
-                        <span>Product {index + 1}</span>
+                        <span>{t('Product {number}', { number: formatNumber(index + 1) })}</span>
                         <select
                             onChange={(event) =>
                                 setItems(
@@ -1000,7 +1019,7 @@ function Lines({
                             }
                             value={item.product_id}
                         >
-                            <option value={0}>Select product</option>
+                            <option value={0}>{t('Select product')}</option>
                             {products.map((product) => (
                                 <option
                                     disabled={items.some(
@@ -1016,7 +1035,7 @@ function Lines({
                         <FieldError errors={errors} name={`items.${index}.product_id`} />
                     </label>
                     <label className="ui-field">
-                        <span>Quantity</span>
+                        <span>{t('Quantity')}</span>
                         <input
                             max={max}
                             min={1}
@@ -1040,7 +1059,7 @@ function Lines({
                     <IconButton
                         disabled={items.length === 1}
                         icon="x"
-                        label={`Remove product ${index + 1}`}
+                        label={t('Remove product {number}', { number: formatNumber(index + 1) })}
                         onClick={() => setItems(items.filter((_, lineIndex) => lineIndex !== index))}
                     />
                 </div>
@@ -1051,6 +1070,7 @@ function Lines({
 
 export function WarehouseTransferFormPage() {
     const navigate = useNavigate();
+    const { t } = useLocale();
     const { transferId } = useParams();
     const { user } = useSession();
     const [options, setOptions] = useState(emptyWarehouseOptions);
@@ -1071,7 +1091,7 @@ export function WarehouseTransferFormPage() {
                 setTransfer(response?.data ?? null);
             })
             .catch((requestError) => {
-                if (active) setError(message(requestError));
+                if (active) setError(message(requestError, t('Unable to complete the request.')));
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -1079,18 +1099,22 @@ export function WarehouseTransferFormPage() {
         return () => {
             active = false;
         };
-    }, [transferId]);
+    }, [transferId, t]);
 
     return (
         <div className="admin-page stock-import-form-page warehouse-transfer-form-page">
             <header className="page-heading">
                 <div>
-                    <p className="ui-eyebrow">Stock movement</p>
-                    <h1>{transfer ? `Edit ${transfer.reference}` : 'Create warehouse transfer'}</h1>
-                    <p>Build and review a stock-neutral transfer draft before dispatching it from the register.</p>
+                    <p className="ui-eyebrow">{t('Stock movement')}</p>
+                    <h1>
+                        {transfer ? t('Edit {name}', { name: transfer.reference }) : t('Create warehouse transfer')}
+                    </h1>
+                    <p>
+                        {t('Build and review a stock-neutral transfer draft before dispatching it from the register.')}
+                    </p>
                 </div>
                 <Button icon="chevronLeft" onClick={() => navigate('/admin/transfers')}>
-                    Back to transfers
+                    {t('Back to transfers')}
                 </Button>
             </header>
             {notice ? <div className="ui-flash ui-flash--success">{notice}</div> : null}
@@ -1098,7 +1122,7 @@ export function WarehouseTransferFormPage() {
             {loading ? (
                 <div className="ui-loading" role="status">
                     <span />
-                    Loading transfer form…
+                    {t('Loading transfer form…')}
                 </div>
             ) : (
                 <WarehouseTransferForm
@@ -1134,6 +1158,7 @@ function WarehouseTransferForm({
     options: WarehouseTransferOptions;
     transfer: WarehouseTransfer | null;
 }) {
+    const { formatNumber, t } = useLocale();
     const [step, setStep] = useState(1);
     const [draftRecord, setDraftRecord] = useState<WarehouseTransfer | null>(transfer);
     const [form, setForm] = useState<WarehouseTransferInput>({
@@ -1187,10 +1212,10 @@ function WarehouseTransferForm({
                 form.destination_warehouse_id ||
                 options.destination_warehouses.find((warehouse) => warehouse.id !== sourceId)?.id ||
                 0;
-            if (!sourceId) nextErrors.source_warehouse_id = ['Select a source warehouse.'];
-            if (!destinationId) nextErrors.destination_warehouse_id = ['Select a destination warehouse.'];
+            if (!sourceId) nextErrors.source_warehouse_id = [t('Select a source warehouse.')];
+            if (!destinationId) nextErrors.destination_warehouse_id = [t('Select a destination warehouse.')];
             if (sourceId === destinationId)
-                nextErrors.destination_warehouse_id = ['Destination must differ from the source warehouse.'];
+                nextErrors.destination_warehouse_id = [t('Destination must differ from the source warehouse.')];
             if (!Object.keys(nextErrors).length) {
                 setForm((value) => ({
                     ...value,
@@ -1199,12 +1224,12 @@ function WarehouseTransferForm({
                 }));
             }
         }
-        if (step === 2 && form.items.length === 0) nextErrors.items = ['Select at least one product.'];
+        if (step === 2 && form.items.length === 0) nextErrors.items = [t('Select at least one product.')];
         if (step === 3) {
             form.items.forEach((item, index) => {
-                if (!item.product_unit_id) nextErrors[`items.${index}.product_unit_id`] = ['Select a product unit.'];
+                if (!item.product_unit_id) nextErrors[`items.${index}.product_unit_id`] = [t('Select a product unit.')];
                 if (!Number.isInteger(item.quantity) || item.quantity < 1)
-                    nextErrors[`items.${index}.quantity`] = ['Enter a whole quantity of at least one.'];
+                    nextErrors[`items.${index}.quantity`] = [t('Enter a whole quantity of at least one.')];
             });
         }
         if (Object.keys(nextErrors).length) {
@@ -1224,12 +1249,12 @@ function WarehouseTransferForm({
             setDraftRecord(response.data);
             onSaved(
                 response.data,
-                draftRecord ? 'Warehouse transfer draft updated.' : 'Warehouse transfer draft created.',
+                t(draftRecord ? 'Warehouse transfer draft updated.' : 'Warehouse transfer draft created.'),
             );
             return response.data;
         } catch (requestError) {
             if (requestError instanceof TransferApiError) setErrors(requestError.fields);
-            setErrors((value) => ({ ...value, form: [message(requestError)] }));
+            setErrors((value) => ({ ...value, form: [message(requestError, t('Unable to complete the request.'))] }));
             return null;
         } finally {
             setSaving(false);
@@ -1243,7 +1268,7 @@ function WarehouseTransferForm({
             await transferApi.warehouseCommand(record.id, 'dispatch');
             onSubmitted();
         } catch (requestError) {
-            setErrors({ form: [message(requestError)] });
+            setErrors({ form: [message(requestError, t('Unable to complete the request.'))] });
         } finally {
             setSaving(false);
         }
@@ -1251,7 +1276,7 @@ function WarehouseTransferForm({
     return (
         <section className="stock-import-form-page__panel warehouse-transfer-form-page__panel">
             <form className="management-form" id="warehouse-transfer-form" onSubmit={(event) => event.preventDefault()}>
-                <ol aria-label="Warehouse transfer progress" className="form-stepper transfer-form-stepper">
+                <ol aria-label={t('Warehouse transfer progress')} className="form-stepper transfer-form-stepper">
                     {['Transfer information', 'Product selection', 'Unit & quantity', 'Review & save'].map(
                         (label, index) => (
                             <li
@@ -1259,8 +1284,8 @@ function WarehouseTransferForm({
                                 className={step >= index + 1 ? 'is-active' : ''}
                                 key={label}
                             >
-                                <span>{index + 1}</span>
-                                <strong>{label}</strong>
+                                <span>{formatNumber(index + 1)}</span>
+                                <strong>{t(label)}</strong>
                             </li>
                         ),
                     )}
@@ -1269,7 +1294,7 @@ function WarehouseTransferForm({
                 {step === 1 ? (
                     <div className="form-grid transfer-wizard-section">
                         <label className="ui-field">
-                            <span>Source warehouse</span>
+                            <span>{t('Source warehouse')}</span>
                             <select
                                 onChange={(event) => {
                                     const sourceWarehouseId = Number(event.target.value);
@@ -1302,7 +1327,7 @@ function WarehouseTransferForm({
                             <FieldError errors={errors} name="source_warehouse_id" />
                         </label>
                         <label className="ui-field">
-                            <span>Destination warehouse</span>
+                            <span>{t('Destination warehouse')}</span>
                             <select
                                 disabled={destinationWarehouses.length === 0}
                                 onChange={(event) =>
@@ -1314,7 +1339,7 @@ function WarehouseTransferForm({
                                 value={form.destination_warehouse_id}
                             >
                                 {destinationWarehouses.length === 0 ? (
-                                    <option value={0}>No destination warehouse available</option>
+                                    <option value={0}>{t('No destination warehouse available')}</option>
                                 ) : null}
                                 {destinationWarehouses.map((warehouse) => (
                                     <option key={warehouse.id} value={warehouse.id}>
@@ -1325,7 +1350,7 @@ function WarehouseTransferForm({
                             <FieldError errors={errors} name="destination_warehouse_id" />
                         </label>
                         <label className="ui-field form-grid__wide">
-                            <span>Notes</span>
+                            <span>{t('Notes')}</span>
                             <input
                                 onChange={(event) =>
                                     setForm((value) => ({
@@ -1342,8 +1367,8 @@ function WarehouseTransferForm({
                 {step === 2 ? (
                     <div className="stock-import-products transfer-wizard-section">
                         <div className="import-lines__heading">
-                            <strong>Select products</strong>
-                            <small>{form.items.length} selected</small>
+                            <strong>{t('Select products')}</strong>
+                            <small>{t('{count} selected', { count: formatNumber(form.items.length) })}</small>
                         </div>
                         <div className="stock-import-products__list">
                             {options.products.map((product) => {
@@ -1354,7 +1379,7 @@ function WarehouseTransferForm({
                                         key={product.id}
                                     >
                                         <input
-                                            aria-label={`Select ${product.name}`}
+                                            aria-label={t('Select {name}', { name: product.name })}
                                             checked={selected}
                                             onChange={() =>
                                                 setForm((value) => ({
@@ -1396,8 +1421,8 @@ function WarehouseTransferForm({
                 {step === 3 ? (
                     <div className="transfer-wizard-section">
                         <div className="import-lines__heading">
-                            <strong>Set units and quantities</strong>
-                            <small>Choose the package unit used for each transfer line.</small>
+                            <strong>{t('Set units and quantities')}</strong>
+                            <small>{t('Choose the package unit used for each transfer line.')}</small>
                         </div>
                         <div className="transfer-wizard-quantities">
                             {form.items.map((item, index) => {
@@ -1410,7 +1435,7 @@ function WarehouseTransferForm({
                                             <small>{product?.sku}</small>
                                         </div>
                                         <label className="ui-field">
-                                            <span>Unit</span>
+                                            <span>{t('Unit')}</span>
                                             <select
                                                 onChange={(event) =>
                                                     setForm((value) => ({
@@ -1429,21 +1454,21 @@ function WarehouseTransferForm({
                                                 value={item.product_unit_id || ''}
                                             >
                                                 <option disabled value="">
-                                                    Select unit
+                                                    {t('Select unit')}
                                                 </option>
                                                 {(product?.units ?? []).map((unit) => (
                                                     <option key={unit.id} value={unit.id}>
                                                         {unit.name}
                                                         {unit.is_base
-                                                            ? ' (base unit)'
-                                                            : ` (${unit.conversion_factor} ${baseUnit?.name ?? 'base units'})`}
+                                                            ? ` (${t('base unit')})`
+                                                            : ` (${formatNumber(unit.conversion_factor)} ${baseUnit?.name ?? t('base units')})`}
                                                     </option>
                                                 ))}
                                             </select>
                                             <FieldError errors={errors} name={`items.${index}.product_unit_id`} />
                                         </label>
                                         <label className="ui-field">
-                                            <span>Transfer quantity</span>
+                                            <span>{t('Transfer quantity')}</span>
                                             <input
                                                 min={1}
                                                 onChange={(event) =>
@@ -1476,7 +1501,7 @@ function WarehouseTransferForm({
                 {step === 4 ? (
                     <div className="transfer-wizard-section transfer-wizard-review">
                         <section>
-                            <span>Source</span>
+                            <span>{t('Source')}</span>
                             <strong>
                                 {
                                     options.source_warehouses.find(
@@ -1486,7 +1511,7 @@ function WarehouseTransferForm({
                             </strong>
                         </section>
                         <section>
-                            <span>Destination</span>
+                            <span>{t('Destination')}</span>
                             <strong>
                                 {
                                     options.destination_warehouses.find(
@@ -1496,27 +1521,33 @@ function WarehouseTransferForm({
                             </strong>
                         </section>
                         <section>
-                            <span>Products</span>
-                            <strong>{form.items.length}</strong>
+                            <span>{t('Products')}</span>
+                            <strong>{formatNumber(form.items.length)}</strong>
                         </section>
                         <section>
-                            <span>Total base units</span>
+                            <span>{t('Total base units')}</span>
                             <strong>
-                                {form.items.reduce((total, item) => {
-                                    const product = options.products.find((option) => option.id === item.product_id);
-                                    const unit = product?.units?.find((option) => option.id === item.product_unit_id);
-                                    return total + item.quantity * (unit?.conversion_factor ?? 0);
-                                }, 0)}
+                                {formatNumber(
+                                    form.items.reduce((total, item) => {
+                                        const product = options.products.find(
+                                            (option) => option.id === item.product_id,
+                                        );
+                                        const unit = product?.units?.find(
+                                            (option) => option.id === item.product_unit_id,
+                                        );
+                                        return total + item.quantity * (unit?.conversion_factor ?? 0);
+                                    }, 0),
+                                )}
                             </strong>
                         </section>
                         <div className="ui-table-wrap">
                             <table className="ui-table transfer-wizard-review__table">
                                 <thead>
                                     <tr>
-                                        <th>Product</th>
-                                        <th>Unit</th>
-                                        <th className="is-numeric">Quantity</th>
-                                        <th className="is-numeric">Base stock</th>
+                                        <th>{t('Product')}</th>
+                                        <th>{t('Unit')}</th>
+                                        <th className="is-numeric">{t('Quantity')}</th>
+                                        <th className="is-numeric">{t('Base stock')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1532,20 +1563,31 @@ function WarehouseTransferForm({
                                                 <td>
                                                     <strong>{product?.name}</strong>
                                                     <small>
-                                                        {product?.sku} · Base unit:{' '}
-                                                        {product?.units?.find((option) => option.is_base)?.name ??
-                                                            product?.unit}
+                                                        {t('{sku} · Base unit: {unit}', {
+                                                            sku: product?.sku ?? '',
+                                                            unit:
+                                                                product?.units?.find((option) => option.is_base)
+                                                                    ?.name ??
+                                                                product?.unit ??
+                                                                '',
+                                                        })}
                                                     </small>
                                                 </td>
                                                 <td>
-                                                    <strong>{unit?.name ?? 'Not selected'}</strong>
-                                                    <small>{unit?.conversion_factor ?? 0} base units each</small>
+                                                    <strong>{unit?.name ?? t('Not selected')}</strong>
+                                                    <small>
+                                                        {t('{count} base units each', {
+                                                            count: formatNumber(unit?.conversion_factor ?? 0),
+                                                        })}
+                                                    </small>
                                                 </td>
                                                 <td className="is-numeric">
-                                                    <strong>{item.quantity}</strong>
+                                                    <strong>{formatNumber(item.quantity)}</strong>
                                                 </td>
                                                 <td className="is-numeric">
-                                                    <strong>{item.quantity * (unit?.conversion_factor ?? 0)}</strong>
+                                                    <strong>
+                                                        {formatNumber(item.quantity * (unit?.conversion_factor ?? 0))}
+                                                    </strong>
                                                 </td>
                                             </tr>
                                         );
@@ -1555,7 +1597,7 @@ function WarehouseTransferForm({
                         </div>
                         {form.notes ? (
                             <p className="transfer-wizard-review__notes">
-                                <strong>Notes:</strong> {form.notes}
+                                <strong>{t('Notes:')}</strong> {form.notes}
                             </p>
                         ) : null}
                     </div>
@@ -1563,18 +1605,18 @@ function WarehouseTransferForm({
             </form>
             <footer className="stock-import-form-page__actions">
                 {step === 1 ? (
-                    <Button onClick={onClose}>Cancel</Button>
+                    <Button onClick={onClose}>{t('Cancel')}</Button>
                 ) : (
-                    <Button onClick={() => setStep((value) => value - 1)}>Back</Button>
+                    <Button onClick={() => setStep((value) => value - 1)}>{t('Back')}</Button>
                 )}
                 {step === 3 ? (
                     <Button disabled={saving} onClick={() => void saveDraft()} requiresOnline>
-                        {saving ? 'Saving…' : 'Save draft'}
+                        {saving ? t('Saving…') : t('Save draft')}
                     </Button>
                 ) : null}
                 {step < 4 ? (
                     <Button onClick={next} tone="primary" type="button">
-                        Continue
+                        {t('Continue')}
                     </Button>
                 ) : (
                     <Button
@@ -1584,7 +1626,7 @@ function WarehouseTransferForm({
                         tone="primary"
                         type="button"
                     >
-                        {saving ? 'Submitting…' : canSubmit ? 'Submit transfer' : 'Save draft'}
+                        {saving ? t('Submitting…') : t(canSubmit ? 'Submit transfer' : 'Save draft')}
                     </Button>
                 )}
             </footer>
@@ -1593,7 +1635,12 @@ function WarehouseTransferForm({
 }
 export function RepresentativeTransferFormPage() {
     const navigate = useNavigate();
+    const { t } = useLocale();
     const { transferId } = useParams();
+    const [searchParams] = useSearchParams();
+    const tripId = Number(searchParams.get('tripId') ?? 0);
+    const tripWarehouseId = Number(searchParams.get('warehouseId') ?? 0);
+    const tripRepresentativeId = Number(searchParams.get('representativeId') ?? 0);
     const [options, setOptions] = useState(emptyRepresentativeOptions);
     const [transfer, setTransfer] = useState<RepresentativeTransfer | null>(null);
     const [loading, setLoading] = useState(true);
@@ -1611,7 +1658,7 @@ export function RepresentativeTransferFormPage() {
                 setTransfer(response?.data ?? null);
             })
             .catch((requestError) => {
-                if (active) setError(message(requestError));
+                if (active) setError(message(requestError, t('Unable to complete the request.')));
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -1619,18 +1666,20 @@ export function RepresentativeTransferFormPage() {
         return () => {
             active = false;
         };
-    }, [transferId]);
+    }, [transferId, t]);
 
     return (
         <div className="admin-page stock-import-form-page representative-transfer-form-page">
             <header className="page-heading">
                 <div>
-                    <p className="ui-eyebrow">Representative stock</p>
-                    <h1>{transfer ? `Edit ${transfer.reference}` : 'Create representative issue'}</h1>
-                    <p>Build and review a controlled stock issue before dispatching it to the representative.</p>
+                    <p className="ui-eyebrow">{t('Representative stock')}</p>
+                    <h1>
+                        {transfer ? t('Edit {name}', { name: transfer.reference }) : t('Create representative issue')}
+                    </h1>
+                    <p>{t('Build and review a controlled stock issue before dispatching it to the representative.')}</p>
                 </div>
-                <Button icon="chevronLeft" onClick={() => navigate('/admin/transfers')}>
-                    Back to transfers
+                <Button icon="chevronLeft" onClick={() => navigate(tripId ? `/admin/trips/${tripId}` : '/admin/transfers')}>
+                    {t(tripId ? 'Back to trip' : 'Back to transfers')}
                 </Button>
             </header>
             {error ? (
@@ -1641,13 +1690,14 @@ export function RepresentativeTransferFormPage() {
             {loading ? (
                 <div className="ui-loading" role="status">
                     <span />
-                    Loading representative issue form…
+                    {t('Loading representative issue form…')}
                 </div>
             ) : (
                 <RepresentativeTransferWizard
-                    onClose={() => navigate('/admin/transfers')}
-                    onSubmitted={(record) => navigate(`/admin/transfers/representative/${record.id}`)}
+                    onClose={() => navigate(tripId ? `/admin/trips/${tripId}` : '/admin/transfers')}
+                    onSubmitted={(record) => navigate(tripId ? `/admin/trips/${tripId}` : `/admin/transfers/representative/${record.id}`)}
                     options={options}
+                    preset={{ tripId, warehouseId: tripWarehouseId, representativeId: tripRepresentativeId }}
                     transfer={transfer}
                 />
             )}
@@ -1659,16 +1709,20 @@ function RepresentativeTransferWizard({
     onClose,
     onSubmitted,
     options,
+    preset,
     transfer,
 }: {
     onClose: () => void;
     onSubmitted: (record: RepresentativeTransfer) => void;
     options: RepresentativeTransferOptions;
+    preset: { tripId: number; warehouseId: number; representativeId: number };
     transfer: RepresentativeTransfer | null;
 }) {
+    const { formatNumber, t } = useLocale();
     const [step, setStep] = useState(1);
     const [draftRecord, setDraftRecord] = useState(transfer);
     const [form, setForm] = useState<RepresentativeTransferInput>({
+        trip_id: transfer?.trip?.id ?? preset.tripId,
         items: [],
         notes: '',
         sales_representative_id: options.representatives[0]?.id ?? 0,
@@ -1683,19 +1737,20 @@ function RepresentativeTransferWizard({
             ),
         [form.source_warehouse_id, options.representatives],
     );
-
     useEffect(() => {
-        const sourceWarehouseId = transfer?.source_warehouse.id ?? options.source_warehouses[0]?.id ?? 0;
+        const sourceWarehouseId = transfer?.source_warehouse.id ?? (preset.warehouseId || options.source_warehouses[0]?.id || 0);
         const representativeId =
             transfer?.representative.id ??
-            options.representatives.find((value) => value.primary_warehouse_id === sourceWarehouseId)?.id ??
-            0;
+            (preset.representativeId ||
+                options.representatives.find((value) => value.primary_warehouse_id === sourceWarehouseId)?.id ||
+                0);
         setStep(1);
         setDraftRecord(transfer);
         setErrors({});
         setForm(
             transfer
                 ? {
+                      trip_id: transfer.trip?.id ?? preset.tripId,
                       source_warehouse_id: transfer.source_warehouse.id,
                       sales_representative_id: transfer.representative.id,
                       notes: transfer.notes ?? '',
@@ -1708,28 +1763,22 @@ function RepresentativeTransferWizard({
                       })),
                   }
                 : {
+                      trip_id: preset.tripId,
                       source_warehouse_id: sourceWarehouseId,
                       sales_representative_id: representativeId,
                       notes: '',
                       items: [],
                   },
         );
-    }, [options, transfer]);
+    }, [options, preset.representativeId, preset.tripId, preset.warehouseId, transfer]);
 
     const next = () => {
         const nextErrors: Record<string, string[]> = {};
-        if (step === 1 && !form.sales_representative_id)
-            nextErrors.sales_representative_id = ['Select a representative.'];
-        if (step === 1 && !form.source_warehouse_id) nextErrors.source_warehouse_id = ['Select a source warehouse.'];
+        if (step === 1 && (!form.trip_id || !form.sales_representative_id || !form.source_warehouse_id))
+            nextErrors.form = [t('This stock issue must be opened from a valid trip.')];
+        if (step === 1 && !form.items.length) nextErrors.items = [t('Select at least one product.')];
         if (
-            step === 1 &&
-            form.sales_representative_id &&
-            !filteredRepresentatives.some((value) => value.id === form.sales_representative_id)
-        )
-            nextErrors.sales_representative_id = ['Select a representative assigned to this warehouse.'];
-        if (step === 2 && !form.items.length) nextErrors.items = ['Select at least one product.'];
-        if (
-            step === 3 &&
+            step === 2 &&
             form.items.some(
                 (item) =>
                     !Number.isInteger(item.quantity) ||
@@ -1739,10 +1788,10 @@ function RepresentativeTransferWizard({
             )
         )
             nextErrors.items = [
-                'Paid quantities must be whole numbers of at least 1; FOC must be a whole number of 0 or more.',
+                t('Paid quantities must be whole numbers of at least 1; FOC must be a whole number of 0 or more.'),
             ];
         if (
-            step === 3 &&
+            step === 2 &&
             form.items.some((item) => {
                 const product = options.products.find((value) => value.id === item.product_id);
                 const unit =
@@ -1757,13 +1806,13 @@ function RepresentativeTransferWizard({
                 );
             })
         )
-            nextErrors.items = ['One or more quantities exceed the available warehouse stock.'];
+            nextErrors.items = [t('One or more quantities exceed the available warehouse stock.')];
         if (Object.keys(nextErrors).length) {
             setErrors(nextErrors);
             return;
         }
         setErrors({});
-        setStep((value) => Math.min(4, value + 1));
+        setStep((value) => Math.min(3, value + 1));
     };
     const saveDraft = async () => {
         setSaving(true);
@@ -1776,7 +1825,7 @@ function RepresentativeTransferWizard({
             return response.data;
         } catch (requestError) {
             if (requestError instanceof TransferApiError) setErrors(requestError.fields);
-            setErrors((value) => ({ ...value, form: [message(requestError)] }));
+            setErrors((value) => ({ ...value, form: [message(requestError, t('Unable to complete the request.'))] }));
             return null;
         } finally {
             setSaving(false);
@@ -1790,32 +1839,44 @@ function RepresentativeTransferWizard({
             const response = await transferApi.representativeCommand(record.id, 'dispatch');
             onSubmitted(response.data);
         } catch (requestError) {
-            setErrors({ form: [message(requestError)] });
+            setErrors({ form: [message(requestError, t('Unable to complete the request.'))] });
         } finally {
             setSaving(false);
         }
     };
     const representative = options.representatives.find((value) => value.id === form.sales_representative_id);
+    const sourceWarehouse = options.source_warehouses.find((value) => value.id === form.source_warehouse_id);
     return (
         <section className="stock-import-form-page__panel warehouse-transfer-form-page__panel">
             <form className="management-form" onSubmit={(event) => event.preventDefault()}>
-                <ol aria-label="Representative issue progress" className="form-stepper transfer-form-stepper">
-                    {['Issue information', 'Product selection', 'Quantity', 'Review & dispatch'].map((label, index) => (
+                <div className="trip-linked-transfer-context" aria-label={t('Trip stock issue assignment')}>
+                    <div>
+                        <span>{t('Source warehouse')}</span>
+                        <strong>{sourceWarehouse ? `${sourceWarehouse.code} · ${sourceWarehouse.name}` : t('Not available')}</strong>
+                    </div>
+                    <div>
+                        <span>{t('Representative')}</span>
+                        <strong>{representative ? `${representative.code} · ${representative.name}` : t('Not available')}</strong>
+                    </div>
+                    <p>{t('Assignment comes from the selected trip and cannot be changed here.')}</p>
+                </div>
+                <ol aria-label={t('Representative issue progress')} className="form-stepper transfer-form-stepper">
+                    {['Product selection', 'Quantity', 'Review & dispatch'].map((label, index) => (
                         <li
                             aria-current={step === index + 1 ? 'step' : undefined}
                             className={step >= index + 1 ? 'is-active' : ''}
                             key={label}
                         >
-                            <span>{index + 1}</span>
-                            <strong>{label}</strong>
+                            <span>{formatNumber(index + 1)}</span>
+                            <strong>{t(label)}</strong>
                         </li>
                     ))}
                 </ol>
                 {errors.form?.[0] ? <div className="ui-form-error">{errors.form[0]}</div> : null}
-                {step === 1 ? (
+                {false ? (
                     <div className="form-grid transfer-wizard-section">
                         <label className="ui-field representative-select-field">
-                            <span>Representative</span>
+                            <span>{t('Representative')}</span>
                             <select
                                 onChange={(event) => {
                                     const id = Number(event.target.value);
@@ -1828,8 +1889,8 @@ function RepresentativeTransferWizard({
                             >
                                 <option value={0}>
                                     {filteredRepresentatives.length
-                                        ? 'Select representative'
-                                        : 'No representatives in warehouse'}
+                                        ? t('Select representative')
+                                        : t('No representatives in warehouse')}
                                 </option>
                                 {filteredRepresentatives.map((value) => (
                                     <option key={value.id} value={value.id}>
@@ -1840,7 +1901,7 @@ function RepresentativeTransferWizard({
                             <FieldError errors={errors} name="sales_representative_id" />
                         </label>
                         <label className="ui-field representative-warehouse-field">
-                            <span>Source warehouse</span>
+                            <span>{t('Source warehouse')}</span>
                             <select
                                 onChange={(event) => {
                                     const warehouseId = Number(event.target.value);
@@ -1864,7 +1925,7 @@ function RepresentativeTransferWizard({
                             <FieldError errors={errors} name="source_warehouse_id" />
                         </label>
                         <label className="ui-field form-grid__wide">
-                            <span>Notes</span>
+                            <span>{t('Notes')}</span>
                             <textarea
                                 maxLength={2000}
                                 onChange={(event) => setForm((value) => ({ ...value, notes: event.target.value }))}
@@ -1874,11 +1935,11 @@ function RepresentativeTransferWizard({
                         </label>
                     </div>
                 ) : null}
-                {step === 2 ? (
+                {step === 1 ? (
                     <div className="stock-import-products transfer-wizard-section">
                         <div className="import-lines__heading">
-                            <strong>Select products</strong>
-                            <small>{form.items.length} selected</small>
+                            <strong>{t('Select products')}</strong>
+                            <small>{t('{count} selected', { count: formatNumber(form.items.length) })}</small>
                         </div>
                         <div className="stock-import-products__list">
                             {options.products.map((product) => {
@@ -1889,7 +1950,7 @@ function RepresentativeTransferWizard({
                                         key={product.id}
                                     >
                                         <input
-                                            aria-label={`Select ${product.name}`}
+                                            aria-label={t('Select {name}', { name: product.name })}
                                             checked={selected}
                                             onChange={() =>
                                                 setForm((value) => ({
@@ -1914,12 +1975,14 @@ function RepresentativeTransferWizard({
                         <FieldError errors={errors} name="items" />
                     </div>
                 ) : null}
-                {step === 3 ? (
+                {step === 2 ? (
                     <div className="transfer-wizard-section">
                         <div className="import-lines__heading">
-                            <strong>Set issue quantities</strong>
+                            <strong>{t('Set issue quantities')}</strong>
                             <small>
-                                Paid and FOC stock are tracked separately; all quantities are converted to base units.
+                                {t(
+                                    'Paid and FOC stock are tracked separately; all quantities are converted to base units.',
+                                )}
                             </small>
                         </div>
                         <div className="transfer-wizard-quantities">
@@ -1948,16 +2011,16 @@ function RepresentativeTransferWizard({
                                                     exceedsStock ? 'stock-availability is-danger' : 'stock-availability'
                                                 }
                                             >
-                                                Available: {number(available)} base units
+                                                {t('Available: {count} base units', { count: formatNumber(available) })}
                                             </small>
                                             <small>
                                                 {product?.sku} · {product?.unit}
                                             </small>
                                         </div>
                                         <label className="ui-field transfer-quantity-line__paid-unit">
-                                            <span>Issue unit</span>
+                                            <span>{t('Issue unit')}</span>
                                             <select
-                                                aria-label="Issue unit"
+                                                aria-label={t('Issue unit')}
                                                 onChange={(event) =>
                                                     setForm((value) => ({
                                                         ...value,
@@ -1975,15 +2038,16 @@ function RepresentativeTransferWizard({
                                             >
                                                 {product?.units?.map((option) => (
                                                     <option key={option.id} value={option.id}>
-                                                        {option.name} ({option.conversion_factor} base)
+                                                        {option.name} ({formatNumber(option.conversion_factor)}{' '}
+                                                        {t('base')})
                                                     </option>
                                                 ))}
                                             </select>
                                         </label>
                                         <label className="ui-field transfer-quantity-line__paid-quantity">
-                                            <span>Paid stock quantity</span>
+                                            <span>{t('Paid stock quantity')}</span>
                                             <input
-                                                aria-label="Paid stock quantity"
+                                                aria-label={t('Paid stock quantity')}
                                                 aria-invalid={exceedsStock}
                                                 min={1}
                                                 onChange={(event) =>
@@ -2005,14 +2069,17 @@ function RepresentativeTransferWizard({
                                             />
                                             {exceedsStock ? (
                                                 <small className="ui-field-error">
-                                                    Only {number(available)} {product?.unit} available.
+                                                    {t('Only {count} {unit} available.', {
+                                                        count: formatNumber(available),
+                                                        unit: product?.unit ?? '',
+                                                    })}
                                                 </small>
                                             ) : null}
                                         </label>
                                         <label className="ui-field transfer-quantity-line__foc-unit">
-                                            <span>FOC unit</span>
+                                            <span>{t('FOC unit')}</span>
                                             <select
-                                                aria-label="FOC unit"
+                                                aria-label={t('FOC unit')}
                                                 onChange={(event) =>
                                                     setForm((value) => ({
                                                         ...value,
@@ -2030,15 +2097,16 @@ function RepresentativeTransferWizard({
                                             >
                                                 {product?.units?.map((option) => (
                                                     <option key={option.id} value={option.id}>
-                                                        {option.name} ({option.conversion_factor} base)
+                                                        {option.name} ({formatNumber(option.conversion_factor)}{' '}
+                                                        {t('base')})
                                                     </option>
                                                 ))}
                                             </select>
                                         </label>
                                         <label className="ui-field transfer-quantity-line__foc-quantity">
-                                            <span>FOC quantity</span>
+                                            <span>{t('FOC quantity')}</span>
                                             <input
-                                                aria-label="FOC quantity"
+                                                aria-label={t('FOC quantity')}
                                                 min={0}
                                                 onChange={(event) =>
                                                     setForm((value) => ({
@@ -2060,7 +2128,7 @@ function RepresentativeTransferWizard({
                                             />
                                         </label>
                                         <strong className="transfer-base-total">
-                                            {number(physical)} base units total
+                                            {t('{count} base units total', { count: formatNumber(physical) })}
                                         </strong>
                                     </div>
                                 );
@@ -2069,52 +2137,56 @@ function RepresentativeTransferWizard({
                         <FieldError errors={errors} name="items" />
                     </div>
                 ) : null}
-                {step === 4 ? (
+                {step === 3 ? (
                     <div className="transfer-wizard-section transfer-wizard-review">
                         <section>
-                            <span>Representative</span>
+                            <span>{t('Representative')}</span>
                             <strong>{representative?.name}</strong>
                         </section>
                         <section>
-                            <span>Source</span>
+                            <span>{t('Source')}</span>
                             <strong>
                                 {options.source_warehouses.find((value) => value.id === form.source_warehouse_id)?.name}
                             </strong>
                         </section>
                         <section>
-                            <span>Products</span>
-                            <strong>{form.items.length}</strong>
+                            <span>{t('Products')}</span>
+                            <strong>{formatNumber(form.items.length)}</strong>
                         </section>
                         <section>
-                            <span>Paid / FOC base</span>
+                            <span>{t('Paid / FOC base')}</span>
                             <strong>
-                                {form.items.reduce((sum, item) => {
-                                    const product = options.products.find((value) => value.id === item.product_id);
-                                    const unit =
-                                        product?.units?.find((value) => value.id === item.product_unit_id) ??
-                                        product?.units?.find((value) => value.is_default_selling) ??
-                                        product?.units?.[0];
-                                    return sum + item.quantity * (unit?.conversion_factor ?? 1);
-                                }, 0)}{' '}
+                                {formatNumber(
+                                    form.items.reduce((sum, item) => {
+                                        const product = options.products.find((value) => value.id === item.product_id);
+                                        const unit =
+                                            product?.units?.find((value) => value.id === item.product_unit_id) ??
+                                            product?.units?.find((value) => value.is_default_selling) ??
+                                            product?.units?.[0];
+                                        return sum + item.quantity * (unit?.conversion_factor ?? 1);
+                                    }, 0),
+                                )}{' '}
                                 /{' '}
-                                {form.items.reduce((sum, item) => {
-                                    const product = options.products.find((value) => value.id === item.product_id);
-                                    const unit =
-                                        product?.units?.find((value) => value.id === item.foc_product_unit_id) ??
-                                        product?.units?.find((value) => value.id === item.product_unit_id) ??
-                                        product?.units?.find((value) => value.is_default_selling) ??
-                                        product?.units?.[0];
-                                    return sum + (item.foc_quantity ?? 0) * (unit?.conversion_factor ?? 1);
-                                }, 0)}
+                                {formatNumber(
+                                    form.items.reduce((sum, item) => {
+                                        const product = options.products.find((value) => value.id === item.product_id);
+                                        const unit =
+                                            product?.units?.find((value) => value.id === item.foc_product_unit_id) ??
+                                            product?.units?.find((value) => value.id === item.product_unit_id) ??
+                                            product?.units?.find((value) => value.is_default_selling) ??
+                                            product?.units?.[0];
+                                        return sum + (item.foc_quantity ?? 0) * (unit?.conversion_factor ?? 1);
+                                    }, 0),
+                                )}
                             </strong>
                         </section>
                         <div className="ui-table-wrap">
                             <table className="ui-table transfer-wizard-review__table">
                                 <thead>
                                     <tr>
-                                        <th>Product</th>
-                                        <th className="is-numeric">Paid</th>
-                                        <th className="is-numeric">FOC</th>
+                                        <th>{t('Product')}</th>
+                                        <th className="is-numeric">{t('Paid')}</th>
+                                        <th className="is-numeric">{t('FOC')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -2134,18 +2206,24 @@ function RepresentativeTransferWizard({
                                                     <small>{product?.sku}</small>
                                                 </td>
                                                 <td className="is-numeric">
-                                                    <strong>{item.quantity}</strong>
+                                                    <strong>{formatNumber(item.quantity)}</strong>
                                                     <small>
                                                         {paidUnit?.name ?? product?.unit} ·{' '}
-                                                        {item.quantity * (paidUnit?.conversion_factor ?? 1)} base
+                                                        {formatNumber(
+                                                            item.quantity * (paidUnit?.conversion_factor ?? 1),
+                                                        )}{' '}
+                                                        {t('base')}
                                                     </small>
                                                 </td>
                                                 <td className="is-numeric">
-                                                    <strong>{item.foc_quantity ?? 0}</strong>
+                                                    <strong>{formatNumber(item.foc_quantity ?? 0)}</strong>
                                                     <small>
                                                         {focUnit?.name ?? product?.unit} ·{' '}
-                                                        {(item.foc_quantity ?? 0) * (focUnit?.conversion_factor ?? 1)}{' '}
-                                                        base
+                                                        {formatNumber(
+                                                            (item.foc_quantity ?? 0) *
+                                                                (focUnit?.conversion_factor ?? 1),
+                                                        )}{' '}
+                                                        {t('base')}
                                                     </small>
                                                 </td>
                                             </tr>
@@ -2156,7 +2234,7 @@ function RepresentativeTransferWizard({
                         </div>
                         {form.notes ? (
                             <p className="transfer-wizard-review__notes">
-                                <strong>Notes:</strong> {form.notes}
+                                <strong>{t('Notes:')}</strong> {form.notes}
                             </p>
                         ) : null}
                     </div>
@@ -2164,22 +2242,22 @@ function RepresentativeTransferWizard({
             </form>
             <footer className="stock-import-form-page__actions">
                 {step === 1 ? (
-                    <Button onClick={onClose}>Cancel</Button>
+                    <Button onClick={onClose}>{t('Cancel')}</Button>
                 ) : (
-                    <Button onClick={() => setStep((value) => value - 1)}>Back</Button>
+                    <Button onClick={() => setStep((value) => value - 1)}>{t('Back')}</Button>
                 )}
-                {step === 3 ? (
+                {step === 2 ? (
                     <Button disabled={saving} onClick={() => void saveDraft()} requiresOnline>
-                        {saving ? 'Saving…' : 'Save draft'}
+                        {saving ? t('Saving…') : t('Save draft')}
                     </Button>
                 ) : null}
-                {step < 4 ? (
+                {step < 3 ? (
                     <Button onClick={next} tone="primary">
-                        Continue
+                        {t('Continue')}
                     </Button>
                 ) : (
                     <Button disabled={saving} onClick={() => void submit()} requiresOnline tone="primary">
-                        {saving ? 'Dispatching…' : 'Save & dispatch'}
+                        {saving ? t('Dispatching…') : t('Save & dispatch')}
                     </Button>
                 )}
             </footer>
@@ -2200,7 +2278,9 @@ export function RepresentativeTransferDialog({
     options: RepresentativeTransferOptions;
     transfer: RepresentativeTransfer | null;
 }) {
+    const { t } = useLocale();
     const [form, setForm] = useState<RepresentativeTransferInput>({
+        trip_id: 0,
         items: [{ product_id: 0, quantity: 1 }],
         notes: '',
         sales_representative_id: 0,
@@ -2213,6 +2293,7 @@ export function RepresentativeTransferDialog({
         setForm(
             transfer
                 ? {
+                      trip_id: transfer.trip?.id ?? 0,
                       source_warehouse_id: transfer.source_warehouse.id,
                       sales_representative_id: transfer.representative.id,
                       notes: transfer.notes ?? '',
@@ -2222,6 +2303,7 @@ export function RepresentativeTransferDialog({
                       })),
                   }
                 : {
+                      trip_id: 0,
                       source_warehouse_id: options.source_warehouses[0]?.id ?? 0,
                       sales_representative_id: options.representatives[0]?.id ?? 0,
                       notes: '',
@@ -2241,20 +2323,22 @@ export function RepresentativeTransferDialog({
         try {
             if (transfer) await transferApi.updateRepresentativeTransfer(transfer.id, form);
             else await transferApi.createRepresentativeTransfer(form);
-            await onSaved(transfer ? 'Representative issue draft updated.' : 'Representative issue draft created.');
+            await onSaved(t(transfer ? 'Representative issue draft updated.' : 'Representative issue draft created.'));
         } catch (requestError) {
             if (requestError instanceof TransferApiError) setErrors(requestError.fields);
-            setErrors((value) => ({ ...value, form: [message(requestError)] }));
+            setErrors((value) => ({ ...value, form: [message(requestError, t('Unable to complete the request.'))] }));
         } finally {
             setSaving(false);
         }
     };
     return (
         <Dialog
-            description="Dispatch validates warehouse stock, converts selected units to base stock, and keeps paid and FOC balances separate."
+            description={t(
+                'Dispatch validates warehouse stock, converts selected units to base stock, and keeps paid and FOC balances separate.',
+            )}
             footer={
                 <>
-                    <Button onClick={onClose}>Cancel</Button>
+                    <Button onClick={onClose}>{t('Cancel')}</Button>
                     <Button
                         disabled={saving}
                         form="representative-transfer-form"
@@ -2262,20 +2346,24 @@ export function RepresentativeTransferDialog({
                         tone="primary"
                         type="submit"
                     >
-                        {saving ? 'Saving…' : 'Save draft'}
+                        {saving ? t('Saving…') : t('Save draft')}
                     </Button>
                 </>
             }
             onClose={onClose}
             open={open}
-            title={transfer ? `Edit issue · ${transfer.reference}` : 'Create representative issue'}
+            title={
+                transfer
+                    ? t('Edit issue · {reference}', { reference: transfer.reference })
+                    : t('Create representative issue')
+            }
             width="wide"
         >
             <form className="management-form" id="representative-transfer-form" onSubmit={submit}>
                 {errors.form?.[0] ? <div className="ui-form-error">{errors.form[0]}</div> : null}
                 <div className="form-grid">
                     <label className="ui-field">
-                        <span>Source warehouse</span>
+                        <span>{t('Source warehouse')}</span>
                         <select
                             onChange={(event) =>
                                 setForm((value) => ({
@@ -2293,7 +2381,7 @@ export function RepresentativeTransferDialog({
                         </select>
                     </label>
                     <label className="ui-field">
-                        <span>Representative</span>
+                        <span>{t('Representative')}</span>
                         <select
                             onChange={(event) =>
                                 setForm((value) => ({
@@ -2312,7 +2400,7 @@ export function RepresentativeTransferDialog({
                         <FieldError errors={errors} name="sales_representative_id" />
                     </label>
                     <label className="ui-field form-grid__wide">
-                        <span>Notes</span>
+                        <span>{t('Notes')}</span>
                         <input
                             onChange={(event) =>
                                 setForm((value) => ({

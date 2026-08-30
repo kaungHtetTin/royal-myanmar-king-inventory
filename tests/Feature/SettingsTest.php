@@ -42,7 +42,9 @@ class SettingsTest extends TestCase
         $this->actingAs($user)->getJson('/api/admin/settings')
             ->assertOk()
             ->assertJsonPath('profile.username', 'superadmin')
-            ->assertJsonPath('operations.currency_code', 'MMK');
+            ->assertJsonPath('operations.currency_code', 'MMK')
+            ->assertJsonPath('operations.payment_methods.0.key', 'cash')
+            ->assertJsonPath('operations.payment_methods.1.key', 'banking');
 
         $this->putJson('/api/admin/settings/profile', [
             'name' => 'System Owner',
@@ -65,11 +67,17 @@ class SettingsTest extends TestCase
             'timezone' => 'Asia/Yangon',
             'low_stock_threshold' => 25,
             'invoice_footer' => 'Thank you for your business.',
+            'payment_methods' => [
+                ['key' => 'cash', 'name' => 'Cash', 'adds_to_cash_hold' => true, 'is_active' => true],
+                ['key' => 'banking', 'name' => 'Banking', 'adds_to_cash_hold' => false, 'is_active' => true],
+                ['key' => 'mobile_banking', 'name' => 'Mobile banking', 'adds_to_cash_hold' => false, 'is_active' => true],
+            ],
             'logo' => UploadedFile::fake()->createWithContent('logo.png', $pixel),
             'favicon' => UploadedFile::fake()->createWithContent('favicon.png', $pixel),
         ], ['Accept' => 'application/json'])->assertOk()
             ->assertJsonPath('branding.business_name', 'Valley Distribution')
-            ->assertJsonPath('operations.low_stock_threshold', 25);
+            ->assertJsonPath('operations.low_stock_threshold', 25)
+            ->assertJsonPath('operations.payment_methods.2.name', 'Mobile banking');
 
         $settings = ApplicationSetting::query()->firstOrFail();
         Storage::disk('public')->assertExists($settings->logo_path);

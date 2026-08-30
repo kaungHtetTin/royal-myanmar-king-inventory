@@ -12,6 +12,7 @@ import {
 } from '../../services/administration';
 import { Icon } from '../../ui/icons';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
+import { useLocale } from '../../localization/locale-context';
 
 const emptyMeta: PaginationMeta = {
     current_page: 1,
@@ -35,19 +36,13 @@ function label(value: string) {
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function dateTime(value: string | null) {
-    if (!value) return 'Never';
-    return new Intl.DateTimeFormat(undefined, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-    }).format(new Date(value));
-}
-
-function errorMessage(error: unknown) {
-    return error instanceof Error ? error.message : 'Unable to complete the request.';
+function errorMessage(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback;
 }
 
 export function AccessManagementPage() {
+    const { formatDateTime, formatNumber, t } = useLocale();
+    const dateTime = (value: string | null) => (value ? formatDateTime(value) : t('Never'));
     const [appliedFilters, setAppliedFilters] = useState<UserFilters>({
         page: 1,
     });
@@ -75,11 +70,11 @@ export function AccessManagementPage() {
             setMeta(response.meta);
             setSummary(response.summary ?? emptySummary);
         } catch (requestError) {
-            setError(errorMessage(requestError));
+            setError(errorMessage(requestError, t('Unable to complete the request.')));
         } finally {
             setLoading(false);
         }
-    }, [appliedFilters]);
+    }, [appliedFilters, t]);
 
     useEffect(() => {
         let active = true;
@@ -89,12 +84,12 @@ export function AccessManagementPage() {
                 if (active) setOptions(response);
             })
             .catch((requestError) => {
-                if (active) setError(errorMessage(requestError));
+                if (active) setError(errorMessage(requestError, t('Unable to complete the request.')));
             });
         return () => {
             active = false;
         };
-    }, []);
+    }, [t]);
 
     useEffect(() => {
         let active = true;
@@ -107,7 +102,7 @@ export function AccessManagementPage() {
                 setSummary(response.summary ?? emptySummary);
             })
             .catch((requestError) => {
-                if (active) setError(errorMessage(requestError));
+                if (active) setError(errorMessage(requestError, t('Unable to complete the request.')));
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -115,7 +110,7 @@ export function AccessManagementPage() {
         return () => {
             active = false;
         };
-    }, [appliedFilters]);
+    }, [appliedFilters, t]);
 
     const showNotice = (message: string) => {
         setNotice(message);
@@ -131,9 +126,9 @@ export function AccessManagementPage() {
         <div className="admin-page access-management">
             <header className="page-heading">
                 <div>
-                    <p className="ui-eyebrow">Access control</p>
-                    <h1>Users</h1>
-                    <p>Manage account details, status, assigned roles, and warehouse scope.</p>
+                    <p className="ui-eyebrow">{t('Access control')}</p>
+                    <h1>{t('Users')}</h1>
+                    <p>{t('Manage account details, status, assigned roles, and warehouse scope.')}</p>
                 </div>
                 <Button
                     icon="plus"
@@ -143,28 +138,28 @@ export function AccessManagementPage() {
                     }}
                     tone="primary"
                 >
-                    New user
+                    {t('New user')}
                 </Button>
             </header>
 
             <div className="metric-grid access-metrics">
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="users"
-                    label="User accounts"
-                    value={String(summary.total)}
+                    label={t('User accounts')}
+                    value={formatNumber(summary.total)}
                 />
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="dashboard"
-                    label="Active accounts"
-                    value={String(summary.active)}
+                    label={t('Active accounts')}
+                    value={formatNumber(summary.active)}
                 />
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="warehouse"
-                    label="Warehouse assigned"
-                    value={String(summary.warehouse_assigned)}
+                    label={t('Warehouse assigned')}
+                    value={formatNumber(summary.warehouse_assigned)}
                 />
             </div>
 
@@ -179,199 +174,210 @@ export function AccessManagementPage() {
                     <Icon name="x" size={15} />
                     {error}
                     <button onClick={() => void loadUsers()} type="button">
-                        Retry
+                        {t('Retry')}
                     </button>
                 </div>
             ) : null}
 
-            <Panel eyebrow="Directory" title="User accounts">
-                    <form
-                        className="filter-toolbar"
-                        onSubmit={(event) => {
-                            event.preventDefault();
-                            setLoading(true);
-                            setAppliedFilters({ ...draftFilters, page: 1 });
-                        }}
-                    >
-                        <label className="filter-search">
-                            <span className="sr-only">Search users</span>
-                            <Icon name="search" size={15} />
-                            <input
-                                onChange={(event) =>
-                                    setDraftFilters((value) => ({
-                                        ...value,
-                                        search: event.target.value,
-                                    }))
-                                }
-                                placeholder="Search name, username, or email"
-                                type="search"
-                                value={draftFilters.search}
-                            />
-                        </label>
-                        <label>
-                            <span className="sr-only">Filter by status</span>
-                            <select
-                                onChange={(event) =>
-                                    setDraftFilters((value) => ({
-                                        ...value,
-                                        status: event.target.value,
-                                    }))
-                                }
-                                value={draftFilters.status}
-                            >
-                                <option value="">All statuses</option>
-                                <option value="active">Active</option>
-                                <option value="inactive">Inactive</option>
-                            </select>
-                        </label>
-                        <label>
-                            <span className="sr-only">Filter by role</span>
-                            <select
-                                onChange={(event) =>
-                                    setDraftFilters((value) => ({
-                                        ...value,
-                                        role: event.target.value,
-                                    }))
-                                }
-                                value={draftFilters.role}
-                            >
-                                <option value="">All roles</option>
-                                {options.roles.map((role) => (
-                                    <option key={role.id} value={role.name}>
-                                        {label(role.name)}
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
-                        <Button icon="search" type="submit">
-                            Apply filters
-                        </Button>
-                    </form>
-
-                    {loading ? (
-                        <div className="ui-loading" role="status">
-                            <span />
-                            Loading user accounts…
-                        </div>
-                    ) : users.length === 0 ? (
-                        <EmptyState
-                            description="Change the filters or create the first account."
-                            title="No users found"
+            <Panel eyebrow={t('Directory')} title={t('User accounts')}>
+                <form
+                    className="filter-toolbar"
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        setLoading(true);
+                        setAppliedFilters({ ...draftFilters, page: 1 });
+                    }}
+                >
+                    <label className="filter-search">
+                        <span className="sr-only">{t('Search users')}</span>
+                        <Icon name="search" size={15} />
+                        <input
+                            onChange={(event) =>
+                                setDraftFilters((value) => ({
+                                    ...value,
+                                    search: event.target.value,
+                                }))
+                            }
+                            placeholder={t('Search name, username, or email')}
+                            type="search"
+                            value={draftFilters.search}
                         />
-                    ) : (
-                        <div className="ui-table-wrap">
-                            <table className="ui-table access-table">
-                                <thead>
-                                    <tr>
-                                        <th>User</th>
-                                        <th>Status</th>
-                                        <th>Roles</th>
-                                        <th>Warehouse scope</th>
-                                        <th>Last sign in</th>
-                                        <th className="ui-table__actions">Actions</th>
+                    </label>
+                    <label>
+                        <span className="sr-only">{t('Filter by status')}</span>
+                        <select
+                            onChange={(event) =>
+                                setDraftFilters((value) => ({
+                                    ...value,
+                                    status: event.target.value,
+                                }))
+                            }
+                            value={draftFilters.status}
+                        >
+                            <option value="">{t('All statuses')}</option>
+                            <option value="active">{t('Active')}</option>
+                            <option value="inactive">{t('Inactive')}</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span className="sr-only">{t('Filter by role')}</span>
+                        <select
+                            onChange={(event) =>
+                                setDraftFilters((value) => ({
+                                    ...value,
+                                    role: event.target.value,
+                                }))
+                            }
+                            value={draftFilters.role}
+                        >
+                            <option value="">{t('All roles')}</option>
+                            {options.roles.map((role) => (
+                                <option key={role.id} value={role.name}>
+                                    {t(label(role.name))}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                    <Button icon="search" type="submit">
+                        {t('Apply filters')}
+                    </Button>
+                </form>
+
+                {loading ? (
+                    <div className="ui-loading" role="status">
+                        <span />
+                        {t('Loading user accounts…')}
+                    </div>
+                ) : users.length === 0 ? (
+                    <EmptyState
+                        description={t('Change the filters or create the first account.')}
+                        title={t('No users found')}
+                    />
+                ) : (
+                    <div className="ui-table-wrap">
+                        <table className="ui-table access-table">
+                            <thead>
+                                <tr>
+                                    <th>{t('User')}</th>
+                                    <th>{t('Status')}</th>
+                                    <th>{t('Roles')}</th>
+                                    <th>{t('Warehouse scope')}</th>
+                                    <th>{t('Last sign in')}</th>
+                                    <th className="ui-table__actions">{t('Actions')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {users.map((managedUser) => (
+                                    <tr key={managedUser.id}>
+                                        <td>
+                                            <strong className="table-primary">{managedUser.name}</strong>
+                                            <small>
+                                                @{managedUser.username} · {managedUser.email}
+                                            </small>
+                                        </td>
+                                        <td>
+                                            <StatusBadge tone={managedUser.is_active ? 'success' : 'danger'}>
+                                                {t(managedUser.is_active ? 'Active' : 'Inactive')}
+                                            </StatusBadge>
+                                        </td>
+                                        <td>
+                                            <div className="tag-list">
+                                                {managedUser.roles.map((role) => (
+                                                    <span key={role}>{t(label(role))}</span>
+                                                ))}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            {managedUser.warehouses.length ? (
+                                                <>
+                                                    <strong>{managedUser.warehouses[0].name}</strong>
+                                                    {managedUser.warehouses.length > 1 ? (
+                                                        <small>
+                                                            {t('+{count} more', {
+                                                                count: formatNumber(managedUser.warehouses.length - 1),
+                                                            })}
+                                                        </small>
+                                                    ) : (
+                                                        <small>{managedUser.warehouses[0].code}</small>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <span className="table-muted">{t('All / none required')}</span>
+                                            )}
+                                        </td>
+                                        <td>
+                                            <span className="table-primary">{dateTime(managedUser.last_login_at)}</span>
+                                            <small>
+                                                {t('Created {date}', { date: dateTime(managedUser.created_at) })}
+                                            </small>
+                                        </td>
+                                        <td className="ui-table__actions">
+                                            <div className="row-actions">
+                                                <IconButton
+                                                    icon="adjustments"
+                                                    label={t('Edit {name} access', { name: managedUser.name })}
+                                                    onClick={() => {
+                                                        setSelectedUser(managedUser);
+                                                        setUserDialog('access');
+                                                    }}
+                                                />
+                                                <IconButton
+                                                    icon="settings"
+                                                    label={t('Edit {name} profile', { name: managedUser.name })}
+                                                    onClick={() => {
+                                                        setSelectedUser(managedUser);
+                                                        setUserDialog('edit');
+                                                    }}
+                                                />
+                                            </div>
+                                        </td>
                                     </tr>
-                                </thead>
-                                <tbody>
-                                    {users.map((managedUser) => (
-                                        <tr key={managedUser.id}>
-                                            <td>
-                                                <strong className="table-primary">{managedUser.name}</strong>
-                                                <small>
-                                                    @{managedUser.username} · {managedUser.email}
-                                                </small>
-                                            </td>
-                                            <td>
-                                                <StatusBadge tone={managedUser.is_active ? 'success' : 'danger'}>
-                                                    {managedUser.is_active ? 'Active' : 'Inactive'}
-                                                </StatusBadge>
-                                            </td>
-                                            <td>
-                                                <div className="tag-list">
-                                                    {managedUser.roles.map((role) => (
-                                                        <span key={role}>{label(role)}</span>
-                                                    ))}
-                                                </div>
-                                            </td>
-                                            <td>
-                                                {managedUser.warehouses.length ? (
-                                                    <>
-                                                        <strong>{managedUser.warehouses[0].name}</strong>
-                                                        {managedUser.warehouses.length > 1 ? (
-                                                            <small>+{managedUser.warehouses.length - 1} more</small>
-                                                        ) : (
-                                                            <small>{managedUser.warehouses[0].code}</small>
-                                                        )}
-                                                    </>
-                                                ) : (
-                                                    <span className="table-muted">All / none required</span>
-                                                )}
-                                            </td>
-                                            <td>
-                                                <span className="table-primary">
-                                                    {dateTime(managedUser.last_login_at)}
-                                                </span>
-                                                <small>Created {dateTime(managedUser.created_at)}</small>
-                                            </td>
-                                            <td className="ui-table__actions">
-                                                <div className="row-actions">
-                                                    <IconButton
-                                                        icon="adjustments"
-                                                        label={`Edit ${managedUser.name} access`}
-                                                        onClick={() => {
-                                                            setSelectedUser(managedUser);
-                                                            setUserDialog('access');
-                                                        }}
-                                                    />
-                                                    <IconButton
-                                                        icon="settings"
-                                                        label={`Edit ${managedUser.name} profile`}
-                                                        onClick={() => {
-                                                            setSelectedUser(managedUser);
-                                                            setUserDialog('edit');
-                                                        }}
-                                                    />
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                    <footer className="table-footer">
-                        <span>
-                            {meta.from ?? 0}–{meta.to ?? 0} of {meta.total} users
-                        </span>
-                        <button
-                            disabled={meta.current_page <= 1 || loading}
-                            onClick={() => {
-                                setLoading(true);
-                                setAppliedFilters((value) => ({
-                                    ...value,
-                                    page: meta.current_page - 1,
-                                }));
-                            }}
-                            type="button"
-                        >
-                            Previous
-                        </button>
-                        <strong>
-                            Page {meta.current_page} of {meta.last_page}
-                        </strong>
-                        <button
-                            disabled={meta.current_page >= meta.last_page || loading}
-                            onClick={() => {
-                                setLoading(true);
-                                setAppliedFilters((value) => ({
-                                    ...value,
-                                    page: meta.current_page + 1,
-                                }));
-                            }}
-                            type="button"
-                        >
-                            Next
-                        </button>
-                    </footer>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+                <footer className="table-footer">
+                    <span>
+                        {t('{from}–{to} of {total} users', {
+                            from: formatNumber(meta.from ?? 0),
+                            to: formatNumber(meta.to ?? 0),
+                            total: formatNumber(meta.total),
+                        })}
+                    </span>
+                    <button
+                        disabled={meta.current_page <= 1 || loading}
+                        onClick={() => {
+                            setLoading(true);
+                            setAppliedFilters((value) => ({
+                                ...value,
+                                page: meta.current_page - 1,
+                            }));
+                        }}
+                        type="button"
+                    >
+                        {t('Previous')}
+                    </button>
+                    <strong>
+                        {t('Page {current} of {last}', {
+                            current: formatNumber(meta.current_page),
+                            last: formatNumber(meta.last_page),
+                        })}
+                    </strong>
+                    <button
+                        disabled={meta.current_page >= meta.last_page || loading}
+                        onClick={() => {
+                            setLoading(true);
+                            setAppliedFilters((value) => ({
+                                ...value,
+                                page: meta.current_page + 1,
+                            }));
+                        }}
+                        type="button"
+                    >
+                        {t('Next')}
+                    </button>
+                </footer>
             </Panel>
 
             <UserDialog
@@ -389,6 +395,7 @@ export function AccessManagementPage() {
 }
 
 export function RoleManagementSection() {
+    const { formatNumber, t } = useLocale();
     const [roles, setRoles] = useState<ManagedRole[]>([]);
     const [options, setOptions] = useState<AccessOptions>(emptyOptions);
     const [loading, setLoading] = useState(true);
@@ -408,11 +415,11 @@ export function RoleManagementSection() {
             setRoles(roleResponse.roles);
             setOptions(accessOptions);
         } catch (requestError) {
-            setError(errorMessage(requestError));
+            setError(errorMessage(requestError, t('Unable to complete the request.')));
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [t]);
 
     useEffect(() => {
         void loadRoles();
@@ -422,9 +429,9 @@ export function RoleManagementSection() {
         <div className="settings-role-management">
             <header className="settings-editor-heading settings-role-heading">
                 <div>
-                    <p className="ui-eyebrow">Authorization</p>
-                    <h2>Roles & permissions</h2>
-                    <p>Bundle permissions into reusable access profiles for user accounts.</p>
+                    <p className="ui-eyebrow">{t('Authorization')}</p>
+                    <h2>{t('Roles & permissions')}</h2>
+                    <p>{t('Bundle permissions into reusable access profiles for user accounts.')}</p>
                 </div>
                 <Button
                     icon="plus"
@@ -433,37 +440,84 @@ export function RoleManagementSection() {
                         setRoleDialog('create');
                     }}
                 >
-                    New role
+                    {t('New role')}
                 </Button>
             </header>
 
-            {notice ? <div className="ui-flash ui-flash--success" role="status">{notice}</div> : null}
+            {notice ? (
+                <div className="ui-flash ui-flash--success" role="status">
+                    {notice}
+                </div>
+            ) : null}
             {error ? (
                 <div className="ui-flash ui-flash--danger" role="alert">
                     {error}
-                    <button onClick={() => void loadRoles()} type="button">Retry</button>
+                    <button onClick={() => void loadRoles()} type="button">
+                        {t('Retry')}
+                    </button>
                 </div>
             ) : null}
 
             <section className="settings-subsection settings-role-card">
                 <div className="role-summary">
-                    Built-in role names stay fixed to preserve policy behavior. Permission changes apply immediately.
+                    {t(
+                        'Built-in role names stay fixed to preserve policy behavior. Permission changes apply immediately.',
+                    )}
                 </div>
                 {loading ? (
-                    <div className="ui-loading" role="status"><span />Loading roles…</div>
+                    <div className="ui-loading" role="status">
+                        <span />
+                        {t('Loading roles…')}
+                    </div>
                 ) : (
                     <div className="ui-table-wrap">
                         <table className="ui-table role-table">
-                            <thead><tr><th>Role</th><th>Users</th><th>Permissions</th><th>Type</th><th className="ui-table__actions">Actions</th></tr></thead>
+                            <thead>
+                                <tr>
+                                    <th>{t('Role')}</th>
+                                    <th>{t('Users')}</th>
+                                    <th>{t('Permissions')}</th>
+                                    <th>{t('Type')}</th>
+                                    <th className="ui-table__actions">{t('Actions')}</th>
+                                </tr>
+                            </thead>
                             <tbody>
                                 {roles.map((role) => (
                                     <tr key={role.id}>
-                                        <td><strong>{label(role.name)}</strong><small>{role.name}</small></td>
-                                        <td className="is-numeric">{role.users_count}</td>
-                                        <td><strong>{role.permissions.length}</strong><small>{role.permissions.slice(0, 3).map(label).join(', ') || 'No permissions'}{role.permissions.length > 3 ? ` +${role.permissions.length - 3}` : ''}</small></td>
-                                        <td><StatusBadge tone={role.system ? 'info' : 'neutral'}>{role.system ? 'Built-in' : 'Custom'}</StatusBadge></td>
+                                        <td>
+                                            <strong>{t(label(role.name))}</strong>
+                                            <small>{role.name}</small>
+                                        </td>
+                                        <td className="is-numeric">{formatNumber(role.users_count)}</td>
+                                        <td>
+                                            <strong>{formatNumber(role.permissions.length)}</strong>
+                                            <small>
+                                                {role.permissions
+                                                    .slice(0, 3)
+                                                    .map((value) => t(label(value)))
+                                                    .join(', ') || t('No permissions')}
+                                                {role.permissions.length > 3
+                                                    ? t(' +{count}', {
+                                                          count: formatNumber(role.permissions.length - 3),
+                                                      })
+                                                    : ''}
+                                            </small>
+                                        </td>
+                                        <td>
+                                            <StatusBadge tone={role.system ? 'info' : 'neutral'}>
+                                                {t(role.system ? 'Built-in' : 'Custom')}
+                                            </StatusBadge>
+                                        </td>
                                         <td className="ui-table__actions">
-                                            <IconButton disabled={role.name === 'super-admin'} icon="settings" label={`Edit ${label(role.name)}`} onClick={() => { setSelectedRole(role); setRoleDialog('edit'); }} />
+                                            <IconButton
+                                                disabled={role.name === 'super-admin'}
+                                                icon="settings"
+                                                label={t('Edit {name}', { name: t(label(role.name)) })}
+                                                onClick={() => {
+                                                    setSelectedRole(role);
+                                                    setRoleDialog('edit');
+                                                }}
+                                            />
                                         </td>
                                     </tr>
                                 ))}
@@ -506,6 +560,7 @@ function UserDialog({
     options: AccessOptions;
     user: ManagedUser | null;
 }) {
+    const { t } = useLocale();
     const [saving, setSaving] = useState(false);
     const [errors, setErrors] = useState<Record<string, string[]>>({});
     const [form, setForm] = useState<UserInput>({
@@ -537,10 +592,10 @@ function UserDialog({
     const isAccess = mode === 'access';
     const title =
         mode === 'create'
-            ? 'Create user account'
+            ? t('Create user account')
             : mode === 'access'
-              ? `Assign access · ${user?.name}`
-              : `Edit profile · ${user?.name}`;
+              ? t('Assign access · {name}', { name: user?.name ?? '' })
+              : t('Edit profile · {name}', { name: user?.name ?? '' });
     const toggleRole = (name: string) =>
         setForm((value) => ({
             ...value,
@@ -562,7 +617,9 @@ function UserDialog({
             mode === 'edit' &&
             user?.is_active &&
             !form.is_active &&
-            !window.confirm(`Deactivate ${user.name}? They will be signed out and blocked from logging in.`)
+            !window.confirm(
+                t('Deactivate {name}? They will be signed out and blocked from logging in.', { name: user.name }),
+            )
         )
             return;
         setSaving(true);
@@ -570,22 +627,22 @@ function UserDialog({
         try {
             if (mode === 'create') {
                 await administrationApi.createUser(form);
-                await onSaved('User account created.');
+                await onSaved(t('User account created.'));
             } else if (mode === 'access' && user) {
                 await administrationApi.updateUserAccess(user.id, {
                     roles: form.roles ?? [],
                     warehouse_ids: form.warehouse_ids ?? [],
                 });
-                await onSaved('User access updated.');
+                await onSaved(t('User access updated.'));
             } else if (user) {
                 await administrationApi.updateUser(user.id, form);
-                await onSaved('User profile updated.');
+                await onSaved(t('User profile updated.'));
             }
         } catch (requestError) {
             if (requestError instanceof AdministrationError) setErrors(requestError.fields);
             setErrors((value) => ({
                 ...value,
-                form: [errorMessage(requestError)],
+                form: [errorMessage(requestError, t('Unable to complete the request.'))],
             }));
         } finally {
             setSaving(false);
@@ -596,16 +653,16 @@ function UserDialog({
         <Dialog
             description={
                 isAccess
-                    ? 'Choose at least one role and the warehouses this user can operate.'
-                    : 'Profile fields are used for sign-in, identity, and account status.'
+                    ? t('Choose at least one role and the warehouses this user can operate.')
+                    : t('Profile fields are used for sign-in, identity, and account status.')
             }
             footer={
                 <>
                     <Button disabled={saving} onClick={onClose}>
-                        Cancel
+                        {t('Cancel')}
                     </Button>
                     <Button disabled={saving} form="user-management-form" requiresOnline tone="primary" type="submit">
-                        {saving ? 'Saving…' : 'Save changes'}
+                        {saving ? t('Saving…') : t('Save changes')}
                     </Button>
                 </>
             }
@@ -623,7 +680,7 @@ function UserDialog({
                 {!isAccess ? (
                     <div className="form-grid">
                         <label className="ui-field">
-                            <span>Full name</span>
+                            <span>{t('Full name')}</span>
                             <input
                                 autoFocus
                                 onChange={(event) =>
@@ -638,7 +695,7 @@ function UserDialog({
                             <FieldError errors={errors} name="name" />
                         </label>
                         <label className="ui-field">
-                            <span>Username</span>
+                            <span>{t('Username')}</span>
                             <input
                                 autoComplete="off"
                                 onChange={(event) =>
@@ -653,7 +710,7 @@ function UserDialog({
                             <FieldError errors={errors} name="username" />
                         </label>
                         <label className="ui-field form-grid__wide">
-                            <span>Email address</span>
+                            <span>{t('Email address')}</span>
                             <input
                                 onChange={(event) =>
                                     setForm((value) => ({
@@ -668,7 +725,13 @@ function UserDialog({
                             <FieldError errors={errors} name="email" />
                         </label>
                         <label className="ui-field">
-                            <span>{mode === 'edit' ? 'New password (optional, minimum 6 characters)' : 'Password (minimum 6 characters)'}</span>
+                            <span>
+                                {t(
+                                    mode === 'edit'
+                                        ? 'New password (optional, minimum 6 characters)'
+                                        : 'Password (minimum 6 characters)',
+                                )}
+                            </span>
                             <input
                                 autoComplete="new-password"
                                 minLength={6}
@@ -685,7 +748,7 @@ function UserDialog({
                             <FieldError errors={errors} name="password" />
                         </label>
                         <label className="ui-field">
-                            <span>Confirm password</span>
+                            <span>{t('Confirm password')}</span>
                             <input
                                 autoComplete="new-password"
                                 minLength={6}
@@ -712,8 +775,8 @@ function UserDialog({
                                 type="checkbox"
                             />
                             <span>
-                                <strong>Active account</strong>
-                                <small>Inactive users cannot sign in and existing sessions are revoked.</small>
+                                <strong>{t('Active account')}</strong>
+                                <small>{t('Inactive users cannot sign in and existing sessions are revoked.')}</small>
                             </span>
                         </label>
                     </div>
@@ -745,11 +808,12 @@ function AccessSelectors({
     toggleRole: (name: string) => void;
     toggleWarehouse: (id: number) => void;
 }) {
+    const { t } = useLocale();
     return (
         <div className="access-selector-grid">
             <fieldset>
-                <legend>Roles</legend>
-                <p>Permissions come from the selected access profiles.</p>
+                <legend>{t('Roles')}</legend>
+                <p>{t('Permissions come from the selected access profiles.')}</p>
                 <div className="check-list">
                     {options.roles.map((role) => (
                         <label key={role.id}>
@@ -759,7 +823,7 @@ function AccessSelectors({
                                 type="checkbox"
                             />
                             <span>
-                                <strong>{label(role.name)}</strong>
+                                <strong>{t(label(role.name))}</strong>
                                 <small>{role.name}</small>
                             </span>
                         </label>
@@ -768,8 +832,8 @@ function AccessSelectors({
                 <FieldError errors={errors} name="roles" />
             </fieldset>
             <fieldset>
-                <legend>Warehouse scope</legend>
-                <p>Limits operational records visible to this user.</p>
+                <legend>{t('Warehouse scope')}</legend>
+                <p>{t('Limits operational records visible to this user.')}</p>
                 <div className="check-list">
                     {options.warehouses.map((warehouse) => (
                         <label key={warehouse.id}>
@@ -804,6 +868,7 @@ function RoleDialog({
     options: AccessOptions;
     role: ManagedRole | null;
 }) {
+    const { formatNumber, t } = useLocale();
     const [name, setName] = useState('');
     const [permissions, setPermissions] = useState<string[]>([]);
     const [errors, setErrors] = useState<Record<string, string[]>>({});
@@ -838,12 +903,12 @@ function RoleDialog({
                     name,
                     permissions,
                 });
-            await onSaved(mode === 'create' ? 'Role created.' : 'Role permissions updated.');
+            await onSaved(t(mode === 'create' ? 'Role created.' : 'Role permissions updated.'));
         } catch (requestError) {
             if (requestError instanceof AdministrationError) setErrors(requestError.fields);
             setErrors((value) => ({
                 ...value,
-                form: [errorMessage(requestError)],
+                form: [errorMessage(requestError, t('Unable to complete the request.'))],
             }));
         } finally {
             setSaving(false);
@@ -852,20 +917,24 @@ function RoleDialog({
 
     return (
         <Dialog
-            description="Permission changes apply immediately to every user assigned this role."
+            description={t('Permission changes apply immediately to every user assigned this role.')}
             footer={
                 <>
                     <Button disabled={saving} onClick={onClose}>
-                        Cancel
+                        {t('Cancel')}
                     </Button>
                     <Button disabled={saving} form="role-management-form" requiresOnline tone="primary" type="submit">
-                        {saving ? 'Saving…' : 'Save role'}
+                        {saving ? t('Saving…') : t('Save role')}
                     </Button>
                 </>
             }
             onClose={onClose}
             open
-            title={mode === 'create' ? 'Create access role' : `Edit role · ${label(role?.name ?? '')}`}
+            title={
+                mode === 'create'
+                    ? t('Create access role')
+                    : t('Edit role · {name}', { name: t(label(role?.name ?? '')) })
+            }
         >
             <form className="management-form" id="role-management-form" onSubmit={submit}>
                 {errors.form?.[0] ? (
@@ -874,7 +943,7 @@ function RoleDialog({
                     </div>
                 ) : null}
                 <label className="ui-field role-name-field">
-                    <span>Role name</span>
+                    <span>{t('Role name')}</span>
                     <input
                         disabled={fixedName}
                         onChange={(event) => setName(event.target.value.toLowerCase().replaceAll(' ', '-'))}
@@ -884,19 +953,19 @@ function RoleDialog({
                     />
                     <small>
                         {fixedName
-                            ? 'Built-in role names cannot be changed.'
-                            : 'Use lowercase letters, numbers, and hyphens.'}
+                            ? t('Built-in role names cannot be changed.')
+                            : t('Use lowercase letters, numbers, and hyphens.')}
                     </small>
                     <FieldError errors={errors} name="name" />
                 </label>
                 <div className="permission-heading">
-                    <strong>Permissions</strong>
-                    <span>{permissions.length} selected</span>
+                    <strong>{t('Permissions')}</strong>
+                    <span>{t('{count} selected', { count: formatNumber(permissions.length) })}</span>
                 </div>
                 <div className="permission-groups">
                     {groups.map(([group, groupPermissions]) => (
                         <fieldset key={group}>
-                            <legend>{label(group)}</legend>
+                            <legend>{t(label(group))}</legend>
                             {groupPermissions?.map((permission) => (
                                 <label key={permission.id}>
                                     <input
@@ -910,7 +979,7 @@ function RoleDialog({
                                         }
                                         type="checkbox"
                                     />
-                                    <span>{label(permission.name.split('.').slice(1).join('.'))}</span>
+                                    <span>{t(label(permission.name.split('.').slice(1).join('.')))}</span>
                                     <code>{permission.name}</code>
                                 </label>
                             ))}

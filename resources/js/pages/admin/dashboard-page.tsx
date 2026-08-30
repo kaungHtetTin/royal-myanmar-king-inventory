@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { reportingApi, type AdminDashboard } from '../../services/reporting';
 import { Icon } from '../../ui/icons';
 import { EmptyState, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
+import { useLocale } from '../../localization/locale-context';
 
 const empty: AdminDashboard = {
     as_of: '',
@@ -23,23 +24,13 @@ const empty: AdminDashboard = {
     },
     recent_movements: [],
 };
-function money(value: number) {
-    return `${new Intl.NumberFormat('en-US').format(value)} MMK`;
-}
-function number(value: number) {
-    return new Intl.NumberFormat('en-US').format(value);
-}
-function dateTime(value: string) {
-    return new Intl.DateTimeFormat(undefined, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-    }).format(new Date(value));
-}
-function message(error: unknown) {
-    return error instanceof Error ? error.message : 'Unable to load dashboard.';
+function message(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback;
 }
 
 export function AdminDashboardPage() {
+    const { formatDateTime, formatNumber, t } = useLocale();
+    const money = (value: number) => `${formatNumber(value)} MMK`;
     const [data, setData] = useState(empty);
     const [warehouseId, setWarehouseId] = useState(0);
     const [loading, setLoading] = useState(true);
@@ -51,12 +42,12 @@ export function AdminDashboardPage() {
             try {
                 setData(await reportingApi.adminDashboard(selected || undefined));
             } catch (requestError) {
-                setError(message(requestError));
+                setError(message(requestError, t('Unable to load dashboard.')));
             } finally {
                 setLoading(false);
             }
         },
-        [warehouseId],
+        [t, warehouseId],
     );
     useEffect(() => {
         let active = true;
@@ -66,7 +57,7 @@ export function AdminDashboardPage() {
                 if (active) setData(response);
             })
             .catch((requestError) => {
-                if (active) setError(message(requestError));
+                if (active) setError(message(requestError, t('Unable to load dashboard.')));
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -74,7 +65,7 @@ export function AdminDashboardPage() {
         return () => {
             active = false;
         };
-    }, []);
+    }, [t]);
     const selectWarehouse = (value: number) => {
         setWarehouseId(value);
         void load(value);
@@ -84,21 +75,22 @@ export function AdminDashboardPage() {
         <div className="admin-page dashboard-page">
             <header className="page-heading">
                 <div>
-                    <p className="ui-eyebrow">{data.as_of ? dateTime(data.as_of) : 'Live operations'}</p>
-                    <h1>Operations overview</h1>
+                    <p className="ui-eyebrow">{data.as_of ? formatDateTime(data.as_of) : t('Live operations')}</p>
+                    <h1>{t('Operations overview')}</h1>
                     <p>
-                        Posted sales, current custody balances, and work awaiting confirmation across accessible
-                        warehouses.
+                        {t(
+                            'Posted sales, current custody balances, and work awaiting confirmation across accessible warehouses.',
+                        )}
                     </p>
                 </div>
                 <label className="dashboard-warehouse-filter">
-                    <span>Warehouse scope</span>
+                    <span>{t('Warehouse scope')}</span>
                     <select
-                        aria-label="Warehouse scope"
+                        aria-label={t('Warehouse scope')}
                         onChange={(event) => selectWarehouse(Number(event.target.value))}
                         value={warehouseId}
                     >
-                        <option value={0}>All accessible warehouses</option>
+                        <option value={0}>{t('All accessible warehouses')}</option>
                         {data.warehouses.map((warehouse) => (
                             <option key={warehouse.id} value={warehouse.id}>
                                 {warehouse.code} · {warehouse.name}
@@ -107,29 +99,34 @@ export function AdminDashboardPage() {
                     </select>
                 </label>
             </header>
-            <section aria-label="Key performance indicators" className="metric-grid dashboard-kpis">
+            <section aria-label={t('Key performance indicators')} className="metric-grid dashboard-kpis">
                 <MetricCard
-                    hint={`${number(kpi.today_cash_sales)} cash · ${number(kpi.today_credit_sales)} credit`}
+                    hint={t('{cash} cash · {credit} credit', {
+                        cash: formatNumber(kpi.today_cash_sales),
+                        credit: formatNumber(kpi.today_credit_sales),
+                    })}
                     icon="sales"
-                    label="Today's posted sales"
+                    label={t("Today's posted sales")}
                     value={money(kpi.today_sales)}
                 />
                 <MetricCard
-                    hint={`${kpi.products} active products`}
+                    hint={t('{count} active products', { count: formatNumber(kpi.products) })}
                     icon="warehouse"
-                    label="Warehouse stock"
-                    value={number(kpi.warehouse_stock)}
+                    label={t('Warehouse stock')}
+                    value={formatNumber(kpi.warehouse_stock)}
                 />
                 <MetricCard
-                    hint="Current customer balances"
+                    hint={t('Current customer balances')}
                     icon="customers"
-                    label="Outstanding credit"
+                    label={t('Outstanding credit')}
                     value={money(kpi.customer_outstanding)}
                 />
                 <MetricCard
-                    hint={`${kpi.active_representatives} active representatives`}
+                    hint={t('{count} active representatives', {
+                        count: formatNumber(kpi.active_representatives),
+                    })}
                     icon="cash"
-                    label="Representative cash"
+                    label={t('Representative cash')}
                     value={money(kpi.representative_cash)}
                 />
             </section>
@@ -137,42 +134,42 @@ export function AdminDashboardPage() {
                 <div className="ui-flash ui-flash--danger">
                     <Icon name="x" size={15} />
                     {error}
-                    <button onClick={() => void load()}>Retry</button>
+                    <button onClick={() => void load()}>{t('Retry')}</button>
                 </div>
             ) : null}
             <div className="dashboard-grid">
                 <Panel
                     actions={
                         <Link className="ui-text-link" to="/admin/reports">
-                            Open reports
+                            {t('Open reports')}
                         </Link>
                     }
-                    eyebrow="Live custody ledger"
-                    title="Recent stock movements"
+                    eyebrow={t('Live custody ledger')}
+                    title={t('Recent stock movements')}
                 >
                     {loading ? (
                         <div className="ui-loading">
                             <span />
-                            Loading operations…
+                            {t('Loading operations…')}
                         </div>
                     ) : data.recent_movements.length === 0 ? (
                         <EmptyState
-                            description="Posted inventory activity for the selected scope will appear here."
-                            title="No recent movements"
+                            description={t('Posted inventory activity for the selected scope will appear here.')}
+                            title={t('No recent movements')}
                         />
                     ) : (
                         <div className="ui-table-wrap">
                             <table
-                                aria-label="Recent stock movements"
+                                aria-label={t('Recent stock movements')}
                                 className="ui-table dashboard-stock-movements-table"
                             >
                                 <thead>
                                     <tr>
-                                        <th>Reference</th>
-                                        <th>Product</th>
-                                        <th>Movement</th>
-                                        <th className="is-numeric">Qty</th>
-                                        <th>Actor / time</th>
+                                        <th>{t('Reference')}</th>
+                                        <th>{t('Product')}</th>
+                                        <th>{t('Movement')}</th>
+                                        <th className="is-numeric">{t('Qty')}</th>
+                                        <th>{t('Actor / time')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -198,11 +195,11 @@ export function AdminDashboardPage() {
                                                 </StatusBadge>
                                             </td>
                                             <td className="is-numeric">
-                                                <strong>{number(movement.quantity)}</strong>
+                                                <strong>{formatNumber(movement.quantity)}</strong>
                                             </td>
                                             <td>
                                                 {movement.actor.name}
-                                                <small>{dateTime(movement.occurred_at)}</small>
+                                                <small>{formatDateTime(movement.occurred_at)}</small>
                                             </td>
                                         </tr>
                                     ))}
@@ -212,63 +209,67 @@ export function AdminDashboardPage() {
                     )}
                 </Panel>
                 <div className="dashboard-side-stack">
-                    <Panel eyebrow="Attention" title="Awaiting action">
+                    <Panel eyebrow={t('Attention')} title={t('Awaiting action')}>
                         <ul className="attention-list">
                             <li>
                                 <span className="attention-icon is-warning">{kpi.pending_warehouse_transfers}</span>
                                 <div>
-                                    <strong>Warehouse transfers</strong>
-                                    <small>Dispatched, awaiting receipt</small>
+                                    <strong>{t('Warehouse transfers')}</strong>
+                                    <small>{t('Dispatched, awaiting receipt')}</small>
                                 </div>
-                                <Link aria-label="Review pending warehouse transfers" to="/admin/transfers">
+                                <Link aria-label={t('Review pending warehouse transfers')} to="/admin/transfers">
                                     <Icon name="chevronRight" />
                                 </Link>
                             </li>
                             <li>
                                 <span className="attention-icon is-info">{kpi.pending_representative_receivings}</span>
                                 <div>
-                                    <strong>Representative receiving</strong>
-                                    <small>Stock remains in transit</small>
+                                    <strong>{t('Representative receiving')}</strong>
+                                    <small>{t('Stock remains in transit')}</small>
                                 </div>
-                                <Link aria-label="Review pending representative receiving" to="/admin/transfers">
+                                <Link aria-label={t('Review pending representative receiving')} to="/admin/transfers">
                                     <Icon name="chevronRight" />
                                 </Link>
                             </li>
                             <li>
                                 <span className="attention-icon is-danger">{kpi.pending_cash_submissions}</span>
                                 <div>
-                                    <strong>Cash submissions</strong>
-                                    <small>Waiting for office confirmation</small>
+                                    <strong>{t('Cash submissions')}</strong>
+                                    <small>{t('Waiting for office confirmation')}</small>
                                 </div>
-                                <Link aria-label="Review pending cash submissions" to="/admin/cash">
+                                <Link aria-label={t('Review pending cash submissions')} to="/admin/cash">
                                     <Icon name="chevronRight" />
                                 </Link>
                             </li>
                             <li>
                                 <span className="attention-icon is-warning">{kpi.low_stock_products ?? 0}</span>
                                 <div>
-                                    <strong>Low-stock products</strong>
-                                    <small>At or below {kpi.low_stock_threshold ?? 10} warehouse units</small>
+                                    <strong>{t('Low-stock products')}</strong>
+                                    <small>
+                                        {t('At or below {count} warehouse units', {
+                                            count: formatNumber(kpi.low_stock_threshold ?? 10),
+                                        })}
+                                    </small>
                                 </div>
-                                <Link aria-label="Review low-stock products" to="/admin/inventory">
+                                <Link aria-label={t('Review low-stock products')} to="/admin/inventory">
                                     <Icon name="chevronRight" />
                                 </Link>
                             </li>
                         </ul>
                     </Panel>
-                    <Panel className="dashboard-sales-composition" eyebrow="Sales composition" title="Today">
+                    <Panel className="dashboard-sales-composition" eyebrow={t('Sales composition')} title={t('Today')}>
                         <div className="dashboard-sales-split">
                             <div>
-                                <span>Cash</span>
+                                <span>{t('Cash')}</span>
                                 <strong>{money(kpi.today_cash_sales)}</strong>
                             </div>
                             <div>
-                                <span>Credit</span>
+                                <span>{t('Credit')}</span>
                                 <strong>{money(kpi.today_credit_sales)}</strong>
                             </div>
                         </div>
                         <Link className="dashboard-report-link" to="/admin/reports">
-                            Review reconciled reports <Icon name="chevronRight" size={15} />
+                            {t('Review reconciled reports')} <Icon name="chevronRight" size={15} />
                         </Link>
                     </Panel>
                 </div>

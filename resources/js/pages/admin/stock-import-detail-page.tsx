@@ -4,26 +4,19 @@ import { useSession } from '../../auth/session-context';
 import { inventoryApi, type StockImport } from '../../services/inventory';
 import { Icon } from '../../ui/icons';
 import { Button, Dialog, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
-
-function number(value: number) {
-    return new Intl.NumberFormat('en-US').format(value);
-}
-
-function dateTime(value: string | null) {
-    return value
-        ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
-        : '—';
-}
+import { useLocale } from '../../localization/locale-context';
 
 function statusTone(status: StockImport['status']) {
     return status === 'posted' ? 'success' : status === 'voided' ? 'danger' : 'warning';
 }
 
-function message(error: unknown) {
-    return error instanceof Error ? error.message : 'Unable to load the stock import.';
+function message(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback;
 }
 
 export function StockImportDetailPage() {
+    const { formatDateTime, formatNumber, t } = useLocale();
+    const dateTime = (value: string | null) => (value ? formatDateTime(value) : '—');
     const { importId } = useParams();
     const navigate = useNavigate();
     const { user } = useSession();
@@ -40,7 +33,7 @@ export function StockImportDetailPage() {
 
     const load = useCallback(async () => {
         if (!Number.isInteger(id) || id < 1) {
-            setError('Invalid stock import reference.');
+            setError(t('Invalid stock import reference.'));
             setLoading(false);
             return;
         }
@@ -50,18 +43,18 @@ export function StockImportDetailPage() {
             const response = await inventoryApi.importRecord(id);
             setRecord(response.data);
         } catch (requestError) {
-            setError(message(requestError));
+            setError(message(requestError, t('Unable to load the stock import.')));
         } finally {
             setLoading(false);
         }
-    }, [id]);
+    }, [id, t]);
 
     useEffect(() => {
         let active = true;
         if (!Number.isInteger(id) || id < 1) {
             queueMicrotask(() => {
                 if (!active) return;
-                setError('Invalid stock import reference.');
+                setError(t('Invalid stock import reference.'));
                 setLoading(false);
             });
             return () => {
@@ -76,7 +69,7 @@ export function StockImportDetailPage() {
                 setError('');
             })
             .catch((requestError) => {
-                if (active) setError(message(requestError));
+                if (active) setError(message(requestError, t('Unable to load the stock import.')));
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -84,7 +77,7 @@ export function StockImportDetailPage() {
         return () => {
             active = false;
         };
-    }, [id]);
+    }, [id, t]);
 
     const runCommand = async (operation: () => Promise<{ data: StockImport }>, success: string) => {
         setWorking(true);
@@ -97,7 +90,7 @@ export function StockImportDetailPage() {
             setConfirmVoid(false);
             setVoidReason('');
         } catch (requestError) {
-            setError(message(requestError));
+            setError(message(requestError, t('Unable to load the stock import.')));
         } finally {
             setWorking(false);
         }
@@ -107,7 +100,7 @@ export function StockImportDetailPage() {
         return (
             <div className="ui-loading" role="status">
                 <span />
-                Loading stock import…
+                {t('Loading stock import…')}
             </div>
         );
     }
@@ -117,12 +110,12 @@ export function StockImportDetailPage() {
             <div className="admin-page stock-import-detail-page">
                 <Link className="sale-detail-back" to="/admin/inventory">
                     <Icon name="chevronLeft" size={13} />
-                    Inventory
+                    {t('Inventory')}
                 </Link>
                 <div className="ui-flash ui-flash--danger" role="alert">
-                    {error || 'Stock import not found.'}
+                    {error || t('Stock import not found.')}
                     <button onClick={() => void load()} type="button">
-                        Retry
+                        {t('Retry')}
                     </button>
                 </div>
             </div>
@@ -135,29 +128,29 @@ export function StockImportDetailPage() {
                 <div>
                     <Link className="sale-detail-back" to="/admin/inventory">
                         <Icon name="chevronLeft" size={13} />
-                        Inventory imports
+                        {t('Inventory imports')}
                     </Link>
-                    <p className="ui-eyebrow">Stock import</p>
+                    <p className="ui-eyebrow">{t('Stock import')}</p>
                     <h1>{record.reference}</h1>
                     <p>
-                        {record.warehouse.name} · Created {dateTime(record.created_at)}
+                        {record.warehouse.name} · {t('Created {date}', { date: dateTime(record.created_at) })}
                     </p>
                 </div>
                 <div className="stock-import-detail-actions">
-                    <StatusBadge tone={statusTone(record.status)}>{record.status}</StatusBadge>
+                    <StatusBadge tone={statusTone(record.status)}>{t(record.status)}</StatusBadge>
                     {canImport && record.status === 'draft' ? (
                         <>
                             <Button icon="edit" onClick={() => navigate(`/admin/inventory/imports/${record.id}/edit`)}>
-                                Edit draft
+                                {t('Edit draft')}
                             </Button>
                             <Button icon="check" onClick={() => setConfirmPost(true)} requiresOnline tone="primary">
-                                Post import
+                                {t('Post import')}
                             </Button>
                         </>
                     ) : null}
                     {canImport && record.status === 'posted' ? (
                         <Button icon="reverse" onClick={() => setConfirmVoid(true)} requiresOnline tone="danger">
-                            Void import
+                            {t('Void import')}
                         </Button>
                     ) : null}
                 </div>
@@ -174,36 +167,36 @@ export function StockImportDetailPage() {
                     <Icon name="x" size={15} />
                     {error}
                     <button onClick={() => void load()} type="button">
-                        Retry
+                        {t('Retry')}
                     </button>
                 </div>
             ) : null}
 
-            <section aria-label="Import summary" className="metric-grid stock-import-detail-kpis">
+            <section aria-label={t('Import summary')} className="metric-grid stock-import-detail-kpis">
                 <MetricCard
-                    hint="Distinct product lines"
+                    hint={t('Distinct product lines')}
                     icon="box"
-                    label="Items"
-                    value={number(record.items.length)}
+                    label={t('Items')}
+                    value={formatNumber(record.items.length)}
                 />
                 <MetricCard
-                    hint="Base stock received"
+                    hint={t('Base stock received')}
                     icon="warehouse"
-                    label="Total base quantity"
-                    value={number(record.total_quantity)}
+                    label={t('Total base quantity')}
+                    value={formatNumber(record.total_quantity)}
                 />
             </section>
 
             <div className="stock-import-detail-grid">
-                <Panel className="stock-import-items" eyebrow="Import contents" title="Product lines">
+                <Panel className="stock-import-items" eyebrow={t('Import contents')} title={t('Product lines')}>
                     <div className="ui-table-wrap">
                         <table className="ui-table">
                             <thead>
                                 <tr>
-                                    <th>Product</th>
-                                    <th>Unit</th>
-                                    <th className="is-numeric">Import quantity</th>
-                                    <th className="is-numeric">Base stock</th>
+                                    <th>{t('Product')}</th>
+                                    <th>{t('Unit')}</th>
+                                    <th className="is-numeric">{t('Import quantity')}</th>
+                                    <th className="is-numeric">{t('Base stock')}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -216,23 +209,25 @@ export function StockImportDetailPage() {
                                         <td>
                                             <strong>{item.product_unit?.name ?? item.product.unit}</strong>
                                             <small>
-                                                {number(item.product_unit?.conversion_factor ?? 1)} base units each
+                                                {t('{count} base units each', {
+                                                    count: formatNumber(item.product_unit?.conversion_factor ?? 1),
+                                                })}
                                             </small>
                                         </td>
                                         <td className="is-numeric">
-                                            <strong>{number(item.quantity)}</strong>
+                                            <strong>{formatNumber(item.quantity)}</strong>
                                         </td>
                                         <td className="is-numeric">
-                                            <strong>{number(item.base_quantity)}</strong>
+                                            <strong>{formatNumber(item.base_quantity)}</strong>
                                         </td>
                                     </tr>
                                 ))}
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <td colSpan={3}>Total base stock</td>
+                                    <td colSpan={3}>{t('Total base stock')}</td>
                                     <td className="is-numeric">
-                                        <strong>{number(record.total_quantity)}</strong>
+                                        <strong>{formatNumber(record.total_quantity)}</strong>
                                     </td>
                                 </tr>
                             </tfoot>
@@ -241,43 +236,43 @@ export function StockImportDetailPage() {
                 </Panel>
 
                 <div className="stock-import-detail-side">
-                    <Panel eyebrow="Document" title="Import details">
+                    <Panel eyebrow={t('Document')} title={t('Import details')}>
                         <dl className="stock-import-detail-facts">
                             <div>
-                                <dt>Warehouse</dt>
+                                <dt>{t('Warehouse')}</dt>
                                 <dd>
                                     {record.warehouse.name}
                                     <small>{record.warehouse.code}</small>
                                 </dd>
                             </div>
                             <div>
-                                <dt>Created by</dt>
+                                <dt>{t('Created by')}</dt>
                                 <dd>
                                     {record.created_by.name}
                                     <small>{dateTime(record.created_at)}</small>
                                 </dd>
                             </div>
                             <div>
-                                <dt>Posted by</dt>
+                                <dt>{t('Posted by')}</dt>
                                 <dd>
-                                    {record.posted_by?.name ?? 'Not posted'}
+                                    {record.posted_by?.name ?? t('Not posted')}
                                     <small>{dateTime(record.posted_at)}</small>
                                 </dd>
                             </div>
                             <div>
-                                <dt>Voided by</dt>
+                                <dt>{t('Voided by')}</dt>
                                 <dd>
-                                    {record.voided_by?.name ?? 'Not voided'}
+                                    {record.voided_by?.name ?? t('Not voided')}
                                     <small>{dateTime(record.voided_at)}</small>
                                 </dd>
                             </div>
                             <div className="is-wide">
-                                <dt>Notes</dt>
-                                <dd>{record.notes || 'No notes recorded'}</dd>
+                                <dt>{t('Notes')}</dt>
+                                <dd>{record.notes || t('No notes recorded')}</dd>
                             </div>
                             {record.void_reason ? (
                                 <div className="is-wide is-danger">
-                                    <dt>Void reason</dt>
+                                    <dt>{t('Void reason')}</dt>
                                     <dd>{record.void_reason}</dd>
                                 </div>
                             ) : null}
@@ -287,72 +282,77 @@ export function StockImportDetailPage() {
             </div>
 
             <Dialog
-                description="Posting adds all quantities to warehouse stock and makes this import immutable."
+                description={t('Posting adds all quantities to warehouse stock and makes this import immutable.')}
                 footer={
                     <>
                         <Button disabled={working} onClick={() => setConfirmPost(false)}>
-                            Cancel
+                            {t('Cancel')}
                         </Button>
                         <Button
                             disabled={working}
                             onClick={() =>
                                 void runCommand(
                                     () => inventoryApi.postImport(record.id),
-                                    `${record.reference} posted successfully.`,
+                                    t('{reference} posted successfully.', { reference: record.reference }),
                                 )
                             }
                             requiresOnline
                             tone="primary"
                         >
-                            {working ? 'Posting…' : 'Post import'}
+                            {t(working ? 'Posting…' : 'Post import')}
                         </Button>
                     </>
                 }
                 onClose={() => setConfirmPost(false)}
                 open={confirmPost}
-                title="Post this stock import?"
+                title={t('Post this stock import?')}
                 width="compact"
             >
                 <p className="stock-import-confirm-summary">
-                    <strong>{number(record.total_quantity)} base units</strong> across {record.items.length} product
-                    lines will be added to {record.warehouse.name}.
+                    {t('{quantity} base units across {lines} product lines will be added to {warehouse}.', {
+                        quantity: formatNumber(record.total_quantity),
+                        lines: formatNumber(record.items.length),
+                        warehouse: record.warehouse.name,
+                    })}
                 </p>
             </Dialog>
 
             <Dialog
-                description="Voiding reverses the posted inventory movement. This action is recorded in the audit trail."
+                description={t(
+                    'Voiding reverses the posted inventory movement. This action is recorded in the audit trail.',
+                )}
                 footer={
                     <>
                         <Button disabled={working} onClick={() => setConfirmVoid(false)}>
-                            Cancel
+                            {t('Cancel')}
                         </Button>
                         <Button
                             disabled={working || !voidReason.trim()}
                             onClick={() =>
                                 void runCommand(
                                     () => inventoryApi.voidImport(record.id, voidReason.trim()),
-                                    `${record.reference} voided successfully.`,
+                                    t('{reference} voided successfully.', { reference: record.reference }),
                                 )
                             }
                             requiresOnline
                             tone="danger"
                         >
-                            {working ? 'Voiding…' : 'Void import'}
+                            {t(working ? 'Voiding…' : 'Void import')}
                         </Button>
                     </>
                 }
                 onClose={() => setConfirmVoid(false)}
                 open={confirmVoid}
-                title="Void this stock import?"
+                title={t('Void this stock import?')}
                 width="compact"
             >
                 <label className="ui-field">
-                    <span>Reason</span>
+                    <span>{t('Reason')}</span>
                     <textarea
                         autoFocus
                         maxLength={500}
                         onChange={(event) => setVoidReason(event.target.value)}
-                        placeholder="Explain why this import must be reversed"
+                        placeholder={t('Explain why this import must be reversed')}
                         rows={4}
                         value={voidReason}
                     />

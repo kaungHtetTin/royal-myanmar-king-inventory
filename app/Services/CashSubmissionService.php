@@ -4,12 +4,15 @@ namespace App\Services;
 
 use App\Enums\CashSubmissionStatus;
 use App\Enums\FinancialTransactionType;
+use App\Enums\TripStatus;
 use App\Exceptions\DomainConflictException;
 use App\Models\CashSubmission;
 use App\Models\RepresentativeCashTransaction;
 use App\Models\SalesRepresentative;
+use App\Models\Trip;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class CashSubmissionService
 {
@@ -28,15 +31,59 @@ class CashSubmissionService
             if (! $representative->is_active || $representative->user_id !== $actor->id) {
                 throw new DomainConflictException('Only an active linked representative can submit cash.', 'INVALID_REPRESENTATIVE');
             }
+            $trip = Trip::query()->where('sales_representative_id', $representative->id)
+                ->whereIn('status', [TripStatus::Operation, TripStatus::Ending])->latest('id')->first();
+            if (! $trip) {
+                throw new DomainConflictException('Cash can only be submitted during an operating or ending trip.', 'NO_ACTIVE_TRIP');
+            }
             $balance = $this->cash->lock($representative->id);
             $pending = (int) CashSubmission::query()->where('sales_representative_id', $representative->id)->where('status', CashSubmissionStatus::Pending)->lockForUpdate()->get(['amount'])->sum('amount');
             if ($pending + $amount > $balance->amount) {
                 throw new DomainConflictException('Cash submission exceeds the unsubmitted cash hold.', 'INSUFFICIENT_REPRESENTATIVE_CASH', ['cash_hold' => $balance->amount, 'pending' => $pending, 'requested' => $amount, 'available_to_submit' => max(0, $balance->amount - $pending)]);
             }
-            $submission = CashSubmission::query()->create(['reference' => $this->references->next('cash_submission', 'CSB'), 'sales_representative_id' => $representative->id, 'warehouse_id' => $representative->primary_warehouse_id, 'amount' => $amount, 'status' => CashSubmissionStatus::Pending, 'notes' => $notes, 'created_by' => $actor->id]);
+            $submission = CashSubmission::query()->create(['reference' => $this->references->next('cash_submission', 'CSB'), 'trip_id' => $trip->id, 'sales_representative_id' => $representative->id, 'warehouse_id' => $trip->warehouse_id, 'amount' => $amount, 'status' => CashSubmissionStatus::Pending, 'notes' => $notes, 'created_by' => $actor->id]);
             $this->auditLogger->record($request, 'cash_submission.created', $actor, $submission, $this->metadata($submission));
 
             return ['id' => $submission->id, 'reference' => $submission->reference, 'status' => CashSubmissionStatus::Pending->value, 'amount' => $amount];
+        });
+    }
+
+    /** @return array<string, mixed> */
+    public function collectByAdmin(SalesRepresentative $representative, int $amount, ?string $notes, User $actor, string $key, Request $request): array
+    {
+        return $this->idempotency->execute($actor, 'cash-submission:admin-collection', $key, function () use ($representative, $amount, $notes, $actor, $request): array {
+            return DB::transaction(function () use ($representative, $amount, $notes, $actor, $request): array {
+                $representative = SalesRepresentative::query()->lockForUpdate()->findOrFail($representative->id);
+                if (! $representative->is_active) {
+                    throw new DomainConflictException('Cash can only be collected from an active representative.', 'INVALID_REPRESENTATIVE');
+                }
+
+                $balance = $this->cash->lock($representative->id);
+                $pending = (int) CashSubmission::query()->where('sales_representative_id', $representative->id)
+                    ->where('status', CashSubmissionStatus::Pending)->lockForUpdate()->get(['amount'])->sum('amount');
+                if ($pending + $amount > $balance->amount) {
+                    throw new DomainConflictException('Cash collection exceeds the representative cash available for handover.', 'INSUFFICIENT_REPRESENTATIVE_CASH', ['cash_hold' => $balance->amount, 'pending' => $pending, 'requested' => $amount, 'available_to_submit' => max(0, $balance->amount - $pending)]);
+                }
+
+                $occurredAt = now();
+                $submission = CashSubmission::query()->create([
+                    'reference' => $this->references->next('cash_submission', 'CSB'),
+                    'trip_id' => null,
+                    'sales_representative_id' => $representative->id,
+                    'warehouse_id' => $representative->primary_warehouse_id,
+                    'amount' => $amount,
+                    'status' => CashSubmissionStatus::Confirmed,
+                    'notes' => $notes,
+                    'created_by' => $actor->id,
+                    'confirmed_by' => $actor->id,
+                    'confirmed_at' => $occurredAt,
+                ]);
+                $this->cash->decrease($balance, $amount);
+                RepresentativeCashTransaction::query()->create(['sales_representative_id' => $representative->id, 'transaction_type' => FinancialTransactionType::CashSubmissionConfirmed, 'amount_delta' => -$amount, 'source_type' => 'cash_submission', 'source_id' => $submission->id, 'reference' => $submission->reference, 'created_by' => $actor->id, 'notes' => $notes, 'occurred_at' => $occurredAt]);
+                $this->auditLogger->record($request, 'cash_submission.admin_collected', $actor, $submission, $this->metadata($submission) + ['created_from' => 'admin_dashboard', 'trip_id' => null]);
+
+                return $this->result($submission, CashSubmissionStatus::Confirmed);
+            });
         });
     }
 
@@ -90,7 +137,7 @@ class CashSubmissionService
 
     private function locked(CashSubmission $submission): CashSubmission
     {
-        return CashSubmission::query()->with(['representative', 'warehouse', 'creator', 'confirmer', 'canceller', 'reverser'])->lockForUpdate()->findOrFail($submission->id);
+        return CashSubmission::query()->with(['trip', 'representative', 'warehouse', 'creator', 'confirmer', 'canceller', 'reverser'])->lockForUpdate()->findOrFail($submission->id);
     }
 
     private function requireStatus(CashSubmission $submission, CashSubmissionStatus $status): void

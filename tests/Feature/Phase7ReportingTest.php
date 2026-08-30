@@ -91,8 +91,8 @@ class Phase7ReportingTest extends TestCase
     {
         $fixture = $this->fixture();
         $admin = $this->office($fixture['warehouse'], PermissionName::ReportView);
-        $this->actingAs($admin)->getJson('/api/admin/report-options')->assertOk()->assertJsonPath('reports', ['sales', 'way-sales-power', 'stock-issues']);
-        foreach (['warehouse-stock', 'representative-stock', 'stock-movements', 'warehouse-transfers', 'representative-transfers', 'cash-hold', 'customer-credit'] as $removedReport) {
+        $this->actingAs($admin)->getJson('/api/admin/report-options')->assertOk()->assertJsonPath('reports', ['sales', 'representatives', 'customers']);
+        foreach (['way-sales-power', 'stock-issues', 'warehouse-stock', 'representative-stock', 'stock-movements', 'warehouse-transfers', 'representative-transfers', 'cash-hold', 'customer-credit'] as $removedReport) {
             $this->getJson('/api/admin/reports/'.$removedReport.'?per_page=10')->assertNotFound();
         }
     }
@@ -111,12 +111,28 @@ class Phase7ReportingTest extends TestCase
             ->assertJsonPath('rules.financial_totals', 'posted_only');
     }
 
+    public function test_representative_and_customer_analysis_apply_amount_duration_and_scope(): void
+    {
+        $fixture = $this->fixture();
+        $admin = $this->office($fixture['warehouse'], PermissionName::ReportView);
+
+        $this->actingAs($admin)->getJson('/api/admin/reports/representatives?min_amount=700&per_page=10')->assertOk()
+            ->assertJsonPath('report', 'representatives')->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.representative.id', $fixture['representative']->id)
+            ->assertJsonPath('data.0.sales_amount', 800)->assertJsonPath('data.0.sale_count', 2);
+        $this->getJson('/api/admin/reports/representatives?min_amount=900&per_page=10')->assertOk()->assertJsonPath('meta.total', 0);
+        $this->getJson('/api/admin/reports/customers?date_from='.today()->toDateString().'&min_amount=700&per_page=10')->assertOk()
+            ->assertJsonPath('report', 'customers')->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.customer.id', $fixture['customer']->id)
+            ->assertJsonPath('data.0.purchase_amount', 800)->assertJsonPath('data.0.purchase_count', 2);
+    }
+
     public function test_representative_sales_report_is_own_only_and_supports_today_customer_product_and_payment_filters(): void
     {
         $fixture = $this->fixture();
-        $this->actingAs($fixture['repUser'])->getJson('/api/sales/reports/sales?period=today&customer_id='.$fixture['customer']->id.'&product_id='.$fixture['product']->id.'&payment_type=credit&per_page=10')->assertOk()
+        $this->actingAs($fixture['repUser'])->getJson('/api/sales/sales?period=today&customer_id='.$fixture['customer']->id.'&product_id='.$fixture['product']->id.'&payment_type=credit&per_page=10')->assertOk()
             ->assertJsonPath('meta.total', 1)->assertJsonPath('data.0.reference', 'P7-CREDIT')->assertJsonPath('summary.gross_sales', 300);
-        $this->getJson('/api/sales/report-options')->assertOk()->assertJsonCount(1, 'customers')->assertJsonCount(1, 'products');
+        $this->getJson('/api/sales/sale-history-options')->assertOk()->assertJsonCount(1, 'customers')->assertJsonCount(1, 'products');
     }
 
     public function test_audit_log_is_searchable_linked_and_warehouse_scoped(): void

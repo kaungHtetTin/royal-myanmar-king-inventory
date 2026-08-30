@@ -25,6 +25,10 @@ enum PermissionName: string
     case RepresentativeStockView = 'representative_stock.view';
     case RepresentativeStockIssue = 'representative_stock.issue';
     case RepresentativeStockReceive = 'representative_stock.receive';
+    case TripView = 'trip.view';
+    case TripManage = 'trip.manage';
+    case TripClose = 'trip.close';
+    case TripExpenseCreate = 'trip_expense.create';
     case CustomerView = 'customer.view';
     case CustomerCreate = 'customer.create';
     case CustomerEdit = 'customer.edit';

@@ -10,10 +10,10 @@ import {
     type WarehouseInput,
     type WarehouseSummary,
     type WarehouseRegion,
-    type WarehouseWay,
 } from '../../services/warehouses';
 import { Icon } from '../../ui/icons';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
+import { useLocale } from '../../localization/locale-context';
 
 const emptyMeta: PaginationMeta = {
     current_page: 1,
@@ -25,19 +25,13 @@ const emptyMeta: PaginationMeta = {
 };
 const emptySummary: WarehouseSummary = { active: 0, assigned_users: 0, inactive: 0, total: 0 };
 
-function errorMessage(error: unknown) {
-    return error instanceof Error ? error.message : 'Unable to complete the request.';
-}
-
-function dateTime(value: string | null) {
-    if (!value) return 'Not available';
-    return new Intl.DateTimeFormat(undefined, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-    }).format(new Date(value));
+function errorMessage(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback;
 }
 
 export function WarehouseManagementPage() {
+    const { formatDateTime, formatNumber, t } = useLocale();
+    const dateTime = (value: string | null) => (value ? formatDateTime(value) : t('Not available'));
     const { user } = useSession();
     const isSuperAdmin = user?.roles.includes('super-admin');
     const canCreate = Boolean(isSuperAdmin || user?.permissions.includes('warehouse.create'));
@@ -67,11 +61,11 @@ export function WarehouseManagementPage() {
             setMeta(response.meta);
             setSummary(response.summary ?? emptySummary);
         } catch (requestError) {
-            setError(errorMessage(requestError));
+            setError(errorMessage(requestError, t('Unable to complete the request.')));
         } finally {
             setLoading(false);
         }
-    }, [filters]);
+    }, [filters, t]);
 
     useEffect(() => {
         let active = true;
@@ -84,7 +78,7 @@ export function WarehouseManagementPage() {
                 setSummary(response.summary ?? emptySummary);
             })
             .catch((requestError) => {
-                if (active) setError(errorMessage(requestError));
+                if (active) setError(errorMessage(requestError, t('Unable to complete the request.')));
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -92,7 +86,7 @@ export function WarehouseManagementPage() {
         return () => {
             active = false;
         };
-    }, [filters]);
+    }, [filters, t]);
 
     const showNotice = (message: string) => {
         setNotice(message);
@@ -103,9 +97,9 @@ export function WarehouseManagementPage() {
         <div className="admin-page warehouse-management">
             <header className="page-heading">
                 <div>
-                    <p className="ui-eyebrow">Master data</p>
-                    <h1>Warehouses</h1>
-                    <p>Maintain operational locations and warehouse availability.</p>
+                    <p className="ui-eyebrow">{t('Master data')}</p>
+                    <h1>{t('Warehouses')}</h1>
+                    <p>{t('Maintain operational locations and warehouse availability.')}</p>
                 </div>
                 {canCreate ? (
                     <Button
@@ -116,35 +110,35 @@ export function WarehouseManagementPage() {
                         }}
                         tone="primary"
                     >
-                        New warehouse
+                        {t('New warehouse')}
                     </Button>
                 ) : null}
             </header>
 
             <div className="metric-grid access-metrics">
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="warehouse"
-                    label="Warehouses"
-                    value={String(summary.total)}
+                    label={t('Warehouses')}
+                    value={formatNumber(summary.total)}
                 />
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="dashboard"
-                    label="Active"
-                    value={String(summary.active)}
+                    label={t('Active')}
+                    value={formatNumber(summary.active)}
                 />
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="adjustments"
-                    label="Inactive"
-                    value={String(summary.inactive)}
+                    label={t('Inactive')}
+                    value={formatNumber(summary.inactive)}
                 />
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="users"
-                    label="Assigned users"
-                    value={String(summary.assigned_users)}
+                    label={t('Assigned users')}
+                    value={formatNumber(summary.assigned_users)}
                 />
             </div>
 
@@ -159,12 +153,12 @@ export function WarehouseManagementPage() {
                     <Icon name="x" size={15} />
                     {error}
                     <button onClick={() => void loadWarehouses()} type="button">
-                        Retry
+                        {t('Retry')}
                     </button>
                 </div>
             ) : null}
 
-            <Panel eyebrow="Locations" title="Warehouse directory">
+            <Panel eyebrow={t('Locations')} title={t('Warehouse directory')}>
                 <form
                     className="filter-toolbar warehouse-filters"
                     onSubmit={(event) => {
@@ -178,7 +172,7 @@ export function WarehouseManagementPage() {
                     }}
                 >
                     <label className="filter-search">
-                        <span className="sr-only">Search warehouses</span>
+                        <span className="sr-only">{t('Search warehouses')}</span>
                         <Icon name="search" size={15} />
                         <input
                             onChange={(event) =>
@@ -187,13 +181,13 @@ export function WarehouseManagementPage() {
                                     search: event.target.value,
                                 }))
                             }
-                            placeholder="Search code, name, or address"
+                            placeholder={t('Search code, name, or address')}
                             type="search"
                             value={draftFilters.search}
                         />
                     </label>
                     <label>
-                        <span className="sr-only">Filter by status</span>
+                        <span className="sr-only">{t('Filter by status')}</span>
                         <select
                             onChange={(event) =>
                                 setDraftFilters((value) => ({
@@ -203,38 +197,38 @@ export function WarehouseManagementPage() {
                             }
                             value={draftFilters.status}
                         >
-                            <option value="">All statuses</option>
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
+                            <option value="">{t('All statuses')}</option>
+                            <option value="active">{t('Active')}</option>
+                            <option value="inactive">{t('Inactive')}</option>
                         </select>
                     </label>
                     <Button icon="search" type="submit">
-                        Apply filters
+                        {t('Apply filters')}
                     </Button>
                 </form>
 
                 {loading ? (
                     <div className="ui-loading" role="status">
                         <span />
-                        Loading warehouses…
+                        {t('Loading warehouses…')}
                     </div>
                 ) : warehouses.length === 0 ? (
                     <EmptyState
-                        description="Change the filters or create the first operational location."
-                        title="No warehouses found"
+                        description={t('Change the filters or create the first operational location.')}
+                        title={t('No warehouses found')}
                     />
                 ) : (
                     <div className="ui-table-wrap warehouse-table-wrap">
                         <table className="ui-table warehouse-table">
                             <thead>
                                 <tr>
-                                    <th>Warehouse</th>
-                                    <th>Address</th>
-                                    <th>Contact</th>
-                                    <th>Assigned users</th>
-                                    <th>Status</th>
-                                    <th>Updated</th>
-                                    {canEdit ? <th className="ui-table__actions">Actions</th> : null}
+                                    <th>{t('Warehouse')}</th>
+                                    <th>{t('Address')}</th>
+                                    <th>{t('Contact')}</th>
+                                    <th>{t('Assigned users')}</th>
+                                    <th>{t('Status')}</th>
+                                    <th>{t('Updated')}</th>
+                                    {canEdit ? <th className="ui-table__actions">{t('Actions')}</th> : null}
                                 </tr>
                             </thead>
                             <tbody>
@@ -245,37 +239,41 @@ export function WarehouseManagementPage() {
                                             <small>{warehouse.code}</small>
                                         </td>
                                         <td>
-                                            <strong>{warehouse.address || 'No address recorded'}</strong>
+                                            <strong>{warehouse.address || t('No address recorded')}</strong>
                                         </td>
                                         <td>
-                                            <span className="table-primary">{warehouse.phone || 'Not specified'}</span>
-                                            <small>{warehouse.notes || 'No operational notes'}</small>
+                                            <span className="table-primary">
+                                                {warehouse.phone || t('Not specified')}
+                                            </span>
+                                            <small>{warehouse.notes || t('No operational notes')}</small>
                                         </td>
                                         <td className="is-numeric">
-                                            <strong>{warehouse.users_count}</strong>
+                                            <strong>{formatNumber(warehouse.users_count)}</strong>
                                         </td>
                                         <td>
                                             <StatusBadge tone={warehouse.is_active ? 'success' : 'danger'}>
-                                                {warehouse.is_active ? 'Active' : 'Inactive'}
+                                                {t(warehouse.is_active ? 'Active' : 'Inactive')}
                                             </StatusBadge>
                                         </td>
                                         <td>
                                             <span className="table-primary">{dateTime(warehouse.updated_at)}</span>
-                                            <small>Created {dateTime(warehouse.created_at)}</small>
+                                            <small>
+                                                {t('Created {date}', { date: dateTime(warehouse.created_at) })}
+                                            </small>
                                         </td>
                                         {canEdit ? (
                                             <td className="ui-table__actions">
                                                 <Link
-                                                    aria-label={`Open settings for ${warehouse.name}`}
+                                                    aria-label={t('Open settings for {name}', { name: warehouse.name })}
                                                     className="ui-icon-button ui-icon-button--secondary"
-                                                    title={`Open settings for ${warehouse.name}`}
+                                                    title={t('Open settings for {name}', { name: warehouse.name })}
                                                     to={`/admin/warehouses/${warehouse.id}/settings`}
                                                 >
                                                     <Icon name="warehouse" />
                                                 </Link>
                                                 <IconButton
                                                     icon="settings"
-                                                    label={`Edit ${warehouse.name}`}
+                                                    label={t('Edit {name}', { name: warehouse.name })}
                                                     onClick={() => {
                                                         setSelected(warehouse);
                                                         setDialogOpen(true);
@@ -291,7 +289,11 @@ export function WarehouseManagementPage() {
                 )}
                 <footer className="table-footer">
                     <span>
-                        {meta.from ?? 0}–{meta.to ?? 0} of {meta.total} warehouses
+                        {t('{from}–{to} of {total} warehouses', {
+                            from: formatNumber(meta.from ?? 0),
+                            to: formatNumber(meta.to ?? 0),
+                            total: formatNumber(meta.total),
+                        })}
                     </span>
                     <button
                         disabled={meta.current_page <= 1 || loading}
@@ -304,10 +306,13 @@ export function WarehouseManagementPage() {
                         }}
                         type="button"
                     >
-                        Previous
+                        {t('Previous')}
                     </button>
                     <strong>
-                        Page {meta.current_page} of {meta.last_page}
+                        {t('Page {current} of {last}', {
+                            current: formatNumber(meta.current_page),
+                            last: formatNumber(meta.last_page),
+                        })}
                     </strong>
                     <button
                         disabled={meta.current_page >= meta.last_page || loading}
@@ -320,7 +325,7 @@ export function WarehouseManagementPage() {
                         }}
                         type="button"
                     >
-                        Next
+                        {t('Next')}
                     </button>
                 </footer>
             </Panel>
@@ -348,8 +353,8 @@ export function CoverageDialog({
     onClose: () => void;
     onChanged: () => Promise<void>;
 }) {
+    const { t } = useLocale();
     const [regionName, setRegionName] = useState('');
-    const [wayNames, setWayNames] = useState<Record<number, string>>({});
     const [busy, setBusy] = useState(false);
     const [message, setMessage] = useState('');
     if (!warehouse) return null;
@@ -361,7 +366,7 @@ export function CoverageDialog({
             setMessage(success);
             await onChanged();
         } catch (error) {
-            setMessage(errorMessage(error));
+            setMessage(errorMessage(error, t('Unable to complete the request.')));
         } finally {
             setBusy(false);
         }
@@ -374,29 +379,19 @@ export function CoverageDialog({
                     notes: patch.notes ?? region.notes ?? '',
                     is_active: patch.is_active ?? region.is_active,
                 }),
-            'Region updated.',
-        );
-    const updateWay = (way: WarehouseWay, patch: Partial<WarehouseWay>) =>
-        run(
-            () =>
-                warehouseApi.updateWay(way.id, {
-                    name: patch.name ?? way.name,
-                    notes: patch.notes ?? way.notes ?? '',
-                    is_active: patch.is_active ?? way.is_active,
-                }),
-            'Way updated.',
+            t('Region updated.'),
         );
     return (
         <Dialog
-            description="Representatives are assigned to regions; every customer is assigned to one generated-code Way."
+            description={t('Representatives and customers are assigned directly to regions.')}
             footer={
                 <Button onClick={onClose} tone="secondary">
-                    Close
+                    {t('Close')}
                 </Button>
             }
             onClose={onClose}
             open
-            title={`Coverage · ${warehouse.name}`}
+            title={t('Coverage · {warehouse}', { warehouse: warehouse.name })}
             width="wide"
         >
             <div className="coverage-manager">
@@ -417,21 +412,21 @@ export function CoverageDialog({
                                     notes: '',
                                     is_active: true,
                                 }),
-                            'Region created.',
+                            t('Region created.'),
                         ).then(() => setRegionName(''));
                     }}
                 >
                     <label className="ui-field">
-                        <span>New region name</span>
+                        <span>{t('New region name')}</span>
                         <input
                             disabled={busy}
                             onChange={(event) => setRegionName(event.target.value)}
-                            placeholder="Enter region name"
+                            placeholder={t('Enter region name')}
                             value={regionName}
                         />
                     </label>
                     <Button disabled={busy || !regionName.trim()} icon="plus" type="submit">
-                        Add region
+                        {t('Add region')}
                     </Button>
                 </form>
                 <div className="coverage-manager__regions">
@@ -441,72 +436,19 @@ export function CoverageDialog({
                                 <CoverageNameEditor
                                     busy={busy}
                                     key={`${region.id}-${region.name}`}
-                                    label="Region name"
+                                    label={t('Region name')}
                                     name={region.name}
                                     onSave={(name) => updateRegion(region, { name })}
-                                    supportingText={`${region.ways.length} ways`}
+                                    supportingText={t('Customer and representative coverage')}
                                 />
                                 <Button
                                     disabled={busy}
                                     onClick={() => void updateRegion(region, { is_active: !region.is_active })}
                                     tone="secondary"
                                 >
-                                    {region.is_active ? 'Deactivate' : 'Activate'}
+                                    {t(region.is_active ? 'Deactivate' : 'Activate')}
                                 </Button>
                             </header>
-                            <div className="coverage-way-list">
-                                {region.ways.map((way) => (
-                                    <div className="coverage-way" key={way.id}>
-                                        <CoverageNameEditor
-                                            busy={busy}
-                                            key={`${way.id}-${way.name}`}
-                                            label={`${way.code} name`}
-                                            name={way.name}
-                                            onSave={(name) => updateWay(way, { name })}
-                                            supportingText={way.code}
-                                        />
-                                        <StatusBadge tone={way.is_active ? 'success' : 'danger'}>
-                                            {way.is_active ? 'Active' : 'Inactive'}
-                                        </StatusBadge>
-                                        <Button
-                                            disabled={busy}
-                                            onClick={() => void updateWay(way, { is_active: !way.is_active })}
-                                            tone="secondary"
-                                        >
-                                            {way.is_active ? 'Deactivate' : 'Activate'}
-                                        </Button>
-                                    </div>
-                                ))}
-                            </div>
-                            <form
-                                className="coverage-way-create"
-                                onSubmit={(event) => {
-                                    event.preventDefault();
-                                    const name = wayNames[region.id]?.trim();
-                                    if (!name) return;
-                                    void run(
-                                        () => warehouseApi.createWay(region.id, { name, notes: '', is_active: true }),
-                                        'Way created with an automatic code.',
-                                    ).then(() => setWayNames((value) => ({ ...value, [region.id]: '' })));
-                                }}
-                            >
-                                <input
-                                    aria-label={`New way in ${region.name}`}
-                                    disabled={busy || !region.is_active}
-                                    onChange={(event) =>
-                                        setWayNames((value) => ({ ...value, [region.id]: event.target.value }))
-                                    }
-                                    placeholder="New Way name"
-                                    value={wayNames[region.id] ?? ''}
-                                />
-                                <Button
-                                    disabled={busy || !region.is_active || !wayNames[region.id]?.trim()}
-                                    icon="plus"
-                                    type="submit"
-                                >
-                                    Add Way
-                                </Button>
-                            </form>
                         </section>
                     ))}
                 </div>
@@ -528,6 +470,7 @@ function CoverageNameEditor({
     onSave: (name: string) => Promise<unknown>;
     supportingText: string;
 }) {
+    const { t } = useLocale();
     const [value, setValue] = useState(name);
     const changed = value.trim() !== name;
     return (
@@ -550,7 +493,7 @@ function CoverageNameEditor({
             <small>{supportingText}</small>
             {changed ? (
                 <Button disabled={busy || !value.trim()} tone="secondary" type="submit">
-                    Save
+                    {t('Save')}
                 </Button>
             ) : null}
         </form>
@@ -572,6 +515,7 @@ function WarehouseDialog({
     open: boolean;
     warehouse: Warehouse | null;
 }) {
+    const { t } = useLocale();
     const [form, setForm] = useState<WarehouseInput>({
         address: '',
         code: '',
@@ -602,7 +546,9 @@ function WarehouseDialog({
         if (
             warehouse?.is_active &&
             !form.is_active &&
-            !window.confirm(`Deactivate ${warehouse.name}? It will no longer be available for new transactions.`)
+            !window.confirm(
+                t('Deactivate {name}? It will no longer be available for new transactions.', { name: warehouse.name }),
+            )
         )
             return;
         setSaving(true);
@@ -610,12 +556,12 @@ function WarehouseDialog({
         try {
             if (warehouse) await warehouseApi.update(warehouse.id, form);
             else await warehouseApi.create(form);
-            await onSaved(warehouse ? 'Warehouse updated.' : 'Warehouse created.');
+            await onSaved(t(warehouse ? 'Warehouse updated.' : 'Warehouse created.'));
         } catch (requestError) {
             if (requestError instanceof WarehouseApiError) setErrors(requestError.fields);
             setErrors((current) => ({
                 ...current,
-                form: [errorMessage(requestError)],
+                form: [errorMessage(requestError, t('Unable to complete the request.'))],
             }));
         } finally {
             setSaving(false);
@@ -624,11 +570,11 @@ function WarehouseDialog({
 
     return (
         <Dialog
-            description="Warehouse codes identify stock locations and cannot contain spaces."
+            description={t('Warehouse codes identify stock locations and cannot contain spaces.')}
             footer={
                 <>
                     <Button disabled={saving} onClick={onClose}>
-                        Cancel
+                        {t('Cancel')}
                     </Button>
                     <Button
                         disabled={saving}
@@ -637,13 +583,13 @@ function WarehouseDialog({
                         tone="primary"
                         type="submit"
                     >
-                        {saving ? 'Saving…' : 'Save warehouse'}
+                        {saving ? t('Saving…') : t('Save warehouse')}
                     </Button>
                 </>
             }
             onClose={onClose}
             open={open}
-            title={warehouse ? `Edit warehouse · ${warehouse.code}` : 'Create warehouse'}
+            title={warehouse ? t('Edit warehouse · {code}', { code: warehouse.code }) : t('Create warehouse')}
         >
             <form className="management-form" id="warehouse-management-form" onSubmit={submit}>
                 {errors.form?.[0] ? (
@@ -653,7 +599,7 @@ function WarehouseDialog({
                 ) : null}
                 <div className="form-grid">
                     <label className="ui-field">
-                        <span>Warehouse code</span>
+                        <span>{t('Warehouse code')}</span>
                         <input
                             autoFocus
                             maxLength={30}
@@ -665,7 +611,7 @@ function WarehouseDialog({
                         <FieldError errors={errors} name="code" />
                     </label>
                     <label className="ui-field">
-                        <span>Warehouse name</span>
+                        <span>{t('Warehouse name')}</span>
                         <input
                             maxLength={255}
                             onChange={(event) => change('name', event.target.value)}
@@ -675,7 +621,7 @@ function WarehouseDialog({
                         <FieldError errors={errors} name="name" />
                     </label>
                     <label className="ui-field form-grid__wide">
-                        <span>Address</span>
+                        <span>{t('Address')}</span>
                         <input
                             maxLength={500}
                             onChange={(event) => change('address', event.target.value)}
@@ -684,7 +630,7 @@ function WarehouseDialog({
                         <FieldError errors={errors} name="address" />
                     </label>
                     <label className="ui-field form-grid__wide">
-                        <span>Contact phone</span>
+                        <span>{t('Contact phone')}</span>
                         <input
                             maxLength={30}
                             onChange={(event) => change('phone', event.target.value)}
@@ -694,7 +640,7 @@ function WarehouseDialog({
                         <FieldError errors={errors} name="phone" />
                     </label>
                     <label className="ui-field form-grid__wide">
-                        <span>Operational notes</span>
+                        <span>{t('Operational notes')}</span>
                         <textarea
                             maxLength={1000}
                             onChange={(event) => change('notes', event.target.value)}
@@ -710,9 +656,11 @@ function WarehouseDialog({
                             type="checkbox"
                         />
                         <span>
-                            <strong>Active warehouse</strong>
+                            <strong>{t('Active warehouse')}</strong>
                             <small>
-                                Inactive warehouses remain in history but cannot be selected for new transactions.
+                                {t(
+                                    'Inactive warehouses remain in history but cannot be selected for new transactions.',
+                                )}
                             </small>
                         </span>
                     </label>

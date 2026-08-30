@@ -41,4 +41,14 @@ class Warehouse extends Model
     {
         return $this->hasMany(Region::class);
     }
+
+    public function salesRepresentatives(): HasMany
+    {
+        return $this->hasMany(SalesRepresentative::class, 'primary_warehouse_id');
+    }
+
+    public function trips(): HasMany
+    {
+        return $this->hasMany(Trip::class);
+    }
 }

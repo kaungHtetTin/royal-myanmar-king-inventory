@@ -6,6 +6,7 @@ use App\Enums\PermissionName;
 use App\Enums\RoleName;
 use App\Models\AuditLog;
 use App\Models\Customer;
+use App\Models\Region;
 use App\Models\User;
 use App\Models\Warehouse;
 use Database\Seeders\AccessControlSeeder;
@@ -63,16 +64,16 @@ class CustomerManagementTest extends TestCase
         $assigned = Warehouse::factory()->create(['code' => 'YGN']);
         $foreign = Warehouse::factory()->create(['code' => 'MDY']);
         $viewer->warehouses()->attach($assigned, ['assigned_by' => $viewer->id]);
-        $matching = Customer::factory()->withCredit()->create(['warehouse_id' => $assigned->id, 'way_id' => $this->way($assigned)->id, 'code' => 'CUS-YGN', 'name' => 'Yangon Shop', 'customer_type' => 'Shop']);
-        Customer::factory()->create(['warehouse_id' => $foreign->id, 'way_id' => $this->way($foreign)->id, 'code' => 'CUS-MDY', 'name' => 'Mandalay Shop']);
+        $matching = Customer::factory()->withCredit()->create(['warehouse_id' => $assigned->id, 'region_id' => $this->region($assigned)->id, 'code' => 'CUS-YGN', 'name' => 'Yangon Shop', 'customer_type' => 'Shop']);
+        Customer::factory()->create(['warehouse_id' => $foreign->id, 'region_id' => $this->region($foreign)->id, 'code' => 'CUS-MDY', 'name' => 'Mandalay Shop']);
 
         $matching->refresh();
-        $this->actingAs($viewer)->getJson('/api/admin/customers?warehouse_id='.$assigned->id.'&region_id='.$matching->way->region_id.'&way_id='.$matching->way_id)
+        $this->actingAs($viewer)->getJson('/api/admin/customers?warehouse_id='.$assigned->id.'&region_id='.$matching->region_id)
             ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $matching->id)->assertJsonPath('meta.total', 1);
         $this->getJson('/api/admin/customer-options')->assertOk()
             ->assertJsonCount(1, 'warehouses')->assertJsonPath('warehouses.0.id', $assigned->id)
-            ->assertJsonPath('regions.0.id', $matching->way->region_id)
-            ->assertJsonPath('ways.0.id', $matching->way_id);
+            ->assertJsonPath('regions.0.id', $matching->region_id)
+            ->assertJsonMissingPath('ways');
         $this->getJson('/api/admin/customers?warehouse_id='.$foreign->id)->assertForbidden();
     }
 
@@ -168,7 +169,7 @@ class CustomerManagementTest extends TestCase
     {
         return array_merge([
             'warehouse_id' => $warehouse->id,
-            'way_id' => $this->way($warehouse)->id,
+            'region_id' => $this->region($warehouse)->id,
             'code' => 'CUS-001',
             'name' => 'Corner Shop',
             'customer_type' => 'Shop',
@@ -181,14 +182,9 @@ class CustomerManagementTest extends TestCase
         ], $overrides);
     }
 
-    private function way(Warehouse $warehouse)
+    private function region(Warehouse $warehouse): Region
     {
-        $region = $warehouse->regions()->firstOrCreate(['name' => 'Test Region'], ['is_active' => true]);
-
-        return $region->ways()->firstOrCreate(
-            ['name' => 'Test Way'],
-            ['code' => 'WAY-'.$warehouse->id, 'is_active' => true],
-        );
+        return $warehouse->regions()->firstOrCreate(['name' => 'Test Region'], ['is_active' => true]);
     }
 
     private function superAdmin(): User

@@ -26,6 +26,7 @@ class CashController extends Controller
         $representative = $this->representative($request);
         $hold = (int) RepresentativeCashBalance::query()->where('sales_representative_id', $representative->id)->value('amount');
         $pending = (int) CashSubmission::query()->where('sales_representative_id', $representative->id)->where('status', CashSubmissionStatus::Pending)->sum('amount');
+
         return response()->json(['representative' => ['id' => $representative->id, 'code' => $representative->code, 'name' => $representative->name], 'cash_hold' => $hold, 'pending_submissions' => $pending, 'available_to_submit' => max(0, $hold - $pending)]);
     }
 
@@ -51,9 +52,18 @@ class CashController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $representative = $this->representative($request);
-        $data = $request->validate(['per_page' => ['nullable', 'integer', 'min:10', 'max:100']]);
+        $data = $request->validate([
+            'per_page' => ['nullable', 'integer', 'min:10', 'max:100'],
+            'trip_id' => ['nullable', 'integer', 'exists:trips,id'],
+        ]);
 
-        return CashSubmissionResource::collection(CashSubmission::query()->with($this->relations())->where('sales_representative_id', $representative->id)->latest('id')->paginate($data['per_page'] ?? 20)->withQueryString());
+        return CashSubmissionResource::collection(CashSubmission::query()
+            ->with($this->relations())
+            ->where('sales_representative_id', $representative->id)
+            ->when($data['trip_id'] ?? null, fn ($query, $tripId) => $query->where('trip_id', $tripId))
+            ->latest('id')
+            ->paginate($data['per_page'] ?? 20)
+            ->withQueryString());
     }
 
     public function store(Request $request): JsonResponse
@@ -85,6 +95,6 @@ class CashController extends Controller
     /** @return list<string> */
     private function relations(): array
     {
-        return ['representative', 'warehouse', 'creator', 'confirmer', 'canceller', 'reverser'];
+        return ['trip', 'representative', 'warehouse', 'creator', 'confirmer', 'canceller', 'reverser'];
     }
 }

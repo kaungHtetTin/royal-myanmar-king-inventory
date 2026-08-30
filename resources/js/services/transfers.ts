@@ -63,6 +63,7 @@ export type WarehouseTransfer = {
 export type RepresentativeTransfer = {
     id: number;
     reference: string;
+    trip?: { id: number; reference: string; title: string } | null;
     direction: 'issue' | 'return';
     source_warehouse: WarehouseOption;
     representative: RepresentativeOption;
@@ -115,6 +116,7 @@ export type WarehouseTransferInput = {
     }[];
 };
 export type RepresentativeTransferInput = {
+    trip_id: number;
     source_warehouse_id: number;
     sales_representative_id: number;
     notes: string;
@@ -127,6 +129,7 @@ export type RepresentativeTransferInput = {
     }[];
 };
 export type RepresentativeReturnInput = {
+    trip_id?: number | null;
     target_warehouse_id: number;
     sales_representative_id: number;
     notes: string;

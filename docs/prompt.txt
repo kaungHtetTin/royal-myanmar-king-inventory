@@ -1,24 +1,48 @@
-I want to change the system architecture of the system.
-In regional scope,
-I want  Warehouse => Region => Way ,
+I want to add trip planning saleing and reporting module
 
-So in Warehouse CRUD system, I want to make CRUD on new Region under warehouse and new Way under region. 
-A sale representative can be assigned upto REgion scope.
-A sale representative can sell the product under any way under a Region.
+Initially, before creating a trip
+the sale rep no stock at all. 
 
-Product and Price Model, 
-currently the price of a product is one fixed price. 
-in new system, The price can be different according to region scope.
-Update product CRUD system to compact with Different price Model
-Also add unit conversion feature to decompose the product to make FOC.
-In representative issue, I want to issue FOC in the same unit or decomposed unit. 
-No predefined FOC rule is required. make the system flexible.
 
-In customer CRUD,
-define the customer upto way scope from Warehouse => Region => Way
 
-Sale processing
-In sale process, we need to consider the represenative assigned region 
-to decide the product price and to filter the customer. 
-also we need a report for sale power for a Way for a representative or sale power of a way for all represenative. 
-In sale form, I also want to give FOC to customer, no prefixed rule is require, make the system flexible. 
+step 1
+with basic information 
+title,
+warehouse,
+region,
+assigned sale represenative
+assigned vehicle. 
+
+step 2 
+stock issue : current stock issue form is the part of trip planning
+every stock issue have to attach with a trip
+I want the best UX flow, so you can change the layout system
+
+step 3, operation state
+after issue the stock, the sale represenative will hold stocks.
+then selling operation is the same as current operation flow
+during a trip, the sale represenative can record a expense a record legder for this trip
+
+step 3 trip ending.
+In this phase, the representative return all stock holding to the warehouse at once. 
+partially return also allow.
+return turn holding cash back to the office with record. 
+
+tip reporting. 
+I want to know the in overview about
+how much and which proudct are issue, how much and which are saleing, how much and which are return
+for this, we need to consider also FOC. I want this report in table. 
+
+and also we need to know the sale history list in this trip,
+cash hold and return history and state during this trip
+
+note:
+a trip can have these states: planning, operation, ending
+for issue, multiple stock issue for one trip is allowed.
+a sale represenative can create new sale during an valid trip operating phase. 
+so every sale have a link to a trip
+
+don't implement for this now. just disucss ask for your understanding
+discuss about which section and how will you change or  update
+
+

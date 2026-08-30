@@ -235,7 +235,7 @@ class Phase5SalesTest extends TestCase
             'name' => ' New Route Shop ',
             'customer_type' => 'Shop',
             'phone' => '09-111222333',
-            'region' => 'Yangon',
+            'region_id' => $representative->regions()->value('regions.id'),
             'township' => 'Hlaing',
             'address' => 'Main Road',
             'notes' => 'Created on route.',
@@ -266,8 +266,8 @@ class Phase5SalesTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $response->json('customer.id'))
-            ->assertJsonPath('data.0.way.region.name', 'Sales Region')
-            ->assertJsonPath('data.0.way.region.warehouse.id', $representative->primary_warehouse_id)
+            ->assertJsonPath('data.0.region.name', 'Sales Region')
+            ->assertJsonPath('data.0.region.warehouse.id', $representative->primary_warehouse_id)
             ->assertJsonPath('meta.total', 1);
     }
 
@@ -292,12 +292,11 @@ class Phase5SalesTest extends TestCase
     {
         $warehouse = Warehouse::factory()->create();
         $region = $warehouse->regions()->create(['name' => 'Sales Region', 'is_active' => true]);
-        $way = $region->ways()->create(['code' => 'WAY-SALES-'.$warehouse->id, 'name' => 'Sales Route', 'is_active' => true]);
         $user = User::factory()->create();
         $user->assignRole(RoleName::SalesRepresentative->value);
         $representative = SalesRepresentative::factory()->create(['user_id' => $user->id, 'primary_warehouse_id' => $warehouse->id]);
         $representative->regions()->sync([$region->id]);
-        $customer = Customer::factory()->create(['warehouse_id' => $warehouse->id, 'way_id' => $way->id, 'credit_allowed' => $creditAllowed, 'credit_limit' => $creditLimit]);
+        $customer = Customer::factory()->create(['warehouse_id' => $warehouse->id, 'region_id' => $region->id, 'credit_allowed' => $creditAllowed, 'credit_limit' => $creditLimit]);
         $product = Product::factory()->create(['selling_price' => $price]);
         RepresentativeInventory::query()->create(['sales_representative_id' => $representative->id, 'product_id' => $product->id, 'quantity' => $quantity]);
 

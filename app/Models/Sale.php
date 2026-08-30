@@ -10,16 +10,21 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Sale extends Model
 {
-    protected $fillable = ['reference', 'sales_representative_id', 'warehouse_id', 'region_id', 'way_id', 'customer_id', 'payment_type', 'total_amount', 'status', 'notes', 'creation_latitude', 'creation_longitude', 'location_accuracy_meters', 'location_captured_at', 'created_by', 'posted_by', 'posted_at', 'voided_by', 'voided_at', 'void_reason'];
+    protected $fillable = ['reference', 'trip_id', 'sales_representative_id', 'warehouse_id', 'region_id', 'customer_id', 'payment_type', 'payment_method', 'total_amount', 'promotion_title', 'promotion_amount', 'status', 'notes', 'creation_latitude', 'creation_longitude', 'location_accuracy_meters', 'location_captured_at', 'created_by', 'posted_by', 'posted_at', 'voided_by', 'voided_at', 'void_reason'];
 
     protected function casts(): array
     {
-        return ['payment_type' => PaymentType::class, 'status' => SaleStatus::class, 'total_amount' => 'integer', 'creation_latitude' => 'float', 'creation_longitude' => 'float', 'location_accuracy_meters' => 'integer', 'location_captured_at' => 'datetime', 'posted_at' => 'datetime', 'voided_at' => 'datetime'];
+        return ['payment_type' => PaymentType::class, 'status' => SaleStatus::class, 'total_amount' => 'integer', 'promotion_amount' => 'integer', 'creation_latitude' => 'float', 'creation_longitude' => 'float', 'location_accuracy_meters' => 'integer', 'location_captured_at' => 'datetime', 'posted_at' => 'datetime', 'voided_at' => 'datetime'];
     }
 
     public function representative(): BelongsTo
     {
         return $this->belongsTo(SalesRepresentative::class, 'sales_representative_id');
+    }
+
+    public function trip(): BelongsTo
+    {
+        return $this->belongsTo(Trip::class);
     }
 
     public function warehouse(): BelongsTo
@@ -35,11 +40,6 @@ class Sale extends Model
     public function region(): BelongsTo
     {
         return $this->belongsTo(Region::class);
-    }
-
-    public function way(): BelongsTo
-    {
-        return $this->belongsTo(Way::class);
     }
 
     public function items(): HasMany

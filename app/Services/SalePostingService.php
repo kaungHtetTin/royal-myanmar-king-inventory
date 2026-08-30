@@ -6,6 +6,7 @@ use App\Enums\FinancialTransactionType;
 use App\Enums\PaymentType;
 use App\Enums\SaleStatus;
 use App\Enums\StockMovementType;
+use App\Enums\TripStatus;
 use App\Exceptions\DomainConflictException;
 use App\Models\Customer;
 use App\Models\CustomerCreditTransaction;
@@ -24,6 +25,7 @@ class SalePostingService
         private readonly CustomerCreditMutation $credit,
         private readonly RepresentativeCashMutation $cash,
         private readonly AuditLogger $auditLogger,
+        private readonly PaymentMethodRegistry $paymentMethods,
     ) {}
 
     /** @return array<string, mixed> */
@@ -32,6 +34,9 @@ class SalePostingService
         return $this->idempotency->execute($actor, "sale:{$sale->id}:post", $key, function () use ($sale, $actor, $request): array {
             $sale = $this->locked($sale);
             $this->requireStatus($sale, SaleStatus::Draft);
+            if (! $sale->trip || $sale->trip->status !== TripStatus::Operation) {
+                throw new DomainConflictException('Sales can only be posted during trip operation.', 'INVALID_TRIP_STATE');
+            }
             $customer = Customer::query()->lockForUpdate()->findOrFail($sale->customer_id);
             $this->assertPostable($sale, $customer);
             $productIds = $sale->items->pluck('product_id')->all();
@@ -55,7 +60,7 @@ class SalePostingService
             if ($sale->payment_type === PaymentType::Credit) {
                 $creditBalance = $this->credit->lock($customer);
                 $this->credit->assertSaleAllowed($customer, $creditBalance, $sale->total_amount);
-            } else {
+            } elseif ($this->paymentMethods->addsToCashHold($sale->payment_method)) {
                 $cashBalance = $this->cash->lock($sale->sales_representative_id);
             }
 
@@ -71,7 +76,7 @@ class SalePostingService
             if ($creditBalance) {
                 $this->credit->increase($creditBalance, $sale->total_amount);
                 CustomerCreditTransaction::query()->create($this->financialAttributes($sale, FinancialTransactionType::CreditSale, $sale->total_amount, $actor, $occurredAt) + ['customer_id' => $sale->customer_id]);
-            } else {
+            } elseif ($cashBalance) {
                 $this->cash->increase($cashBalance, $sale->total_amount);
                 RepresentativeCashTransaction::query()->create($this->financialAttributes($sale, FinancialTransactionType::CashSale, $sale->total_amount, $actor, $occurredAt) + ['sales_representative_id' => $sale->sales_representative_id]);
             }
@@ -102,7 +107,7 @@ class SalePostingService
                 if ($creditBalance->outstanding_amount < $sale->total_amount) {
                     throw new DomainConflictException('Customer credit has already been settled below the sale amount.', 'INSUFFICIENT_CUSTOMER_CREDIT');
                 }
-            } else {
+            } elseif ($this->paymentMethods->addsToCashHold($sale->payment_method)) {
                 $cashBalance = $this->cash->lock($sale->sales_representative_id);
                 if ($cashBalance->amount < $sale->total_amount) {
                     throw new DomainConflictException('Representative cash has already been settled below the sale amount.', 'INSUFFICIENT_REPRESENTATIVE_CASH');
@@ -122,7 +127,7 @@ class SalePostingService
                 $this->credit->decrease($creditBalance, $sale->total_amount);
                 $original = CustomerCreditTransaction::query()->where('source_type', 'sale')->where('source_id', $sale->id)->where('transaction_type', FinancialTransactionType::CreditSale)->lockForUpdate()->firstOrFail();
                 CustomerCreditTransaction::query()->create($this->financialAttributes($sale, FinancialTransactionType::CreditSaleVoid, -$sale->total_amount, $actor, $occurredAt, $reason) + ['customer_id' => $sale->customer_id, 'reversal_of_id' => $original->id]);
-            } else {
+            } elseif ($cashBalance) {
                 $this->cash->decrease($cashBalance, $sale->total_amount);
                 $original = RepresentativeCashTransaction::query()->where('source_type', 'sale')->where('source_id', $sale->id)->where('transaction_type', FinancialTransactionType::CashSale)->lockForUpdate()->firstOrFail();
                 RepresentativeCashTransaction::query()->create($this->financialAttributes($sale, FinancialTransactionType::CashSaleVoid, -$sale->total_amount, $actor, $occurredAt, $reason) + ['sales_representative_id' => $sale->sales_representative_id, 'reversal_of_id' => $original->id]);
@@ -136,7 +141,7 @@ class SalePostingService
 
     private function locked(Sale $sale): Sale
     {
-        return Sale::query()->with(['representative.regions', 'warehouse', 'region', 'way.region', 'customer.way.region', 'items.product', 'items.unit', 'items.focUnit'])->lockForUpdate()->findOrFail($sale->id);
+        return Sale::query()->with(['trip', 'representative.regions', 'warehouse', 'region', 'customer.assignedRegion', 'items.product', 'items.unit', 'items.focUnit'])->lockForUpdate()->findOrFail($sale->id);
     }
 
     private function requireStatus(Sale $sale, SaleStatus $status): void
@@ -151,11 +156,16 @@ class SalePostingService
         if ($sale->items->isEmpty()) {
             throw new DomainConflictException('A sale must contain at least one item.', 'EMPTY_SALE');
         }
-        if (! $sale->representative->is_active || ! $sale->warehouse->is_active || ! $sale->region?->is_active || ! $sale->way?->is_active || ! $customer->is_active || $customer->way_id !== $sale->way_id || $sale->way->region_id !== $sale->region_id || ! $sale->representative->regions->contains('id', $sale->region_id) || $sale->items->contains(fn ($item) => ! $item->product->is_active || ! $item->unit?->is_active || ($item->foc_quantity > 0 && ! $item->focUnit?->is_active))) {
+        if (! $sale->representative->is_active || ! $sale->warehouse->is_active || ! $sale->region?->is_active || ! $customer->is_active || $customer->region_id !== $sale->region_id || $customer->assignedRegion?->warehouse_id !== $sale->warehouse_id || ! $sale->representative->regions->contains('id', $sale->region_id) || $sale->items->contains(fn ($item) => ! $item->product->is_active || ! $item->unit?->is_active || ($item->foc_quantity > 0 && ! $item->focUnit?->is_active))) {
             throw new DomainConflictException('Inactive or out-of-scope master data cannot be used for sale posting.', 'INACTIVE_MASTER_DATA');
         }
-        $calculated = $sale->items->sum(fn ($item) => $item->quantity * $item->unit_price);
-        if ($calculated !== $sale->total_amount || $sale->items->contains(fn ($item) => $item->line_total !== $item->quantity * $item->unit_price)) {
+        $calculated = $sale->items->sum('line_total') - $sale->promotion_amount;
+        if ($calculated !== $sale->total_amount || $sale->items->contains(function ($item): bool {
+            $gross = $item->quantity * $item->unit_price;
+            $discount = (int) round($gross * (float) $item->discount_percentage / 100);
+
+            return $item->discount_amount !== $discount || $item->line_total !== $gross - $discount;
+        })) {
             throw new DomainConflictException('Stored sale totals do not reconcile.', 'SALE_TOTAL_MISMATCH');
         }
     }
@@ -184,7 +194,7 @@ class SalePostingService
     /** @return array<string, mixed> */
     private function metadata(Sale $sale): array
     {
-        return ['reference' => $sale->reference, 'sales_representative_id' => $sale->sales_representative_id, 'region_id' => $sale->region_id, 'way_id' => $sale->way_id, 'customer_id' => $sale->customer_id, 'payment_type' => $sale->payment_type->value, 'total_amount' => $sale->total_amount, 'items' => $sale->items->map->only(['product_id', 'product_unit_id', 'quantity', 'base_quantity', 'unit_price', 'line_total', 'foc_product_unit_id', 'foc_quantity', 'foc_base_quantity'])->all()];
+        return ['reference' => $sale->reference, 'sales_representative_id' => $sale->sales_representative_id, 'region_id' => $sale->region_id, 'customer_id' => $sale->customer_id, 'payment_type' => $sale->payment_type->value, 'payment_method' => $sale->payment_method, 'total_amount' => $sale->total_amount, 'promotion_title' => $sale->promotion_title, 'promotion_amount' => $sale->promotion_amount, 'items' => $sale->items->map->only(['product_id', 'product_unit_id', 'quantity', 'base_quantity', 'unit_price', 'discount_percentage', 'discount_amount', 'line_total', 'foc_product_unit_id', 'foc_quantity', 'foc_base_quantity'])->all()];
     }
 
     /** @return array<string, mixed> */

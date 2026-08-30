@@ -12,6 +12,7 @@ import {
 } from '../../services/vehicles';
 import { Icon } from '../../ui/icons';
 import { Button, Dialog, EmptyState, IconButton, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
+import { useLocale } from '../../localization/locale-context';
 
 const emptyMeta: PaginationMeta = {
     current_page: 1,
@@ -24,19 +25,13 @@ const emptyMeta: PaginationMeta = {
 const emptyOptions: VehicleOptions = { representatives: [], types: [] };
 const emptySummary: VehicleSummary = { active: 0, assigned: 0, total: 0, unassigned: 0 };
 
-function errorMessage(error: unknown) {
-    return error instanceof Error ? error.message : 'Unable to complete the request.';
-}
-
-function dateTime(value: string | null) {
-    if (!value) return 'Not available';
-    return new Intl.DateTimeFormat(undefined, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-    }).format(new Date(value));
+function errorMessage(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback;
 }
 
 export function VehicleManagementPage() {
+    const { formatDateTime, formatNumber, t } = useLocale();
+    const dateTime = (value: string | null) => (value ? formatDateTime(value) : t('Not available'));
     const { user } = useSession();
     const isSuperAdmin = user?.roles.includes('super-admin');
     const canCreate = Boolean(isSuperAdmin || user?.permissions.includes('vehicle.create'));
@@ -70,11 +65,11 @@ export function VehicleManagementPage() {
             setSummary(response.summary ?? emptySummary);
             setOptions(availableOptions);
         } catch (requestError) {
-            setError(errorMessage(requestError));
+            setError(errorMessage(requestError, t('Unable to complete the request.')));
         } finally {
             setLoading(false);
         }
-    }, [filters]);
+    }, [filters, t]);
 
     useEffect(() => {
         let active = true;
@@ -87,7 +82,7 @@ export function VehicleManagementPage() {
                 setOptions(availableOptions);
             })
             .catch((requestError) => {
-                if (active) setError(errorMessage(requestError));
+                if (active) setError(errorMessage(requestError, t('Unable to complete the request.')));
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -95,7 +90,7 @@ export function VehicleManagementPage() {
         return () => {
             active = false;
         };
-    }, [filters]);
+    }, [filters, t]);
 
     const showNotice = (message: string) => {
         setNotice(message);
@@ -106,9 +101,9 @@ export function VehicleManagementPage() {
         <div className="admin-page vehicle-management">
             <header className="page-heading">
                 <div>
-                    <p className="ui-eyebrow">Master data</p>
-                    <h1>Vehicles</h1>
-                    <p>Maintain the delivery fleet and optional representative assignments.</p>
+                    <p className="ui-eyebrow">{t('Master data')}</p>
+                    <h1>{t('Vehicles')}</h1>
+                    <p>{t('Maintain the delivery fleet and optional representative assignments.')}</p>
                 </div>
                 {canCreate ? (
                     <Button
@@ -119,35 +114,35 @@ export function VehicleManagementPage() {
                         }}
                         tone="primary"
                     >
-                        New vehicle
+                        {t('New vehicle')}
                     </Button>
                 ) : null}
             </header>
 
             <div className="metric-grid access-metrics">
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="truck"
-                    label="Vehicles"
-                    value={String(summary.total)}
+                    label={t('Vehicles')}
+                    value={formatNumber(summary.total)}
                 />
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="dashboard"
-                    label="Active"
-                    value={String(summary.active)}
+                    label={t('Active')}
+                    value={formatNumber(summary.active)}
                 />
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="users"
-                    label="Assigned"
-                    value={String(summary.assigned)}
+                    label={t('Assigned')}
+                    value={formatNumber(summary.assigned)}
                 />
                 <MetricCard
-                    hint="Current filtered result"
+                    hint={t('Current filtered result')}
                     icon="adjustments"
-                    label="Unassigned"
-                    value={String(summary.unassigned)}
+                    label={t('Unassigned')}
+                    value={formatNumber(summary.unassigned)}
                 />
             </div>
 
@@ -162,12 +157,12 @@ export function VehicleManagementPage() {
                     <Icon name="x" size={15} />
                     {error}
                     <button onClick={() => void loadVehicles()} type="button">
-                        Retry
+                        {t('Retry')}
                     </button>
                 </div>
             ) : null}
 
-            <Panel eyebrow="Fleet" title="Vehicle directory">
+            <Panel eyebrow={t('Fleet')} title={t('Vehicle directory')}>
                 <form
                     className="filter-toolbar master-data-filters"
                     onSubmit={(event) => {
@@ -183,7 +178,7 @@ export function VehicleManagementPage() {
                     }}
                 >
                     <label className="filter-search">
-                        <span className="sr-only">Search vehicles</span>
+                        <span className="sr-only">{t('Search vehicles')}</span>
                         <Icon name="search" size={15} />
                         <input
                             onChange={(event) =>
@@ -192,13 +187,13 @@ export function VehicleManagementPage() {
                                     search: event.target.value,
                                 }))
                             }
-                            placeholder="Search number, make, model, or representative"
+                            placeholder={t('Search number, make, model, or representative')}
                             type="search"
                             value={draftFilters.search}
                         />
                     </label>
                     <label>
-                        <span className="sr-only">Filter by status</span>
+                        <span className="sr-only">{t('Filter by status')}</span>
                         <select
                             onChange={(event) =>
                                 setDraftFilters((value) => ({
@@ -208,13 +203,13 @@ export function VehicleManagementPage() {
                             }
                             value={draftFilters.status}
                         >
-                            <option value="">All statuses</option>
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
+                            <option value="">{t('All statuses')}</option>
+                            <option value="active">{t('Active')}</option>
+                            <option value="inactive">{t('Inactive')}</option>
                         </select>
                     </label>
                     <label>
-                        <span className="sr-only">Filter by type</span>
+                        <span className="sr-only">{t('Filter by type')}</span>
                         <select
                             onChange={(event) =>
                                 setDraftFilters((value) => ({
@@ -224,14 +219,14 @@ export function VehicleManagementPage() {
                             }
                             value={draftFilters.type}
                         >
-                            <option value="">All types</option>
+                            <option value="">{t('All types')}</option>
                             {options.types.map((type) => (
                                 <option key={type}>{type}</option>
                             ))}
                         </select>
                     </label>
                     <label>
-                        <span className="sr-only">Filter by assignment</span>
+                        <span className="sr-only">{t('Filter by assignment')}</span>
                         <select
                             onChange={(event) =>
                                 setDraftFilters((value) => ({
@@ -241,38 +236,38 @@ export function VehicleManagementPage() {
                             }
                             value={draftFilters.assignment}
                         >
-                            <option value="">All assignments</option>
-                            <option value="assigned">Assigned</option>
-                            <option value="unassigned">Unassigned</option>
+                            <option value="">{t('All assignments')}</option>
+                            <option value="assigned">{t('Assigned')}</option>
+                            <option value="unassigned">{t('Unassigned')}</option>
                         </select>
                     </label>
                     <Button icon="search" type="submit">
-                        Apply
+                        {t('Apply')}
                     </Button>
                 </form>
 
                 {loading ? (
                     <div className="ui-loading" role="status">
                         <span />
-                        Loading vehicles…
+                        {t('Loading vehicles…')}
                     </div>
                 ) : vehicles.length === 0 ? (
                     <EmptyState
-                        description="Change the filters or create the first fleet record."
-                        title="No vehicles found"
+                        description={t('Change the filters or create the first fleet record.')}
+                        title={t('No vehicles found')}
                     />
                 ) : (
                     <div className="ui-table-wrap">
                         <table className="ui-table vehicle-table">
                             <thead>
                                 <tr>
-                                    <th>Vehicle</th>
-                                    <th>Make / model</th>
-                                    <th>Representative</th>
-                                    <th>Notes</th>
-                                    <th>Status</th>
-                                    <th>Updated</th>
-                                    {canEdit ? <th className="ui-table__actions">Actions</th> : null}
+                                    <th>{t('Vehicle')}</th>
+                                    <th>{t('Make / model')}</th>
+                                    <th>{t('Representative')}</th>
+                                    <th>{t('Notes')}</th>
+                                    <th>{t('Status')}</th>
+                                    <th>{t('Updated')}</th>
+                                    {canEdit ? <th className="ui-table__actions">{t('Actions')}</th> : null}
                                 </tr>
                             </thead>
                             <tbody>
@@ -283,8 +278,8 @@ export function VehicleManagementPage() {
                                             <small>{vehicle.vehicle_type}</small>
                                         </td>
                                         <td>
-                                            <span className="table-primary">{vehicle.brand || 'Not specified'}</span>
-                                            <small>{vehicle.model || 'No model recorded'}</small>
+                                            <span className="table-primary">{vehicle.brand || t('Not specified')}</span>
+                                            <small>{vehicle.model || t('No model recorded')}</small>
                                         </td>
                                         <td>
                                             {vehicle.representative ? (
@@ -293,28 +288,28 @@ export function VehicleManagementPage() {
                                                     <small>{vehicle.representative.code}</small>
                                                 </>
                                             ) : (
-                                                <span className="table-muted">Unassigned</span>
+                                                <span className="table-muted">{t('Unassigned')}</span>
                                             )}
                                         </td>
                                         <td>
                                             <span className="table-primary">
-                                                {vehicle.notes || 'No operational notes'}
+                                                {vehicle.notes || t('No operational notes')}
                                             </span>
                                         </td>
                                         <td>
                                             <StatusBadge tone={vehicle.is_active ? 'success' : 'danger'}>
-                                                {vehicle.is_active ? 'Active' : 'Inactive'}
+                                                {t(vehicle.is_active ? 'Active' : 'Inactive')}
                                             </StatusBadge>
                                         </td>
                                         <td>
                                             <span className="table-primary">{dateTime(vehicle.updated_at)}</span>
-                                            <small>Created {dateTime(vehicle.created_at)}</small>
+                                            <small>{t('Created {date}', { date: dateTime(vehicle.created_at) })}</small>
                                         </td>
                                         {canEdit ? (
                                             <td className="ui-table__actions">
                                                 <IconButton
                                                     icon="settings"
-                                                    label={`Edit ${vehicle.vehicle_number}`}
+                                                    label={t('Edit {name}', { name: vehicle.vehicle_number })}
                                                     onClick={() => {
                                                         setSelected(vehicle);
                                                         setDialogOpen(true);
@@ -330,7 +325,11 @@ export function VehicleManagementPage() {
                 )}
                 <footer className="table-footer">
                     <span>
-                        {meta.from ?? 0}–{meta.to ?? 0} of {meta.total} vehicles
+                        {t('{from}–{to} of {total} vehicles', {
+                            from: formatNumber(meta.from ?? 0),
+                            to: formatNumber(meta.to ?? 0),
+                            total: formatNumber(meta.total),
+                        })}
                     </span>
                     <button
                         disabled={meta.current_page <= 1 || loading}
@@ -343,10 +342,13 @@ export function VehicleManagementPage() {
                         }}
                         type="button"
                     >
-                        Previous
+                        {t('Previous')}
                     </button>
                     <strong>
-                        Page {meta.current_page} of {meta.last_page}
+                        {t('Page {current} of {last}', {
+                            current: formatNumber(meta.current_page),
+                            last: formatNumber(meta.last_page),
+                        })}
                     </strong>
                     <button
                         disabled={meta.current_page >= meta.last_page || loading}
@@ -359,7 +361,7 @@ export function VehicleManagementPage() {
                         }}
                         type="button"
                     >
-                        Next
+                        {t('Next')}
                     </button>
                 </footer>
             </Panel>
@@ -396,6 +398,7 @@ function VehicleDialog({
     options: VehicleOptions;
     vehicle: Vehicle | null;
 }) {
+    const { t } = useLocale();
     const [form, setForm] = useState<VehicleInput>({
         brand: '',
         is_active: true,
@@ -429,7 +432,9 @@ function VehicleDialog({
             vehicle?.is_active &&
             !form.is_active &&
             !window.confirm(
-                `Deactivate ${vehicle.vehicle_number}? It will remain in history but cannot be selected for new operations.`,
+                t('Deactivate {number}? It will remain in history but cannot be selected for new operations.', {
+                    number: vehicle.vehicle_number,
+                }),
             )
         )
             return;
@@ -438,12 +443,12 @@ function VehicleDialog({
         try {
             if (vehicle) await vehicleApi.update(vehicle.id, form);
             else await vehicleApi.create(form);
-            await onSaved(vehicle ? 'Vehicle updated.' : 'Vehicle created.');
+            await onSaved(t(vehicle ? 'Vehicle updated.' : 'Vehicle created.'));
         } catch (requestError) {
             if (requestError instanceof VehicleApiError) setErrors(requestError.fields);
             setErrors((current) => ({
                 ...current,
-                form: [errorMessage(requestError)],
+                form: [errorMessage(requestError, t('Unable to complete the request.'))],
             }));
         } finally {
             setSaving(false);
@@ -452,11 +457,11 @@ function VehicleDialog({
 
     return (
         <Dialog
-            description="Vehicle numbers are unique. A representative can be assigned to only one vehicle."
+            description={t('Vehicle numbers are unique. A representative can be assigned to only one vehicle.')}
             footer={
                 <>
                     <Button disabled={saving} onClick={onClose}>
-                        Cancel
+                        {t('Cancel')}
                     </Button>
                     <Button
                         disabled={saving}
@@ -465,13 +470,13 @@ function VehicleDialog({
                         tone="primary"
                         type="submit"
                     >
-                        {saving ? 'Saving…' : 'Save vehicle'}
+                        {saving ? t('Saving…') : t('Save vehicle')}
                     </Button>
                 </>
             }
             onClose={onClose}
             open={open}
-            title={vehicle ? `Edit vehicle · ${vehicle.vehicle_number}` : 'Create vehicle'}
+            title={vehicle ? t('Edit vehicle · {number}', { number: vehicle.vehicle_number }) : t('Create vehicle')}
         >
             <form className="management-form" id="vehicle-management-form" onSubmit={submit}>
                 {errors.form?.[0] ? (
@@ -481,7 +486,7 @@ function VehicleDialog({
                 ) : null}
                 <div className="form-grid">
                     <label className="ui-field">
-                        <span>Vehicle number</span>
+                        <span>{t('Vehicle number')}</span>
                         <input
                             autoFocus
                             maxLength={50}
@@ -493,12 +498,12 @@ function VehicleDialog({
                         <FieldError errors={errors} name="vehicle_number" />
                     </label>
                     <label className="ui-field">
-                        <span>Vehicle type</span>
+                        <span>{t('Vehicle type')}</span>
                         <input
                             list="vehicle-type-options"
                             maxLength={50}
                             onChange={(event) => change('vehicle_type', event.target.value)}
-                            placeholder="Van"
+                            placeholder={t('Van')}
                             required
                             value={form.vehicle_type}
                         />
@@ -510,27 +515,27 @@ function VehicleDialog({
                         <FieldError errors={errors} name="vehicle_type" />
                     </label>
                     <label className="ui-field">
-                        <span>Brand</span>
+                        <span>{t('Brand')}</span>
                         <input
                             maxLength={100}
                             onChange={(event) => change('brand', event.target.value)}
-                            placeholder="Toyota"
+                            placeholder={t('Toyota')}
                             value={form.brand}
                         />
                         <FieldError errors={errors} name="brand" />
                     </label>
                     <label className="ui-field">
-                        <span>Model</span>
+                        <span>{t('Model')}</span>
                         <input
                             maxLength={100}
                             onChange={(event) => change('model', event.target.value)}
-                            placeholder="Hiace"
+                            placeholder={t('Hiace')}
                             value={form.model}
                         />
                         <FieldError errors={errors} name="model" />
                     </label>
                     <label className="ui-field form-grid__wide">
-                        <span>Assigned representative</span>
+                        <span>{t('Assigned representative')}</span>
                         <select
                             onChange={(event) =>
                                 change(
@@ -540,7 +545,7 @@ function VehicleDialog({
                             }
                             value={form.sales_representative_id ?? ''}
                         >
-                            <option value="">Unassigned</option>
+                            <option value="">{t('Unassigned')}</option>
                             {options.representatives.map((representative) => (
                                 <option
                                     disabled={Boolean(
@@ -551,7 +556,7 @@ function VehicleDialog({
                                 >
                                     {representative.name} · {representative.code}
                                     {representative.vehicle_id && representative.vehicle_id !== vehicle?.id
-                                        ? ' · already assigned'
+                                        ? t(' · already assigned')
                                         : ''}
                                 </option>
                             ))}
@@ -559,7 +564,7 @@ function VehicleDialog({
                         <FieldError errors={errors} name="sales_representative_id" />
                     </label>
                     <label className="ui-field form-grid__wide">
-                        <span>Operational notes</span>
+                        <span>{t('Operational notes')}</span>
                         <textarea
                             maxLength={1000}
                             onChange={(event) => change('notes', event.target.value)}
@@ -575,9 +580,9 @@ function VehicleDialog({
                             type="checkbox"
                         />
                         <span>
-                            <strong>Active vehicle</strong>
+                            <strong>{t('Active vehicle')}</strong>
                             <small>
-                                Inactive vehicles remain in history but cannot be selected for new operations.
+                                {t('Inactive vehicles remain in history but cannot be selected for new operations.')}
                             </small>
                         </span>
                     </label>

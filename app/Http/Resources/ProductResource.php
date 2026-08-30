@@ -17,6 +17,7 @@ class ProductResource extends JsonResource
             'category' => $this->category,
             'unit' => $this->unit,
             'selling_price' => $this->selling_price,
+            'discount_percentage' => (float) $this->discount_percentage,
             'barcode' => $this->barcode,
             'description' => $this->description,
             'is_active' => $this->is_active,

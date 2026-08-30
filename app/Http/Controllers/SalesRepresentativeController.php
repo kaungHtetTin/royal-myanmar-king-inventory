@@ -18,7 +18,7 @@ class SalesRepresentativeController extends Controller
 
     public function current(Request $request): JsonResponse
     {
-        $representative = $request->user()->salesRepresentative()->with(['primaryWarehouse:id,code,name', 'regions.ways'])->firstOrFail();
+        $representative = $request->user()->salesRepresentative()->with(['primaryWarehouse:id,code,name', 'regions'])->firstOrFail();
         Gate::authorize('view', $representative);
 
         return response()->json(['representative' => $this->payload($representative)]);
@@ -61,7 +61,7 @@ class SalesRepresentativeController extends Controller
         ]);
 
         return response()->json([
-            'representative' => $this->payload($representative->fresh(['primaryWarehouse:id,code,name', 'regions.ways'])),
+            'representative' => $this->payload($representative->fresh(['primaryWarehouse:id,code,name', 'regions'])),
             'user' => $user->only(['id', 'name', 'username', 'email']),
         ]);
     }
@@ -87,7 +87,7 @@ class SalesRepresentativeController extends Controller
     public function show(SalesRepresentative $salesRepresentative): JsonResponse
     {
         Gate::authorize('view', $salesRepresentative);
-        $salesRepresentative->loadMissing(['primaryWarehouse:id,code,name', 'regions.ways']);
+        $salesRepresentative->loadMissing(['primaryWarehouse:id,code,name', 'regions']);
 
         return response()->json(['representative' => $this->payload($salesRepresentative)]);
     }
@@ -104,10 +104,7 @@ class SalesRepresentativeController extends Controller
             'phone' => $representative->phone,
             'email' => $representative->email,
             'region' => $representative->region,
-            'regions' => $representative->regions->map(fn ($region) => [
-                'id' => $region->id, 'name' => $region->name,
-                'ways' => $region->ways->map->only(['id', 'code', 'name'])->values(),
-            ])->values(),
+            'regions' => $representative->regions->map->only(['id', 'name'])->values(),
             'is_active' => $representative->is_active,
             'primary_warehouse' => $representative->primaryWarehouse,
             'account' => [

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Icon } from '../../ui/icons';
 import type { Portal } from '../../auth/session-context';
+import { useLocale } from '../../localization/locale-context';
 
 type AccessState = 'forbidden' | 'inactive' | 'loading';
 
@@ -12,6 +13,7 @@ const content = {
 
 export function AccessStatePage({ portal = 'admin', state }: { portal?: Portal; state: AccessState }) {
     const [title, description] = content[state];
+    const { t } = useLocale();
 
     return (
         <main className="access-state-page">
@@ -19,12 +21,12 @@ export function AccessStatePage({ portal = 'admin', state }: { portal?: Portal; 
                 <span className={`access-state-icon ${state === 'loading' ? 'is-loading' : ''}`}>
                     <Icon name={state === 'loading' ? 'density' : 'users'} size={24} />
                 </span>
-                <p className="ui-eyebrow">StockFlow security</p>
-                <h1>{title}</h1>
-                <p>{description}</p>
+                <p className="ui-eyebrow">{t('StockFlow security')}</p>
+                <h1>{t(title)}</h1>
+                <p>{t(description)}</p>
                 {state !== 'loading' ? (
                     <Link className="ui-button ui-button--primary" to={`/${portal}/login`}>
-                        <span>Return to sign in</span>
+                        <span>{t('Return to sign in')}</span>
                     </Link>
                 ) : null}
             </section>

@@ -12,6 +12,7 @@ use App\Models\SalesRepresentative;
 use App\Models\Warehouse;
 use App\Services\CashSubmissionService;
 use App\Services\WarehouseAccess;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Validation\Rule;
@@ -43,9 +44,23 @@ class CashController extends Controller
     {
         $data = $request->validate(['warehouse_id' => ['nullable', 'integer', 'exists:warehouses,id'], 'representative_id' => ['nullable', 'integer', 'exists:sales_representatives,id'], 'status' => ['nullable', Rule::enum(CashSubmissionStatus::class)], 'search' => ['nullable', 'string', 'max:100'], 'per_page' => ['nullable', 'integer', 'min:10', 'max:100']]);
         $warehouseIds = $this->warehouseIds($request, $data['warehouse_id'] ?? null);
-        $query = CashSubmission::query()->with($this->relations())->whereIn('warehouse_id', $warehouseIds)->when($data['representative_id'] ?? null, fn ($query, $id) => $query->where('sales_representative_id', $id))->when($data['status'] ?? null, fn ($query, $status) => $query->where('status', $status))->when($data['search'] ?? null, fn ($query, $search) => $query->where('reference', 'like', "%{$search}%"))->latest('id');
+        $query = CashSubmission::query()->with($this->relations())->whereIn('warehouse_id', $warehouseIds)->when($data['representative_id'] ?? null, fn ($query, $id) => $query->where('sales_representative_id', $id))->when($data['status'] ?? null, fn ($query, $status) => $query->where('status', $status))->when($data['search'] ?? null, fn ($query, $search) => $query->where(fn ($inner) => $inner->where('reference', 'like', "%{$search}%")->orWhereHas('representative', fn ($representative) => $representative->where('code', 'like', "%{$search}%")->orWhere('name', 'like', "%{$search}%"))))->latest('id');
 
         return CashSubmissionResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString());
+    }
+
+    public function store(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'sales_representative_id' => ['required', 'integer', Rule::exists('sales_representatives', 'id')->where('is_active', true)],
+            'amount' => ['required', 'integer', 'min:1'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+        ]);
+        $representative = SalesRepresentative::query()->findOrFail($data['sales_representative_id']);
+        abort_unless($this->warehouseAccess->allows($request->user(), $representative->primary_warehouse_id), 403);
+        $result = $this->submissions->collectByAdmin($representative, (int) $data['amount'], $data['notes'] ?? null, $request->user(), $this->idempotencyKey($request), $request);
+
+        return (new CashSubmissionResource(CashSubmission::query()->with($this->relations())->findOrFail($result['id'])))->response()->setStatusCode(201);
     }
 
     public function confirm(Request $request, CashSubmission $cashSubmission): CashSubmissionResource
@@ -82,6 +97,6 @@ class CashController extends Controller
     /** @return list<string> */
     private function relations(): array
     {
-        return ['representative', 'warehouse', 'creator', 'confirmer', 'canceller', 'reverser'];
+        return ['trip', 'representative', 'warehouse', 'creator', 'confirmer', 'canceller', 'reverser'];
     }
 }

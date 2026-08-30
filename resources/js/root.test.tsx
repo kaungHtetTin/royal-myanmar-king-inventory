@@ -250,7 +250,7 @@ describe('application portals', () => {
         expect(within(screen.getByRole('region', { name: 'Transfer summary' })).getByText('30')).toBeInTheDocument();
     });
 
-    it('returns representative paid and FOC stock using selected units', async () => {
+    it('reviews the complete representative paid and FOC holding without editable quantities', async () => {
         vi.spyOn(axios, 'get').mockImplementation((url) => {
             if (url === 'api/admin/representative-return-options')
                 return Promise.resolve({
@@ -289,41 +289,32 @@ describe('application portals', () => {
         });
 
         render(
-            <MemoryRouter initialEntries={['/admin/transfers/representative-return/new']}>
+            <MemoryRouter
+                initialEntries={[
+                    '/admin/transfers/representative-return/new?tripId=9&warehouseId=1&representativeId=7',
+                ]}
+            >
                 <Root initialUser={baseUser} />
             </MemoryRouter>,
         );
 
-        expect(await screen.findByRole('heading', { name: 'Create representative return' })).toBeInTheDocument();
-        fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
-        fireEvent.click(screen.getByRole('checkbox', { name: 'Select Drinking Water' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-
-        expect(screen.getByText('Set return units and quantities')).toBeInTheDocument();
-        expect(screen.getByText('Paid: 24 · FOC: 5 base available')).toBeInTheDocument();
-        const returnUnit = screen.getByRole('combobox', { name: 'Return unit' });
-        expect(returnUnit).toHaveValue('12');
-        const returnQuantityLine = returnUnit.closest('.transfer-quantity-line');
-        expect(returnQuantityLine).not.toBeNull();
-        expect(within(returnQuantityLine as HTMLElement).getAllByRole('combobox')).toHaveLength(2);
-        expect(within(returnQuantityLine as HTMLElement).getAllByRole('spinbutton')).toHaveLength(2);
-        expect(returnQuantityLine?.querySelectorAll(':scope > label')).toHaveLength(4);
-        fireEvent.change(screen.getByRole('combobox', { name: 'FOC unit' }), { target: { value: '11' } });
-        fireEvent.change(screen.getByRole('spinbutton', { name: 'Paid quantity' }), { target: { value: '2' } });
-        fireEvent.change(screen.getByRole('spinbutton', { name: 'FOC quantity' }), { target: { value: '6' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-        expect(screen.getByText('Enter a whole FOC quantity within 5 available base units.')).toBeInTheDocument();
-
-        fireEvent.change(screen.getByRole('spinbutton', { name: 'FOC quantity' }), { target: { value: '3' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-        expect(screen.getByText('Paid / FOC base').parentElement).toHaveTextContent('24 / 3');
+        expect(await screen.findByRole('heading', { name: 'Return all stock' })).toBeInTheDocument();
+        expect(await screen.findByText('Complete return only')).toBeInTheDocument();
+        expect(screen.getByText('SR-001 · Ko Aung')).toBeInTheDocument();
+        expect(screen.getByText('YGN-MAIN · Yangon Main')).toBeInTheDocument();
         expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
             'Product',
-            'Paid',
-            'FOC',
+            'Paid return',
+            'FOC return',
+            'Total',
         ]);
-        expect(screen.getByText('box · 24 base')).toBeInTheDocument();
-        expect(screen.getByText('bottle · 3 base')).toBeInTheDocument();
+        expect(screen.getByText('DW-1L · bottle')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Confirm full return' })).toBeEnabled();
+        expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+        expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+        expect(screen.getByRole('table')).toHaveTextContent('24');
+        expect(screen.getByRole('table')).toHaveTextContent('5');
+        expect(screen.getByRole('table')).toHaveTextContent('29');
     });
 
     it('keeps representative issue units and quantities in one compact item row', async () => {
@@ -365,13 +356,20 @@ describe('application portals', () => {
         });
 
         render(
-            <MemoryRouter initialEntries={['/admin/transfers/representative/new']}>
+            <MemoryRouter
+                initialEntries={[
+                    '/admin/transfers/representative/new?tripId=9&warehouseId=1&representativeId=7',
+                ]}
+            >
                 <Root initialUser={baseUser} />
             </MemoryRouter>,
         );
 
         expect(await screen.findByRole('heading', { name: 'Create representative issue' })).toBeInTheDocument();
-        fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+        expect(await screen.findByText('YGN-MAIN · Yangon Main')).toBeInTheDocument();
+        expect(screen.getByText('SR-001 · Ko Aung')).toBeInTheDocument();
+        expect(screen.queryByText('Issue information')).not.toBeInTheDocument();
+        expect(screen.getByText('Product selection')).toBeInTheDocument();
         fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Drinking Water' }));
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
@@ -404,18 +402,12 @@ describe('application portals', () => {
                             name: 'ABC Shop',
                             notes: null,
                             phone: '091234567',
-                            region: 'Yangon West',
+                            region: { id: 1, name: 'Yangon West', warehouse_id: 1 },
+                            region_id: 1,
                             township: 'Hlaing',
                             updated_at: '2026-08-01T00:00:00Z',
                             warehouse: { code: 'YGN-MAIN', id: 1, name: 'Yangon Main Warehouse' },
                             warehouse_id: 1,
-                            way: {
-                                code: 'WAY-000001',
-                                id: 1,
-                                name: 'Hlaing',
-                                region: { id: 1, name: 'Yangon West', warehouse_id: 1 },
-                            },
-                            way_id: 1,
                         },
                     },
                 });
@@ -567,7 +559,7 @@ describe('application portals', () => {
         expect(within(warehouseDialog).queryByRole('textbox', { name: 'Township' })).not.toBeInTheDocument();
     });
 
-    it('loads Region and Way management on a separate warehouse settings page', async () => {
+    it('loads Region management on a separate warehouse settings page', async () => {
         vi.spyOn(axios, 'get').mockResolvedValue({
             data: {
                 data: {
@@ -588,16 +580,6 @@ describe('application portals', () => {
                             name: 'Yangon East',
                             notes: null,
                             is_active: true,
-                            ways: [
-                                {
-                                    id: 20,
-                                    region_id: 10,
-                                    code: 'WAY-000020',
-                                    name: 'Tamwe Route',
-                                    notes: null,
-                                    is_active: true,
-                                },
-                            ],
                         },
                         {
                             id: 11,
@@ -605,16 +587,6 @@ describe('application portals', () => {
                             name: 'Yangon North',
                             notes: null,
                             is_active: true,
-                            ways: [
-                                {
-                                    id: 21,
-                                    region_id: 11,
-                                    code: 'WAY-000021',
-                                    name: 'North Route',
-                                    notes: null,
-                                    is_active: true,
-                                },
-                            ],
                         },
                     ],
                 },
@@ -628,19 +600,13 @@ describe('application portals', () => {
         );
 
         expect(await screen.findByRole('heading', { name: 'Yangon Main Warehouse' })).toBeInTheDocument();
-        expect(screen.getByRole('heading', { name: 'Region and Way management' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Region management' })).toBeInTheDocument();
         expect(screen.getByDisplayValue('Yangon East')).toBeInTheDocument();
-        expect(screen.getByDisplayValue('Tamwe Route')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Deactivate Region Yangon East' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Deactivate Way Tamwe Route' })).toBeInTheDocument();
         fireEvent.change(screen.getByDisplayValue('Yangon East'), { target: { value: 'Yangon East Updated' } });
         expect(screen.getByRole('button', { name: 'Save Region name' })).toBeInTheDocument();
         fireEvent.change(screen.getByDisplayValue('Yangon East Updated'), { target: { value: 'Yangon East' } });
-        fireEvent.change(screen.getByDisplayValue('Tamwe Route'), { target: { value: 'Tamwe Route Updated' } });
-        expect(screen.getByRole('button', { name: 'Save WAY-000020 name' })).toBeInTheDocument();
-        fireEvent.change(screen.getByDisplayValue('Tamwe Route Updated'), { target: { value: 'Tamwe Route' } });
         expect(screen.queryByLabelText('New Region')).not.toBeInTheDocument();
-        expect(screen.queryByLabelText('New Way name')).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Add Region' }));
         const regionDialog = screen.getByRole('dialog', { name: 'Create Region' });
         expect(regionDialog).toBeInTheDocument();
@@ -652,13 +618,7 @@ describe('application portals', () => {
         expect(regionNameInput).toHaveValue('Mingalar Taung Nyunt');
         expect(regionNameInput).toHaveFocus();
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Add Way' }));
-        expect(screen.getByRole('dialog', { name: 'Create Way' })).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-        fireEvent.click(screen.getByRole('button', { name: /Yangon North/ }));
         expect(screen.getByDisplayValue('Yangon North')).toBeInTheDocument();
-        expect(screen.getByDisplayValue('North Route')).toBeInTheDocument();
-        expect(screen.queryByDisplayValue('Tamwe Route')).not.toBeInTheDocument();
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
@@ -1321,7 +1281,7 @@ describe('application portals', () => {
         await waitFor(() => expect(post).toHaveBeenCalledWith('api/sales/customers', expect.any(Object)));
         expect(await screen.findByText('New Route Shop created as a cash-only customer.')).toBeInTheDocument();
         expect(customerSearch).toHaveValue('CUS-000001 · New Route Shop');
-        expect(screen.getByRole('radio', { name: 'Cash' })).toBeChecked();
+        expect(screen.getByRole('radio', { name: 'Paid now' })).toBeChecked();
         expect(screen.getByRole('radio', { name: 'Credit' })).toBeDisabled();
 
         fireEvent.change(customerSearch, { target: { value: 'ABC' } });
@@ -1417,18 +1377,13 @@ describe('application portals', () => {
                                 name: 'Route Shop',
                                 notes: null,
                                 phone: '09-111222333',
-                                region: 'Yangon',
+                                region_id: 1,
                                 township: 'Hlaing',
-                                way: {
-                                    code: 'WAY-01',
+                                region: {
                                     id: 1,
-                                    name: 'Route 1',
-                                    region: {
-                                        id: 1,
-                                        name: 'Yangon North',
-                                        warehouse: { code: 'YGN', id: 1, name: 'Yangon Warehouse' },
-                                        warehouse_id: 1,
-                                    },
+                                    name: 'Yangon North',
+                                    warehouse: { code: 'YGN', id: 1, name: 'Yangon Warehouse' },
+                                    warehouse_id: 1,
                                 },
                             },
                         ],
@@ -1542,7 +1497,7 @@ describe('application portals', () => {
             </MemoryRouter>,
         );
 
-        expect(await screen.findByRole('heading', { name: 'Sales history' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Sales' })).toBeInTheDocument();
         const trigger = await screen.findByRole('button', { name: 'Actions for SAL-000003' });
         expect(trigger).toHaveAttribute('aria-expanded', 'false');
         expect(screen.queryByRole('menu', { name: 'Actions for SAL-000003' })).not.toBeInTheDocument();
@@ -1558,7 +1513,7 @@ describe('application portals', () => {
         expect(trigger).toHaveAttribute('aria-expanded', 'false');
         expect(trigger).toHaveFocus();
 
-        fireEvent.click(within(screen.getByRole('navigation', { name: 'Sales history pagination' })).getByText('Next'));
+        fireEvent.click(within(screen.getByRole('navigation', { name: 'Sales pagination' })).getByText('Next'));
         await waitFor(() => expect(get).toHaveBeenCalledWith('api/sales/sales', { params: { page: 2, per_page: 10 } }));
 
         const refreshedTrigger = await screen.findByRole('button', { name: 'Actions for SAL-000003' });
@@ -1617,7 +1572,7 @@ describe('application portals', () => {
         );
 
         expect(await screen.findByRole('heading', { name: 'SAL-000003' })).toBeInTheDocument();
-        expect(within(screen.getByRole('main')).getByRole('link', { name: 'Sales history' })).toHaveAttribute(
+        expect(within(screen.getByRole('main')).getByRole('link', { name: 'Sales' })).toHaveAttribute(
             'href',
             '/sales/sales-history',
         );
@@ -1754,7 +1709,6 @@ describe('application portals', () => {
                         regions: [{ id: 11, name: 'Yangon West', warehouse_id: 1 }],
                         types: ['Shop'],
                         warehouses: [{ code: 'YGN', id: 1, name: 'Yangon Warehouse' }],
-                        ways: [{ code: 'WAY-000001', id: 21, name: 'Hlaing', region_id: 11 }],
                     },
                 });
             return Promise.resolve({
@@ -1772,7 +1726,8 @@ describe('application portals', () => {
                             name: 'ABC Shop',
                             notes: null,
                             phone: '09-123456789',
-                            region: 'Yangon',
+                            region_id: 11,
+                            region: { id: 11, name: 'Yangon West', warehouse_id: 1 },
                             township: 'Hlaing',
                             updated_at: '2026-08-17T00:00:00Z',
                             warehouse: {
@@ -1806,7 +1761,6 @@ describe('application portals', () => {
         fireEvent.change(screen.getByLabelText('Search customers'), { target: { value: 'ABC' } });
         fireEvent.change(screen.getByLabelText('Filter by warehouse'), { target: { value: '1' } });
         fireEvent.change(screen.getByLabelText('Filter by region'), { target: { value: '11' } });
-        fireEvent.change(screen.getByLabelText('Filter by way'), { target: { value: '21' } });
         fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
         await waitFor(() =>
             expect(get).toHaveBeenCalledWith('api/admin/customers', {
@@ -1816,7 +1770,6 @@ describe('application portals', () => {
                     region_id: '11',
                     search: 'ABC',
                     warehouse_id: '1',
-                    way_id: '21',
                 },
             }),
         );
@@ -1899,11 +1852,11 @@ describe('application portals', () => {
             name: 'Representative navigation',
         });
         expect(desktopNavigation).toHaveClass('sales-desktop-nav');
-        expect(within(desktopNavigation).getByRole('link', { name: 'Sales history' })).toHaveAttribute(
+        expect(within(desktopNavigation).getByRole('link', { name: 'Sales' })).toHaveAttribute(
             'href',
             '/sales/sales-history',
         );
-        expect(within(mobileNavigation).queryByRole('link', { name: 'Sales history' })).not.toBeInTheDocument();
+        expect(within(mobileNavigation).getByRole('link', { name: 'Sales' })).toHaveAttribute('href', '/sales/sales-history');
         expect(screen.getByRole('link', { name: 'StockFlow home' })).toHaveAttribute('href', '/sales/dashboard');
     });
 
@@ -2048,6 +2001,24 @@ describe('application portals', () => {
 
     it('loads the representative cash workspace and opens submission entry', async () => {
         const get = vi.spyOn(axios, 'get').mockImplementation((url) => {
+            if (url === 'api/sales/current-trip')
+                return Promise.resolve({
+                    data: {
+                        data: {
+                            id: 7,
+                            reference: 'TRP-000007',
+                            title: 'Downtown route',
+                            status: 'operation',
+                            opening_cash_balance: 0,
+                            warehouse: { id: 1, code: 'YGN-MAIN', name: 'Yangon Main' },
+                            financial_summary: {
+                                cash_sales: 1400,
+                                cash_submitted_confirmed: 0,
+                                cash_submitted_pending: 1000,
+                            },
+                        },
+                    },
+                });
             if (url === 'api/sales/cash-hold')
                 return Promise.resolve({
                     data: {
@@ -2138,14 +2109,15 @@ describe('application portals', () => {
             within(screen.getByRole('navigation', { name: 'Cash submissions pagination' })).getByText('Next'),
         );
         await waitFor(() =>
-            expect(get).toHaveBeenCalledWith('api/sales/cash-submissions', { params: { page: 2, per_page: 10 } }),
+            expect(get).toHaveBeenCalledWith('api/sales/cash-submissions', { params: { page: 2, per_page: 10, trip_id: 7 } }),
         );
+        fireEvent.click(screen.getByRole('tab', { name: /Cash ledger/ }));
         fireEvent.click(within(screen.getByRole('navigation', { name: 'Cash activity pagination' })).getByText('Next'));
         await waitFor(() =>
             expect(get).toHaveBeenCalledWith('api/sales/cash-transactions', { params: { page: 2, per_page: 10 } }),
         );
-        fireEvent.click(screen.getByRole('button', { name: 'Submit cash' }));
-        expect(screen.getByRole('dialog', { name: 'Submit cash' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Return cash' }));
+        expect(screen.getByRole('dialog', { name: 'Return trip cash' })).toBeInTheDocument();
     });
 
     it('loads the office finance workspace and opens payment entry', async () => {
@@ -2325,17 +2297,13 @@ describe('application portals', () => {
         ).toBeInTheDocument();
     });
 
-    it('loads the multi-report workspace with posted-only sales totals', async () => {
+    it('loads the sales analysis workspace with posted-only totals', async () => {
         vi.spyOn(axios, 'get').mockImplementation((url) => {
             if (url === 'api/admin/report-options')
                 return Promise.resolve({
                     data: {
-                        products: [{ id: 9, name: 'Water 1L', sku: 'DW-1L', unit: 'bottle' }],
-                        regions: [{ id: 3, name: 'North', warehouse_id: 1 }],
-                        reports: ['sales', 'way-sales-power', 'stock-issues'],
-                        representatives: [{ code: 'REP-01', id: 5, name: 'Ko Aung' }],
+                        reports: ['sales', 'representatives', 'customers'],
                         warehouses: [{ code: 'YGN-MAIN', id: 1, name: 'Yangon Main' }],
-                        ways: [{ code: 'WAY-01', id: 4, name: 'North Route', region_id: 3 }],
                     },
                 });
             if (url === 'api/admin/reports/sales')
@@ -2366,61 +2334,6 @@ describe('application portals', () => {
                         },
                     },
                 });
-            if (url === 'api/admin/reports/way-sales-power')
-                return Promise.resolve({
-                    data: {
-                        data: [
-                            {
-                                customers: 3,
-                                foc_base_units: 2,
-                                invoices: 4,
-                                paid_base_units: 12,
-                                region: { name: 'North' },
-                                representative: { code: 'REP-01', name: 'Ko Aung' },
-                                sales_amount: 1200,
-                                way: { code: 'WAY-01', name: 'North Route' },
-                            },
-                        ],
-                        meta: { current_page: 1, from: 1, last_page: 1, per_page: 25, to: 1, total: 1 },
-                        report: 'way-sales-power',
-                        rules: { financial_totals: 'posted_only' },
-                        summary: {
-                            customers: 3,
-                            foc_base_units: 2,
-                            gross_sales: 1200,
-                            invoices: 4,
-                            paid_base_units: 12,
-                        },
-                    },
-                });
-            if (url === 'api/admin/reports/stock-issues')
-                return Promise.resolve({
-                    data: {
-                        data: [
-                            {
-                                foc_base_units: 6,
-                                issues: 2,
-                                paid_base_units: 132,
-                                product: { id: 9, name: 'Water 1L', sku: 'DW-1L', unit: 'bottle' },
-                                representatives: 1,
-                                total_issued_units: 138,
-                            },
-                        ],
-                        meta: { current_page: 1, from: 1, last_page: 1, per_page: 25, to: 1, total: 1 },
-                        report: 'stock-issues',
-                        rules: {
-                            coverage_filters: 'representative_region_assignment',
-                            date: 'dispatched_at',
-                        },
-                        summary: {
-                            foc_base_units: 6,
-                            issues: 2,
-                            products: 1,
-                            representatives: 1,
-                            total_issued_units: 138,
-                        },
-                    },
-                });
             return Promise.reject(new Error(`Unexpected URL: ${url}`));
         });
         render(
@@ -2428,7 +2341,7 @@ describe('application portals', () => {
                 <Root initialUser={baseUser} />
             </MemoryRouter>,
         );
-        expect(await screen.findByRole('heading', { name: 'Reports' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { level: 1, name: 'Sales analysis' })).toBeInTheDocument();
         expect(await screen.findByRole('img', { name: 'Current month sales by day' })).toBeInTheDocument();
         expect(screen.getByRole('img', { name: 'Current year sales by month' })).toBeInTheDocument();
         expect(screen.getByRole('img', { name: 'Top-selling products by units sold' })).toBeInTheDocument();
@@ -2442,42 +2355,17 @@ describe('application portals', () => {
         expect(screen.queryByRole('table')).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Warehouse stock' })).not.toBeInTheDocument();
         expect(screen.getByRole('tablist', { name: 'Report sections' })).toBeInTheDocument();
-        expect(screen.getByRole('tab', { name: 'Sales analysis' })).toHaveAttribute('aria-selected', 'true');
-        expect(screen.getByRole('tab', { name: 'Way sales power' })).toHaveAttribute('aria-selected', 'false');
-        expect(screen.getByRole('tab', { name: 'Stock issues' })).toHaveAttribute('aria-selected', 'false');
+        expect(screen.getByRole('tab', { name: 'Representative analysis' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'Customer analysis' })).toBeInTheDocument();
         expect(screen.queryByRole('combobox', { name: 'Report' })).not.toBeInTheDocument();
         const applyButton = screen.getByRole('button', { name: 'Apply' });
         expect(applyButton.closest('.report-filter-action')).not.toBeNull();
         expect(applyButton.closest('.report-filter-scroll')).toBeNull();
-
-        fireEvent.click(screen.getByRole('tab', { name: 'Way sales power' }));
-        expect(await screen.findByText('North Route')).toBeInTheDocument();
-        expect(screen.getByRole('tab', { name: 'Way sales power' })).toHaveAttribute('aria-selected', 'true');
         expect(screen.getByRole('combobox', { name: 'Warehouse' })).toBeInTheDocument();
-        expect(screen.getByRole('combobox', { name: 'Region' })).toBeInTheDocument();
-        expect(screen.getByRole('combobox', { name: 'Way' })).toBeInTheDocument();
-        expect(screen.queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument();
+        expect(screen.getByRole('combobox', { name: 'Status' })).toBeInTheDocument();
         expect(screen.getByLabelText('Date from')).toBeInTheDocument();
         expect(screen.getByLabelText('Date to')).toBeInTheDocument();
-        expect(screen.queryByRole('combobox', { name: 'Representative' })).not.toBeInTheDocument();
-        expect(screen.queryByRole('combobox', { name: 'Product' })).not.toBeInTheDocument();
-        expect(screen.queryByRole('searchbox', { name: 'Search report' })).not.toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Export CSV' })).toBeEnabled();
-
-        fireEvent.click(screen.getByRole('tab', { name: 'Stock issues' }));
-        expect(await screen.findByText('DW-1L')).toBeInTheDocument();
-        expect(screen.getByRole('tab', { name: 'Stock issues' })).toHaveAttribute('aria-selected', 'true');
-        expect(screen.getByRole('combobox', { name: 'Warehouse' })).toBeInTheDocument();
-        expect(screen.getByRole('combobox', { name: 'Region' })).toBeInTheDocument();
-        expect(screen.getByRole('combobox', { name: 'Way' })).toBeInTheDocument();
-        expect(screen.getByLabelText('Date from')).toBeInTheDocument();
-        expect(screen.getByLabelText('Date to')).toBeInTheDocument();
-        expect(screen.queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument();
-        expect(screen.queryByRole('searchbox', { name: 'Search report' })).not.toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Export CSV' })).toBeEnabled();
-        expect(screen.getByRole('columnheader', { name: 'Total issued' })).toBeInTheDocument();
-        expect(screen.getByRole('columnheader', { name: 'Issue count' })).toBeInTheDocument();
-        expect(screen.getByText('138', { selector: '.metric-card strong' })).toBeInTheDocument();
+        expect(screen.getByRole('searchbox', { name: 'Search report' })).toBeInTheDocument();
     });
 
     it('filters the main admin sale register by duration', async () => {
@@ -2657,9 +2545,9 @@ describe('application portals', () => {
         expect(screen.getByText('8,100')).toBeInTheDocument();
     });
 
-    it('loads the representative own-sales report and filters', async () => {
+    it('loads the unified representative sales history and reporting filters', async () => {
         vi.spyOn(axios, 'get').mockImplementation((url) =>
-            url === 'api/sales/report-options'
+            url === 'api/sales/sale-history-options'
                 ? Promise.resolve({
                       data: {
                           customers: [{ code: 'CUS-ABC', id: 1, name: 'ABC Shop' }],
@@ -2671,6 +2559,7 @@ describe('application portals', () => {
                                   unit: 'bottle',
                               },
                           ],
+                          trips: [{ id: 7, reference: 'TRP-000007', title: 'North route' }],
                       },
                   })
                 : Promise.resolve({
@@ -2682,7 +2571,7 @@ describe('application portals', () => {
                                       id: 1,
                                       name: 'ABC Shop',
                                   },
-                                  date: '2026-08-17T08:00:00Z',
+                                  created_at: '2026-08-17T08:00:00Z',
                                   id: 1,
                                   items: [],
                                   payment_type: 'cash',
@@ -2696,7 +2585,7 @@ describe('application portals', () => {
                               current_page: 1,
                               from: 1,
                               last_page: 1,
-                              per_page: 20,
+                              per_page: 10,
                               to: 1,
                               total: 1,
                           },
@@ -2711,13 +2600,14 @@ describe('application portals', () => {
                   }),
         );
         render(
-            <MemoryRouter initialEntries={['/sales/reports']}>
+            <MemoryRouter initialEntries={['/sales/sales-history']}>
                 <Root initialUser={representativeUser} />
             </MemoryRouter>,
         );
-        expect(await screen.findByRole('heading', { name: 'Sales report' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Sales' })).toBeInTheDocument();
         expect(await screen.findByText('SAL-000001')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Apply report' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'More filters' })).toBeInTheDocument();
+        expect(screen.getAllByText('5,400 MMK').length).toBeGreaterThan(0);
     });
 
     it('redirects a guest from a protected route to its portal login', () => {

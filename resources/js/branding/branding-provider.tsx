@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { BrandingContext, type Branding } from './branding-context';
+import { useLocale } from '../localization/locale-context';
 
 const fallbackBranding: Branding = {
     business_name: 'StockFlow',
@@ -18,8 +19,8 @@ function cachedBranding() {
     }
 }
 
-function applyBranding(branding: Branding) {
-    document.title = `${branding.business_name} · Stock & Inventory Management`;
+function applyBranding(branding: Branding, titleSuffix: string) {
+    document.title = `${branding.business_name} · ${titleSuffix}`;
     document.documentElement.style.setProperty('--brand-primary', branding.primary_color);
     const favicon = document.querySelector<HTMLLinkElement>('link[rel~="icon"]');
     if (favicon) {
@@ -31,16 +32,20 @@ function applyBranding(branding: Branding) {
 }
 
 export function BrandingProvider({ children }: { children: ReactNode }) {
+    const { t } = useLocale();
     const [branding, updateBranding] = useState<Branding>(cachedBranding);
 
-    const setBranding = useCallback((next: Branding) => {
-        updateBranding(next);
-        localStorage.setItem(cacheKey, JSON.stringify(next));
-        applyBranding(next);
-    }, []);
+    const setBranding = useCallback(
+        (next: Branding) => {
+            updateBranding(next);
+            localStorage.setItem(cacheKey, JSON.stringify(next));
+            applyBranding(next, t('Stock & Inventory Management'));
+        },
+        [t],
+    );
 
     useEffect(() => {
-        applyBranding(branding);
+        applyBranding(branding, t('Stock & Inventory Management'));
         let active = true;
         void window.axios
             .get<Branding>('api/branding')
@@ -55,7 +60,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
         };
         // Branding is loaded once; settings updates call setBranding directly.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [t]);
 
     useEffect(() => {
         const syncFromStorage = (event: StorageEvent) => {
@@ -64,14 +69,14 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
                 const next = { ...fallbackBranding, ...(JSON.parse(event.newValue) as Branding) };
                 if (!next.business_name || !next.primary_color) return;
                 updateBranding(next);
-                applyBranding(next);
+                applyBranding(next, t('Stock & Inventory Management'));
             } catch {
                 // Ignore malformed external storage updates and retain the current brand.
             }
         };
         window.addEventListener('storage', syncFromStorage);
         return () => window.removeEventListener('storage', syncFromStorage);
-    }, []);
+    }, [t]);
 
     const value = useMemo(() => ({ branding, setBranding }), [branding, setBranding]);
     return <BrandingContext.Provider value={value}>{children}</BrandingContext.Provider>;

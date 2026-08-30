@@ -71,14 +71,10 @@ export type SalesDashboard = {
         dispatched_at: string | null;
     }>;
 };
-export type ReportName = 'sales' | 'way-sales-power' | 'stock-issues';
+export type ReportName = 'sales' | 'representatives' | 'customers';
 export type ReportOptions = {
     warehouses: Identity[];
     reports: ReportName[];
-    regions: Array<{ id: number; warehouse_id: number; name: string }>;
-    ways: Array<{ id: number; region_id: number; code: string; name: string }>;
-    representatives: Identity[];
-    products: ProductIdentity[];
 };
 export type ReportFilters = {
     page?: number;
@@ -88,8 +84,6 @@ export type ReportFilters = {
     product_id?: number;
     category?: string;
     region?: string;
-    region_id?: number;
-    way_id?: number;
     status?: string;
     payment_type?: string;
     movement_type?: string;
@@ -98,6 +92,7 @@ export type ReportFilters = {
     date_to?: string;
     sort?: string;
     direction?: string;
+    min_amount?: number;
 };
 export type ReportRow = Record<string, unknown>;
 export type ReportResponse = {
@@ -119,10 +114,6 @@ export type ReportResponse = {
     meta: PaginationMeta;
     summary: Record<string, number>;
     rules: Record<string, string>;
-};
-export type RepresentativeReportOptions = {
-    customers: Identity[];
-    products: ProductIdentity[];
 };
 export type AuditRow = {
     id: number;
@@ -174,8 +165,6 @@ async function request<T>(operation: () => Promise<{ data: T }>) {
         throw apiError(error);
     }
 }
-const params = (filters: ReportFilters) => ({ ...filters, per_page: 25 });
-
 export const reportingApi = {
     adminDashboard: (warehouseId?: number) =>
         request<AdminDashboard>(() =>
@@ -185,50 +174,10 @@ export const reportingApi = {
         ),
     salesDashboard: () => request<SalesDashboard>(() => window.axios.get('api/sales/dashboard')),
     options: () => request<ReportOptions>(() => window.axios.get('api/admin/report-options')),
-    report: (report: ReportName, filters: ReportFilters) =>
+    report: (report: ReportName, filters: ReportFilters, perPage = 25) =>
         request<ReportResponse>(() =>
             window.axios.get(`api/admin/reports/${report}`, {
-                params: params(filters),
-            }),
-        ),
-    exportWaySalesPower: async (filters: ReportFilters) => {
-        try {
-            const exportFilters = { ...filters };
-            delete exportFilters.page;
-            const response = await window.axios.get<Blob>('api/admin/reports/way-sales-power/export', {
-                params: exportFilters,
-                responseType: 'blob',
-            });
-            const disposition = String(response.headers['content-disposition'] ?? '');
-            const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] ?? 'way-sales-power.csv';
-
-            return { blob: response.data, filename };
-        } catch (error) {
-            throw apiError(error);
-        }
-    },
-    exportStockIssues: async (filters: ReportFilters) => {
-        try {
-            const exportFilters = { ...filters };
-            delete exportFilters.page;
-            delete exportFilters.status;
-            const response = await window.axios.get<Blob>('api/admin/reports/stock-issues/export', {
-                params: exportFilters,
-                responseType: 'blob',
-            });
-            const disposition = String(response.headers['content-disposition'] ?? '');
-            const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] ?? 'stock-issues.csv';
-
-            return { blob: response.data, filename };
-        } catch (error) {
-            throw apiError(error);
-        }
-    },
-    salesOptions: () => request<RepresentativeReportOptions>(() => window.axios.get('api/sales/report-options')),
-    ownSales: (filters: ReportFilters & { period?: string }) =>
-        request<Omit<ReportResponse, 'report'>>(() =>
-            window.axios.get('api/sales/reports/sales', {
-                params: { ...filters, per_page: 20 },
+                params: { ...filters, per_page: perPage },
             }),
         ),
     audits: (

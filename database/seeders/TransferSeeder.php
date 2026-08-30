@@ -3,10 +3,13 @@
 namespace Database\Seeders;
 
 use App\Enums\TransferStatus;
+use App\Enums\TripStatus;
 use App\Models\Product;
 use App\Models\RepresentativeTransfer;
 use App\Models\SalesRepresentative;
+use App\Models\Trip;
 use App\Models\User;
+use App\Models\Vehicle;
 use App\Models\Warehouse;
 use App\Models\WarehouseTransfer;
 use App\Services\DocumentReferenceGenerator;
@@ -62,7 +65,8 @@ class TransferSeeder extends Seeder
         }
 
         $koAung = SalesRepresentative::query()->where('code', 'SR-001')->firstOrFail();
-        $received = $this->representativeTransfer($actor, $products, $yangon, $koAung, 'Local demo received representative transfer.', [10, 4, 10]);
+        $aungTrip = $this->trip($actor, $yangon, $koAung, 'Yangon retail route');
+        $received = $this->representativeTransfer($actor, $products, $yangon, $koAung, $aungTrip, 'Local demo received representative transfer.', [10, 4, 10]);
         if ($received->status === TransferStatus::Draft) {
             app(RepresentativeTransferPostingService::class)->dispatch($received, $actor, 'local-demo-rtr-received-dispatch', $request);
             $received->refresh();
@@ -70,9 +74,11 @@ class TransferSeeder extends Seeder
         if ($received->status === TransferStatus::Dispatched) {
             app(RepresentativeTransferPostingService::class)->receive($received, $koAung->user, 'local-demo-rtr-received-confirm', $this->request($koAung->user));
         }
+        $aungTrip->update(['status' => TripStatus::Operation, 'started_by' => $actor->id, 'started_at' => now()]);
 
         $maSu = SalesRepresentative::query()->where('code', 'SR-002')->firstOrFail();
-        $pending = $this->representativeTransfer($actor, $products, $mandalay, $maSu, 'Local demo pending representative transfer.', [2, 1, 2]);
+        $suTrip = $this->trip($actor, $mandalay, $maSu, 'Mandalay wholesale route');
+        $pending = $this->representativeTransfer($actor, $products, $mandalay, $maSu, $suTrip, 'Local demo pending representative transfer.', [2, 1, 2]);
         if ($pending->status === TransferStatus::Draft) {
             app(RepresentativeTransferPostingService::class)->dispatch($pending, $actor, 'local-demo-rtr-pending-dispatch', $request);
         }
@@ -81,15 +87,16 @@ class TransferSeeder extends Seeder
     /** @param Collection<int, Product> $products
      * @param  list<int>  $quantities
      */
-    private function representativeTransfer(User $actor, $products, Warehouse $warehouse, SalesRepresentative $representative, string $notes, array $quantities): RepresentativeTransfer
+    private function representativeTransfer(User $actor, $products, Warehouse $warehouse, SalesRepresentative $representative, Trip $trip, string $notes, array $quantities): RepresentativeTransfer
     {
-        return DB::transaction(function () use ($actor, $products, $warehouse, $representative, $notes, $quantities): RepresentativeTransfer {
+        return DB::transaction(function () use ($actor, $products, $warehouse, $representative, $trip, $notes, $quantities): RepresentativeTransfer {
             $existing = RepresentativeTransfer::query()->where('notes', $notes)->first();
             if ($existing) {
                 return $existing;
             }
             $transfer = RepresentativeTransfer::query()->create([
                 'reference' => app(DocumentReferenceGenerator::class)->next('representative_transfer', 'RTR'),
+                'trip_id' => $trip->id,
                 'source_warehouse_id' => $warehouse->id,
                 'sales_representative_id' => $representative->id,
                 'status' => TransferStatus::Draft,
@@ -103,6 +110,22 @@ class TransferSeeder extends Seeder
 
             return $transfer;
         });
+    }
+
+    private function trip(User $actor, Warehouse $warehouse, SalesRepresentative $representative, string $title): Trip
+    {
+        $region = $representative->regions()->where('warehouse_id', $warehouse->id)->firstOrFail();
+        $vehicle = $representative->vehicle()->first()
+            ?? Vehicle::query()->whereNull('sales_representative_id')->where('is_active', true)->firstOrFail();
+        if (! $vehicle->sales_representative_id) {
+            $vehicle->update(['sales_representative_id' => $representative->id]);
+        }
+
+        return Trip::query()->firstOrCreate(['title' => $title, 'sales_representative_id' => $representative->id], [
+            'reference' => app(DocumentReferenceGenerator::class)->next('trip', 'TRP'),
+            'warehouse_id' => $warehouse->id, 'region_id' => $region->id, 'vehicle_id' => $vehicle->id,
+            'status' => TripStatus::Planning, 'created_by' => $actor->id,
+        ]);
     }
 
     private function request(User $actor): Request

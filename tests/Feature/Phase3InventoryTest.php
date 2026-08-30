@@ -31,7 +31,8 @@ class Phase3InventoryTest extends TestCase
     {
         $admin = $this->superAdmin();
         [$yangon, $mandalay] = Warehouse::factory()->count(2)->create();
-        [$water, $juice] = Product::factory()->count(2)->create();
+        $water = Product::factory()->create(['unit' => 'bottle']);
+        $juice = Product::factory()->create(['unit' => 'piece']);
         $water->defaultSellingUnit()->update(['is_default_selling' => false]);
         $water->units()->create([
             'name' => 'box',

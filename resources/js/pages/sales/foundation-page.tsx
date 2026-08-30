@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useSession } from '../../auth/session-context';
 import { Icon } from '../../ui/icons';
 import { StatusBadge } from '../../ui/primitives';
+import { useLocale } from '../../localization/locale-context';
 
 const stock = [
     { name: 'Premium Drinking Water 1L', sku: 'WTR-001', quantity: 70 },
@@ -11,33 +12,34 @@ const stock = [
 
 export function SalesFoundationPage() {
     const { user } = useSession();
+    const { formatNumber, t } = useLocale();
 
     return (
         <div className="sales-dashboard">
             <header className="sales-page-heading">
                 <div>
-                    <p>Monday, 17 August</p>
-                    <h1>Good morning, {user?.name ?? 'Representative'}</h1>
+                    <p>{t('Monday, 17 August')}</p>
+                    <h1>{t('Good morning, {name}', { name: user?.name ?? t('Representative') })}</h1>
                 </div>
-                <StatusBadge tone="success">Route active</StatusBadge>
+                <StatusBadge tone="success">{t('Route active')}</StatusBadge>
             </header>
 
-            <section className="sales-summary-grid" aria-label="Today's summary">
+            <section className="sales-summary-grid" aria-label={t("Today's summary")}>
                 <article className="sales-summary-card is-primary">
                     <span>
                         <Icon name="cash" size={18} />
                     </span>
-                    <small>Cash hold</small>
-                    <strong>1,700,000</strong>
-                    <p>MMK currently held</p>
+                    <small>{t('Cash hold')}</small>
+                    <strong>{formatNumber(1700000)}</strong>
+                    <p>{t('MMK currently held')}</p>
                 </article>
                 <article className="sales-summary-card">
                     <span>
                         <Icon name="sales" size={18} />
                     </span>
-                    <small>Today's sales</small>
-                    <strong>1,250,000</strong>
-                    <p>850K cash · 400K credit</p>
+                    <small>{t("Today's sales")}</small>
+                    <strong>{formatNumber(1250000)}</strong>
+                    <p>{t('850K cash · 400K credit')}</p>
                 </article>
             </section>
 
@@ -46,8 +48,8 @@ export function SalesFoundationPage() {
                     <Icon name="plus" size={21} />
                 </span>
                 <div>
-                    <strong>Create new sale</strong>
-                    <small>Cash or customer credit</small>
+                    <strong>{t('Create new sale')}</strong>
+                    <small>{t('Cash or customer credit')}</small>
                 </div>
                 <Icon name="chevronRight" />
             </Link>
@@ -55,10 +57,10 @@ export function SalesFoundationPage() {
             <section className="sales-section">
                 <header>
                     <div>
-                        <p className="ui-eyebrow">Inventory</p>
-                        <h2>My stock</h2>
+                        <p className="ui-eyebrow">{t('Inventory')}</p>
+                        <h2>{t('My stock')}</h2>
                     </div>
-                    <Link to="/sales/my-stock">View all</Link>
+                    <Link to="/sales/my-stock">{t('View all')}</Link>
                 </header>
                 <div className="sales-stock-list">
                     {stock.map((item) => (
@@ -67,12 +69,12 @@ export function SalesFoundationPage() {
                                 <Icon name="box" size={17} />
                             </span>
                             <div>
-                                <strong>{item.name}</strong>
+                                <strong>{t(item.name)}</strong>
                                 <small>{item.sku}</small>
                             </div>
                             <span className="sales-stock-list__quantity">
-                                <strong>{item.quantity}</strong>
-                                <small>units</small>
+                                <strong>{formatNumber(item.quantity)}</strong>
+                                <small>{t('units')}</small>
                             </span>
                         </article>
                     ))}
@@ -82,10 +84,10 @@ export function SalesFoundationPage() {
             <section className="sales-section sales-pending">
                 <header>
                     <div>
-                        <p className="ui-eyebrow">Receiving</p>
-                        <h2>Pending stock</h2>
+                        <p className="ui-eyebrow">{t('Receiving')}</p>
+                        <h2>{t('Pending stock')}</h2>
                     </div>
-                    <StatusBadge tone="warning">2 pending</StatusBadge>
+                    <StatusBadge tone="warning">{t('2 pending')}</StatusBadge>
                 </header>
                 <article>
                     <span className="sales-stock-list__icon">
@@ -93,14 +95,15 @@ export function SalesFoundationPage() {
                     </span>
                     <div>
                         <strong>RTR-000241</strong>
-                        <small>Yangon Main · 3 products</small>
+                        <small>{t('Yangon Main · 3 products')}</small>
                     </div>
                     <Icon name="chevronRight" />
                 </article>
             </section>
 
             <p className="foundation-note">
-                <strong>UI foundation preview.</strong> Sample values only; transactional actions remain disconnected.
+                <strong>{t('UI foundation preview.')}</strong>{' '}
+                {t('Sample values only; transactional actions remain disconnected.')}
             </p>
         </div>
     );

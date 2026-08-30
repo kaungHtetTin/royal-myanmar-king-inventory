@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\TripStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\WarehouseResource;
 use App\Models\Warehouse;
@@ -32,7 +33,7 @@ class WarehouseController extends Controller
         ]);
 
         $query = $this->warehouseAccess->scope(Warehouse::query(), $request->user())
-            ->with(['regions' => fn ($query) => $query->with('ways')->orderBy('name')])
+            ->with(['regions' => fn ($query) => $query->orderBy('name')])
             ->withCount('users')
             ->when($data['search'] ?? null, function ($query, string $search): void {
                 $query->where(fn ($builder) => $builder
@@ -63,7 +64,7 @@ class WarehouseController extends Controller
         $warehouse = Warehouse::query()->create($this->normalized($data));
         $this->auditLogger->record($request, 'warehouse.created', $request->user(), $warehouse, ['new' => $warehouse->toArray()]);
 
-        return (new WarehouseResource($warehouse->load(['regions.ways'])->loadCount('users')))
+        return (new WarehouseResource($warehouse->load(['regions'])->loadCount('users')))
             ->response()->setStatusCode(201);
     }
 
@@ -72,7 +73,21 @@ class WarehouseController extends Controller
         Gate::authorize('view', $warehouse);
 
         return new WarehouseResource(
-            $warehouse->load(['regions' => fn ($query) => $query->with('ways')->orderBy('name')])->loadCount('users')
+            $warehouse->load(['regions' => fn ($query) => $query
+                ->withCount([
+                    'representatives',
+                    'representatives as active_representatives_count' => fn ($representatives) => $representatives->where('is_active', true),
+                    'customers',
+                    'customers as active_customers_count' => fn ($customers) => $customers->where('is_active', true),
+                    'trips as active_trips_count' => fn ($trips) => $trips->whereIn('status', [TripStatus::Planning, TripStatus::Operation, TripStatus::Ending]),
+                ])
+                ->orderBy('name')])
+                ->loadCount([
+                    'users',
+                    'salesRepresentatives',
+                    'customers',
+                    'trips as active_trips_count' => fn ($trips) => $trips->whereIn('status', [TripStatus::Planning, TripStatus::Operation, TripStatus::Ending]),
+                ])
         );
     }
 
@@ -88,7 +103,7 @@ class WarehouseController extends Controller
             'new' => $warehouse->only(array_keys($old)),
         ]);
 
-        return new WarehouseResource($warehouse->load(['regions.ways'])->loadCount('users'));
+        return new WarehouseResource($warehouse->load(['regions'])->loadCount('users'));
     }
 
     /** @return array<string, mixed> */

@@ -8,6 +8,7 @@ import { PrintSettingsDialog } from '../ui/invoice-print-dialog';
 import { IconButton } from '../ui/primitives';
 import { OfflineBanner } from '../ui/offline-banner';
 import { useOnlineStatus, useUiPreferences } from '../ui/preferences';
+import { useLocale } from '../localization/locale-context';
 
 type NavItem = {
     alert?: keyof NavAlertCounts;
@@ -60,6 +61,12 @@ const navigation: NavGroup[] = [
                 label: 'Transfers',
                 permission: 'warehouse_transfer.view|representative_stock.view',
                 to: '/admin/transfers',
+            },
+            {
+                icon: 'truck',
+                label: 'Trips',
+                permission: 'trip.view',
+                to: '/admin/trips',
             },
             {
                 icon: 'sales',
@@ -165,15 +172,19 @@ export function AdminShell({ children }: AdminShellProps) {
     const [profileMenuOpen, setProfileMenuOpen] = useState(false);
     const [printSettingsOpen, setPrintSettingsOpen] = useState(false);
     const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('inventory.sidebar') === 'collapsed');
-    const { density, theme, toggleDensity, toggleTheme } = useUiPreferences();
+    const { density, fontScale, theme, toggleDensity, toggleTheme } = useUiPreferences();
     const online = useOnlineStatus();
     const { logout, user } = useSession();
     const { branding } = useBranding();
-    const pageTitle = location.pathname.startsWith('/admin/representatives/')
+    const { locale, setLocale, t } = useLocale();
+    const pageTitleKey = location.pathname.startsWith('/admin/representatives/')
         ? 'Representative details'
         : location.pathname.startsWith('/admin/warehouses/')
           ? 'Warehouse settings'
+          : location.pathname.startsWith('/admin/trips/')
+            ? 'Trip details'
           : (routeTitles[location.pathname] ?? 'Dashboard');
+    const pageTitle = t(pageTitleKey);
 
     useEffect(() => {
         window.localStorage.setItem('inventory.sidebar', collapsed ? 'collapsed' : 'expanded');
@@ -237,22 +248,23 @@ export function AdminShell({ children }: AdminShellProps) {
             .join('')
             .slice(0, 2)
             .toUpperCase() ?? 'U';
-    const roleLabel = user?.roles[0]?.replaceAll('-', ' ') ?? 'Authenticated';
+    const roleLabel = user?.roles[0]?.replaceAll('-', ' ') ?? t('Authenticated');
 
     return (
         <div
             className="admin-root"
             data-density={density}
+            data-font-scale={fontScale}
             data-sidebar={collapsed ? 'collapsed' : 'expanded'}
             data-theme={theme}
-            style={{ '--color-primary': branding.primary_color } as CSSProperties}
+            style={{ '--app-font-scale': fontScale, '--color-primary': branding.primary_color } as CSSProperties}
         >
             <a className="skip-link" href="#admin-content">
-                Skip to content
+                {t('Skip to content')}
             </a>
 
             <button
-                aria-label="Close navigation"
+                aria-label={t('Close navigation')}
                 aria-hidden="true"
                 className={`admin-nav-overlay ${mobileNavOpen ? 'is-visible' : ''}`}
                 onClick={() => setMobileNavOpen(false)}
@@ -262,7 +274,7 @@ export function AdminShell({ children }: AdminShellProps) {
 
             <aside
                 className={`admin-sidebar ${mobileNavOpen ? 'is-open' : ''}`}
-                aria-label="Admin sidebar"
+                aria-label={t('Admin sidebar')}
                 id="admin-sidebar"
             >
                 <div className="admin-brand">
@@ -271,20 +283,20 @@ export function AdminShell({ children }: AdminShellProps) {
                     </span>
                     <span className="admin-brand__copy">
                         <strong>{branding.business_name}</strong>
-                        <small>Operations console</small>
+                        <small>{t('Operations console')}</small>
                     </span>
                     <IconButton
                         className="admin-sidebar__mobile-close"
                         icon="x"
-                        label="Close navigation"
+                        label={t('Close navigation')}
                         onClick={() => setMobileNavOpen(false)}
                     />
                 </div>
 
-                <nav className="admin-navigation" aria-label="Admin navigation">
+                <nav className="admin-navigation" aria-label={t('Admin navigation')}>
                     {navigation.map((group) => (
                         <div className="admin-nav-group" key={group.label}>
-                            <p>{group.label}</p>
+                            <p>{t(group.label)}</p>
                             {group.items
                                 .filter((item) => canAccess(item.permission, user))
                                 .map((item) => {
@@ -292,8 +304,13 @@ export function AdminShell({ children }: AdminShellProps) {
                                         location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
                                     const alertCount = item.alert ? navAlerts[item.alert] : 0;
                                     const alertLabel = alertCount
-                                        ? `${item.label}, ${alertCount} ${alertCount === 1 ? 'action needs' : 'actions need'} attention`
-                                        : item.label;
+                                        ? t(
+                                              alertCount === 1
+                                                  ? '{label}, {count} action needs attention'
+                                                  : '{label}, {count} actions need attention',
+                                              { label: t(item.label), count: alertCount },
+                                          )
+                                        : t(item.label);
 
                                     return (
                                         <Link
@@ -302,11 +319,11 @@ export function AdminShell({ children }: AdminShellProps) {
                                             className={`admin-nav-item ${active ? 'is-active' : ''}`}
                                             key={item.to}
                                             onClick={() => setMobileNavOpen(false)}
-                                            title={collapsed ? item.label : undefined}
+                                            title={collapsed ? t(item.label) : undefined}
                                             to={item.to}
                                         >
                                             <Icon name={item.icon} size={17} />
-                                            <span className="admin-nav-item__label">{item.label}</span>
+                                            <span className="admin-nav-item__label">{t(item.label)}</span>
                                             {alertCount > 0 ? (
                                                 <>
                                                     <span aria-hidden="true" className="admin-nav-alert">
@@ -323,15 +340,15 @@ export function AdminShell({ children }: AdminShellProps) {
 
                 <div className="admin-sidebar__footer">
                     <button
-                        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                        aria-label={t(collapsed ? 'Expand sidebar' : 'Collapse sidebar')}
                         className="admin-nav-item admin-collapse-control"
                         onClick={() => setCollapsed((value) => !value)}
-                        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                        title={t(collapsed ? 'Expand sidebar' : 'Collapse sidebar')}
                         type="button"
                     >
                         <Icon name={collapsed ? 'chevronRight' : 'chevronLeft'} size={17} />
                         <span className="admin-nav-item__label">
-                            {collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                            {t(collapsed ? 'Expand sidebar' : 'Collapse sidebar')}
                         </span>
                     </button>
                 </div>
@@ -345,11 +362,11 @@ export function AdminShell({ children }: AdminShellProps) {
                             aria-expanded={mobileNavOpen}
                             className="admin-mobile-menu"
                             icon="menu"
-                            label="Open navigation"
+                            label={t('Open navigation')}
                             onClick={() => setMobileNavOpen(true)}
                         />
                         <div className="admin-breadcrumb">
-                            <span>Admin</span>
+                            <span>{t('Admin')}</span>
                             <Icon name="chevronRight" size={13} />
                             <strong>{pageTitle}</strong>
                         </div>
@@ -359,7 +376,7 @@ export function AdminShell({ children }: AdminShellProps) {
                         <div className="admin-topbar__utilities">
                             <span className={`connection-state ${online ? 'is-online' : 'is-offline'}`}>
                                 <span aria-hidden="true" />
-                                {online ? 'Online' : 'Offline'}
+                                {t(online ? 'Online' : 'Offline')}
                             </span>
                         </div>
                         <div className="admin-profile-menu" ref={profileMenuRef}>
@@ -367,21 +384,21 @@ export function AdminShell({ children }: AdminShellProps) {
                                 aria-controls="admin-profile-dropdown"
                                 aria-expanded={profileMenuOpen}
                                 aria-haspopup="menu"
-                                aria-label="Profile menu"
+                                aria-label={t('Profile menu')}
                                 className="admin-profile"
                                 onClick={() => setProfileMenuOpen((value) => !value)}
                                 type="button"
                             >
                                 <span className="admin-profile__avatar">{initials}</span>
                                 <span className="admin-profile__copy">
-                                    <strong>{user?.name ?? 'User'}</strong>
+                                    <strong>{user?.name ?? t('User')}</strong>
                                     <small>{roleLabel}</small>
                                 </span>
                                 <Icon name="chevronDown" size={13} />
                             </button>
                             {profileMenuOpen ? (
                                 <div
-                                    aria-label="Profile options"
+                                    aria-label={t('Profile options')}
                                     className="admin-profile-dropdown"
                                     id="admin-profile-dropdown"
                                     role="menu"
@@ -389,7 +406,7 @@ export function AdminShell({ children }: AdminShellProps) {
                                     <div className="admin-profile-dropdown__identity">
                                         <span className="admin-profile__avatar">{initials}</span>
                                         <span>
-                                            <strong>{user?.name ?? 'User'}</strong>
+                                            <strong>{user?.name ?? t('User')}</strong>
                                             <small>
                                                 @{user?.username ?? 'user'} · {roleLabel}
                                             </small>
@@ -405,7 +422,7 @@ export function AdminShell({ children }: AdminShellProps) {
                                             type="button"
                                         >
                                             <Icon name={theme === 'light' ? 'moon' : 'sun'} size={16} />
-                                            <span>Use {theme === 'light' ? 'dark' : 'light'} theme</span>
+                                            <span>{t(theme === 'light' ? 'Use dark theme' : 'Use light theme')}</span>
                                         </button>
                                         <button
                                             onClick={() => {
@@ -416,7 +433,21 @@ export function AdminShell({ children }: AdminShellProps) {
                                             type="button"
                                         >
                                             <Icon name="density" size={16} />
-                                            <span>Use {density === 'compact' ? 'comfortable' : 'compact'} density</span>
+                                            <span>
+                                                {t(
+                                                    density === 'compact'
+                                                        ? 'Use comfortable density'
+                                                        : 'Use compact density',
+                                                )}
+                                            </span>
+                                        </button>
+                                        <button
+                                            onClick={() => setLocale(locale === 'en' ? 'my' : 'en')}
+                                            role="menuitem"
+                                            type="button"
+                                        >
+                                            <Icon name="adjustments" size={16} />
+                                            <span>{locale === 'en' ? 'မြန်မာ' : 'English'}</span>
                                         </button>
                                         <button
                                             onClick={() => {
@@ -427,7 +458,7 @@ export function AdminShell({ children }: AdminShellProps) {
                                             type="button"
                                         >
                                             <Icon name="print" size={16} />
-                                            <span>Print settings</span>
+                                            <span>{t('Print settings')}</span>
                                         </button>
                                         {canAccess('role.manage', user) ? (
                                             <Link
@@ -436,7 +467,7 @@ export function AdminShell({ children }: AdminShellProps) {
                                                 to="/admin/settings"
                                             >
                                                 <Icon name="settings" size={16} />
-                                                <span>Settings</span>
+                                                <span>{t('Settings')}</span>
                                             </Link>
                                         ) : null}
                                     </div>
@@ -450,7 +481,7 @@ export function AdminShell({ children }: AdminShellProps) {
                                             type="button"
                                         >
                                             <Icon name="logout" size={16} />
-                                            <span>Sign out</span>
+                                            <span>{t('Sign out')}</span>
                                         </button>
                                     </div>
                                 </div>

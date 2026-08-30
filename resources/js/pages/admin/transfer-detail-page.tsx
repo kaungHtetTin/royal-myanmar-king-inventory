@@ -9,17 +9,12 @@ import {
 } from '../../services/transfers';
 import { Icon } from '../../ui/icons';
 import { Button, Dialog, MetricCard, Panel, StatusBadge } from '../../ui/primitives';
+import { useLocale } from '../../localization/locale-context';
 
 type TransferRecord = WarehouseTransfer | RepresentativeTransfer;
 type TransferKind = 'warehouse' | 'representative' | 'representative-return';
 
-const formatNumber = (value: number) => new Intl.NumberFormat('en-US').format(value);
-const dateTime = (value: string | null) =>
-    value
-        ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
-        : '—';
-const errorMessage = (error: unknown) =>
-    error instanceof Error ? error.message : 'Unable to load the transfer record.';
+const errorMessage = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 const tone = (status: TransferStatus) =>
     status === 'received'
         ? 'success'
@@ -32,6 +27,8 @@ const tone = (status: TransferStatus) =>
               : 'neutral';
 
 export function TransferDetailPage() {
+    const { formatDateTime, formatNumber, t } = useLocale();
+    const dateTime = (value: string | null) => (value ? formatDateTime(value) : t('—'));
     const { transferId, transferType } = useParams();
     const navigate = useNavigate();
     const { user } = useSession();
@@ -51,13 +48,14 @@ export function TransferDetailPage() {
     const [reason, setReason] = useState('');
 
     const fetchRecord = useCallback(() => {
-        if (!kind || !Number.isInteger(id) || id < 1) return Promise.reject(new Error('Invalid transfer reference.'));
+        if (!kind || !Number.isInteger(id) || id < 1)
+            return Promise.reject(new Error(t('Invalid transfer reference.')));
         return kind === 'warehouse'
             ? transferApi.warehouseTransfer(id)
             : kind === 'representative-return'
               ? transferApi.representativeReturn(id)
               : transferApi.representativeTransfer(id);
-    }, [id, kind]);
+    }, [id, kind, t]);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -65,11 +63,11 @@ export function TransferDetailPage() {
         try {
             setRecord((await fetchRecord()).data);
         } catch (requestError) {
-            setError(errorMessage(requestError));
+            setError(errorMessage(requestError, t('Unable to load the transfer record.')));
         } finally {
             setLoading(false);
         }
-    }, [fetchRecord]);
+    }, [fetchRecord, t]);
 
     useEffect(() => {
         let active = true;
@@ -81,7 +79,7 @@ export function TransferDetailPage() {
                 }
             })
             .catch((requestError) => {
-                if (active) setError(errorMessage(requestError));
+                if (active) setError(errorMessage(requestError, t('Unable to load the transfer record.')));
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -89,7 +87,7 @@ export function TransferDetailPage() {
         return () => {
             active = false;
         };
-    }, [fetchRecord]);
+    }, [fetchRecord, t]);
 
     const inTransit = useMemo(
         () => record?.items.reduce((sum, item) => sum + item.in_transit_quantity, 0) ?? 0,
@@ -155,11 +153,16 @@ export function TransferDetailPage() {
                       : command === 'cancel'
                         ? 'cancelled'
                         : 'reversed';
-            setNotice(`${record.reference} ${completed} successfully.`);
+            setNotice(
+                t('{reference} {status} successfully.', {
+                    reference: record.reference,
+                    status: t(completed),
+                }),
+            );
             setCommand(null);
             setReason('');
         } catch (requestError) {
-            setError(errorMessage(requestError));
+            setError(errorMessage(requestError, t('Unable to load the transfer record.')));
         } finally {
             setWorking(false);
         }
@@ -169,7 +172,7 @@ export function TransferDetailPage() {
         return (
             <div className="ui-loading" role="status">
                 <span />
-                Loading transfer record…
+                {t('Loading transfer record…')}
             </div>
         );
     if (!record || !kind)
@@ -177,12 +180,12 @@ export function TransferDetailPage() {
             <div className="admin-page transfer-detail-page">
                 <Link className="sale-detail-back" to="/admin/transfers">
                     <Icon name="chevronLeft" size={13} />
-                    Transfers
+                    {t('Transfers')}
                 </Link>
                 <div className="ui-flash ui-flash--danger" role="alert">
-                    {error || 'Transfer not found.'}
+                    {error || t('Transfer not found.')}
                     <button onClick={() => void load()} type="button">
-                        Retry
+                        {t('Retry')}
                     </button>
                 </div>
             </div>
@@ -213,22 +216,22 @@ export function TransferDetailPage() {
                 <div>
                     <Link className="sale-detail-back" to="/admin/transfers">
                         <Icon name="chevronLeft" size={13} />
-                        Transfer records
+                        {t('Transfer records')}
                     </Link>
                     <p className="ui-eyebrow">
                         {kind === 'warehouse'
-                            ? 'Warehouse transfer'
+                            ? t('Warehouse transfer')
                             : kind === 'representative-return'
-                              ? 'Representative return'
-                              : 'Representative issue'}
+                              ? t('Representative return')
+                              : t('Representative issue')}
                     </p>
                     <h1>{record.reference}</h1>
                     <p>
-                        {routeLabel} · Created {dateTime(record.created_at)}
+                        {routeLabel} · {t('Created {date}', { date: dateTime(record.created_at) })}
                     </p>
                 </div>
                 <div className="transfer-detail-actions">
-                    <StatusBadge tone={tone(record.status)}>{record.status}</StatusBadge>
+                    <StatusBadge tone={tone(record.status)}>{t(record.status)}</StatusBadge>
                     {canEdit ? (
                         <Button
                             icon="edit"
@@ -240,27 +243,27 @@ export function TransferDetailPage() {
                                 )
                             }
                         >
-                            Edit draft
+                            {t('Edit draft')}
                         </Button>
                     ) : null}
                     {canDispatch ? (
                         <Button icon="truck" onClick={() => setCommand('dispatch')} requiresOnline tone="primary">
-                            {kind === 'representative-return' ? 'Post return' : 'Dispatch'}
+                            {t(kind === 'representative-return' ? 'Post return' : 'Dispatch')}
                         </Button>
                     ) : null}
                     {canReceive ? (
                         <Button icon="check" onClick={() => setCommand('receive')} requiresOnline tone="primary">
-                            Receive
+                            {t('Receive')}
                         </Button>
                     ) : null}
                     {canCancel ? (
                         <Button icon="x" onClick={() => setCommand('cancel')} requiresOnline>
-                            Cancel
+                            {t('Cancel')}
                         </Button>
                     ) : null}
                     {canReverse ? (
                         <Button icon="reverse" onClick={() => setCommand('reverse')} requiresOnline tone="danger">
-                            Reverse
+                            {t('Reverse')}
                         </Button>
                     ) : null}
                 </div>
@@ -276,42 +279,45 @@ export function TransferDetailPage() {
                     <Icon name="x" size={15} />
                     {error}
                     <button onClick={() => void load()} type="button">
-                        Retry
+                        {t('Retry')}
                     </button>
                 </div>
             ) : null}
-            <section aria-label="Transfer summary" className="metric-grid transfer-detail-kpis">
+            <section aria-label={t('Transfer summary')} className="metric-grid transfer-detail-kpis">
                 <MetricCard
-                    hint="Distinct product lines"
+                    hint={t('Distinct product lines')}
                     icon="box"
-                    label="Products"
+                    label={t('Products')}
                     value={formatNumber(record.items.length)}
                 />
                 <MetricCard
-                    hint="Total base stock on document"
+                    hint={t('Total base stock on document')}
                     icon="warehouse"
-                    label="Base quantity"
+                    label={t('Base quantity')}
                     value={formatNumber(paidBaseTotal + focBaseTotal)}
                 />
                 <MetricCard
-                    hint={record.status === 'dispatched' ? 'Currently moving' : 'No units currently moving'}
+                    hint={t(record.status === 'dispatched' ? 'Currently moving' : 'No units currently moving')}
                     icon="truck"
-                    label="In transit"
+                    label={t('In transit')}
                     value={formatNumber(inTransit)}
                 />
             </section>
             <div className="transfer-detail-grid">
-                <Panel className="transfer-detail-items" eyebrow="Transfer contents" title="Product lines">
+                <Panel className="transfer-detail-items" eyebrow={t('Transfer contents')} title={t('Product lines')}>
                     <div className="ui-table-wrap">
-                        <table aria-label="Transfer product lines" className={`ui-table${showFoc ? ' has-foc' : ''}`}>
+                        <table
+                            aria-label={t('Transfer product lines')}
+                            className={`ui-table${showFoc ? ' has-foc' : ''}`}
+                        >
                             <thead>
                                 <tr>
-                                    <th>Product</th>
-                                    <th>Unit</th>
-                                    <th className="is-numeric">Transfer quantity</th>
-                                    {showFoc ? <th className="is-numeric">FOC</th> : null}
-                                    <th className="is-numeric">{showFoc ? 'Paid base' : 'Base stock'}</th>
-                                    <th className="is-numeric">In transit</th>
+                                    <th>{t('Product')}</th>
+                                    <th>{t('Unit')}</th>
+                                    <th className="is-numeric">{t('Transfer quantity')}</th>
+                                    {showFoc ? <th className="is-numeric">{t('FOC')}</th> : null}
+                                    <th className="is-numeric">{t(showFoc ? 'Paid base' : 'Base stock')}</th>
+                                    <th className="is-numeric">{t('In transit')}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -324,7 +330,9 @@ export function TransferDetailPage() {
                                         <td>
                                             <strong>{item.unit?.name ?? item.product.unit}</strong>
                                             <small>
-                                                {formatNumber(item.unit?.conversion_factor ?? 1)} base units each
+                                                {t('{count} base units each', {
+                                                    count: formatNumber(item.unit?.conversion_factor ?? 1),
+                                                })}
                                             </small>
                                         </td>
                                         <td className="is-numeric">
@@ -337,7 +345,7 @@ export function TransferDetailPage() {
                                                     <small>
                                                         {item.foc_unit?.name ?? item.product.unit},{' '}
                                                         {formatNumber(item.foc_base_quantity ?? item.foc_quantity ?? 0)}{' '}
-                                                        base
+                                                        {t('base')}
                                                     </small>
                                                 ) : null}
                                             </td>
@@ -351,16 +359,16 @@ export function TransferDetailPage() {
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <td colSpan={3}>{showFoc ? 'Base totals' : 'Total base stock'}</td>
+                                    <td colSpan={3}>{t(showFoc ? 'Base totals' : 'Total base stock')}</td>
                                     {showFoc ? (
                                         <td className="is-numeric">
                                             <strong>{formatNumber(focBaseTotal)}</strong>
-                                            <small>FOC base</small>
+                                            <small>{t('FOC base')}</small>
                                         </td>
                                     ) : null}
                                     <td className="is-numeric">
                                         <strong>{formatNumber(paidBaseTotal)}</strong>
-                                        {showFoc ? <small>Paid base</small> : null}
+                                        {showFoc ? <small>{t('Paid base')}</small> : null}
                                     </td>
                                     <td className="is-numeric">
                                         <strong>{formatNumber(inTransit)}</strong>
@@ -370,10 +378,10 @@ export function TransferDetailPage() {
                         </table>
                     </div>
                 </Panel>
-                <Panel eyebrow="Document" title="Transfer details">
+                <Panel eyebrow={t('Document')} title={t('Transfer details')}>
                     <dl className="transfer-detail-facts">
                         <div>
-                            <dt>Source</dt>
+                            <dt>{t('Source')}</dt>
                             <dd>
                                 {kind === 'representative-return' && 'representative' in record
                                     ? record.representative.name
@@ -386,7 +394,7 @@ export function TransferDetailPage() {
                             </dd>
                         </div>
                         <div>
-                            <dt>Destination</dt>
+                            <dt>{t('Destination')}</dt>
                             <dd>
                                 {kind === 'representative-return' ? record.source_warehouse.name : destination?.name}
                                 <small>
@@ -397,46 +405,46 @@ export function TransferDetailPage() {
                             </dd>
                         </div>
                         <div>
-                            <dt>Created by</dt>
+                            <dt>{t('Created by')}</dt>
                             <dd>
-                                {record.created_by?.name ?? 'Unknown'}
+                                {record.created_by?.name ?? t('Unknown')}
                                 <small>{dateTime(record.created_at)}</small>
                             </dd>
                         </div>
                         <div>
-                            <dt>Dispatched by</dt>
+                            <dt>{t('Dispatched by')}</dt>
                             <dd>
-                                {record.dispatched_by?.name ?? 'Not dispatched'}
+                                {record.dispatched_by?.name ?? t('Not dispatched')}
                                 <small>{dateTime(record.dispatched_at)}</small>
                             </dd>
                         </div>
                         <div>
-                            <dt>Received by</dt>
+                            <dt>{t('Received by')}</dt>
                             <dd>
-                                {record.received_by?.name ?? 'Not received'}
+                                {record.received_by?.name ?? t('Not received')}
                                 <small>{dateTime(record.received_at)}</small>
                             </dd>
                         </div>
                         <div>
-                            <dt>Reversed by</dt>
+                            <dt>{t('Reversed by')}</dt>
                             <dd>
-                                {record.reversed_by?.name ?? 'Not reversed'}
+                                {record.reversed_by?.name ?? t('Not reversed')}
                                 <small>{dateTime(record.reversed_at)}</small>
                             </dd>
                         </div>
                         <div className="is-wide">
-                            <dt>Notes</dt>
-                            <dd>{record.notes || 'No notes recorded'}</dd>
+                            <dt>{t('Notes')}</dt>
+                            <dd>{record.notes || t('No notes recorded')}</dd>
                         </div>
                         {record.cancel_reason ? (
                             <div className="is-wide is-danger">
-                                <dt>Cancellation reason</dt>
+                                <dt>{t('Cancellation reason')}</dt>
                                 <dd>{record.cancel_reason}</dd>
                             </div>
                         ) : null}
                         {record.reversal_reason ? (
                             <div className="is-wide is-danger">
-                                <dt>Reversal reason</dt>
+                                <dt>{t('Reversal reason')}</dt>
                                 <dd>{record.reversal_reason}</dd>
                             </div>
                         ) : null}
@@ -447,11 +455,11 @@ export function TransferDetailPage() {
                 description={
                     command === 'dispatch'
                         ? kind === 'representative-return'
-                            ? 'Posting moves these units from representative custody into the target warehouse.'
-                            : 'Dispatching moves these units into transit.'
+                            ? t('Posting moves these units from representative custody into the target warehouse.')
+                            : t('Dispatching moves these units into transit.')
                         : command === 'receive'
-                          ? 'Receiving moves all in-transit units into destination stock.'
-                          : `A reason is required and will be recorded in the audit trail.`
+                          ? t('Receiving moves all in-transit units into destination stock.')
+                          : t('A reason is required and will be recorded in the audit trail.')
                 }
                 footer={
                     <>
@@ -462,7 +470,7 @@ export function TransferDetailPage() {
                                 setReason('');
                             }}
                         >
-                            Keep transfer
+                            {t('Keep transfer')}
                         </Button>
                         <Button
                             disabled={working || ((command === 'cancel' || command === 'reverse') && !reason.trim())}
@@ -471,16 +479,16 @@ export function TransferDetailPage() {
                             tone={command === 'cancel' || command === 'reverse' ? 'danger' : 'primary'}
                         >
                             {working
-                                ? 'Working…'
+                                ? t('Working…')
                                 : command === 'receive'
-                                  ? 'Receive transfer'
+                                  ? t('Receive transfer')
                                   : command === 'dispatch'
                                     ? kind === 'representative-return'
-                                        ? 'Post return'
-                                        : 'Dispatch transfer'
+                                        ? t('Post return')
+                                        : t('Dispatch transfer')
                                     : command === 'cancel'
-                                      ? 'Cancel transfer'
-                                      : 'Reverse transfer'}
+                                      ? t('Cancel transfer')
+                                      : t('Reverse transfer')}
                         </Button>
                     </>
                 }
@@ -489,25 +497,38 @@ export function TransferDetailPage() {
                     setReason('');
                 }}
                 open={command !== null}
-                title={`${command === 'receive' ? 'Receive' : command === 'dispatch' ? 'Dispatch' : command === 'cancel' ? 'Cancel' : 'Reverse'} ${record.reference}?`}
+                title={t('{action} {reference}?', {
+                    action: t(
+                        command === 'receive'
+                            ? 'Receive'
+                            : command === 'dispatch'
+                              ? 'Dispatch'
+                              : command === 'cancel'
+                                ? 'Cancel'
+                                : 'Reverse',
+                    ),
+                    reference: record.reference,
+                })}
                 width="compact"
             >
                 {command === 'cancel' || command === 'reverse' ? (
                     <label className="ui-field">
-                        <span>Reason</span>
+                        <span>{t('Reason')}</span>
                         <textarea
                             autoFocus
                             maxLength={500}
                             onChange={(event) => setReason(event.target.value)}
-                            placeholder="Explain why this transfer must change state"
+                            placeholder={t('Explain why this transfer must change state')}
                             rows={4}
                             value={reason}
                         />
                     </label>
                 ) : (
                     <p className="transfer-confirm-summary">
-                        <strong>{formatNumber(record.total_quantity)} base units</strong> across {record.items.length}{' '}
-                        product lines.
+                        {t('{count} base units across {products} product lines.', {
+                            count: formatNumber(record.total_quantity),
+                            products: formatNumber(record.items.length),
+                        })}
                     </p>
                 )}
             </Dialog>

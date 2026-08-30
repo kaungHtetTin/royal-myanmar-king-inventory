@@ -1,509 +1,301 @@
-import { useCallback, useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import {
     reportingApi,
+    type Identity,
     type ProductIdentity,
     type ReportFilters,
+    type ReportName,
     type ReportOptions,
     type ReportResponse,
-    type ReportName,
 } from '../../services/reporting';
-import { Icon, type IconName } from '../../ui/icons';
+import { Icon } from '../../ui/icons';
 import { Button, EmptyState, MetricCard, Pagination, Panel } from '../../ui/primitives';
+import { useLocale } from '../../localization/locale-context';
 
-const emptyOptions: ReportOptions = {
-    warehouses: [],
-    reports: [],
-    regions: [],
-    ways: [],
-    representatives: [],
-    products: [],
-};
-const emptyResponse: ReportResponse = {
-    report: 'sales',
+const emptyOptions: ReportOptions = { warehouses: [], reports: [] };
+const emptyResponse = (report: ReportName): ReportResponse => ({
+    report,
     data: [],
     meta: { current_page: 1, from: null, last_page: 1, per_page: 25, to: null, total: 0 },
     summary: {},
     rules: {},
-};
-const reportTabs: Array<{ icon: IconName; label: string; value: ReportName }> = [
-    { icon: 'sales', label: 'Sales analysis', value: 'sales' },
-    { icon: 'truck', label: 'Way sales power', value: 'way-sales-power' },
-    { icon: 'transfer', label: 'Stock issues', value: 'stock-issues' },
-];
+});
+const errorMessage = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 
-function number(value: number) {
-    return new Intl.NumberFormat('en-US').format(value);
-}
-function money(value: number) {
-    return `${number(value)} MMK`;
-}
-function message(error: unknown) {
-    return error instanceof Error ? error.message : 'Unable to load report.';
-}
 export function ReportsPage() {
+    const { formatDateTime, formatNumber, t } = useLocale();
+    const money = (value: number) => `${formatNumber(value)} MMK`;
+    const [report, setReport] = useState<ReportName>('sales');
     const [options, setOptions] = useState(emptyOptions);
-    const [response, setResponse] = useState(emptyResponse);
+    const [response, setResponse] = useState(emptyResponse('sales'));
     const [filters, setFilters] = useState<ReportFilters>({ page: 1 });
     const [draft, setDraft] = useState<ReportFilters>({});
     const [loading, setLoading] = useState(true);
     const [exporting, setExporting] = useState(false);
     const [error, setError] = useState('');
-    const [reportName, setReportName] = useState<ReportName>('sales');
-
     const load = useCallback(async () => {
         setLoading(true);
         setError('');
         try {
-            setResponse(await reportingApi.report(reportName, filters));
+            setResponse(await reportingApi.report(report, filters));
         } catch (requestError) {
-            setError(message(requestError));
+            setError(errorMessage(requestError, t('Unable to load report.')));
         } finally {
             setLoading(false);
         }
-    }, [filters, reportName]);
-
+    }, [filters, report, t]);
     useEffect(() => {
         let active = true;
         void reportingApi
             .options()
             .then((value) => active && setOptions(value))
-            .catch((error) => active && setError(message(error)));
+            .catch((requestError) => active && setError(errorMessage(requestError, t('Unable to load report.'))));
         return () => {
             active = false;
         };
-    }, []);
-
+    }, [t]);
     useEffect(() => {
-        let active = true;
-        void reportingApi
-            .report(reportName, filters)
-            .then((value) => {
-                if (!active) return;
-                setResponse(value);
-                setError('');
-            })
-            .catch((requestError) => active && setError(message(requestError)))
-            .finally(() => active && setLoading(false));
-        return () => {
-            active = false;
-        };
-    }, [filters, reportName]);
+        // The selected report and applied filters intentionally drive this server request.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        void load();
+    }, [load]);
+
+    const titles: Record<ReportName, string> = {
+        sales: t('Sales analysis'),
+        representatives: t('Representative analysis'),
+        customers: t('Customer analysis'),
+    };
+    const descriptions: Record<ReportName, string> = {
+        sales: t('Analyse posted sales across your assigned locations.'),
+        representatives: t('Compare representative sales power across warehouses and durations.'),
+        customers: t('Compare customer purchase power for a selected duration.'),
+    };
+    const metrics =
+        report === 'sales'
+            ? ['month_sales', 'year_sales', 'gross_sales', 'units_sold']
+            : report === 'representatives'
+              ? ['representatives', 'sales_amount', 'transactions']
+              : ['customers', 'purchase_amount', 'transactions'];
     const apply = (event: FormEvent) => {
         event.preventDefault();
-        setLoading(true);
         setFilters({ ...draft, page: 1 });
     };
-    const switchReport = (nextReport: ReportName) => {
-        if (nextReport === reportName) return;
-        setLoading(true);
-        setError('');
-        setReportName(nextReport);
-        setResponse({ ...emptyResponse, report: nextReport });
-        setFilters({ page: 1 });
+    const selectReport = (next: ReportName) => {
+        setReport(next);
         setDraft({});
+        setFilters({ page: 1 });
+        setResponse(emptyResponse(next));
     };
-    const navigateTabs = (event: KeyboardEvent<HTMLButtonElement>) => {
-        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-        const tabs = Array.from(
-            event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? [],
-        );
-        const currentIndex = tabs.indexOf(event.currentTarget);
-        const nextIndex =
-            event.key === 'Home'
-                ? 0
-                : event.key === 'End'
-                  ? tabs.length - 1
-                  : (currentIndex + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
-        event.preventDefault();
-        tabs[nextIndex]?.focus();
-        tabs[nextIndex]?.click();
-    };
-    const exportCurrentReport = async () => {
+    const exportCsv = async () => {
         setExporting(true);
         setError('');
         try {
-            const { blob, filename } =
-                reportName === 'stock-issues'
-                    ? await reportingApi.exportStockIssues(filters)
-                    : await reportingApi.exportWaySalesPower(filters);
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = filename;
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            URL.revokeObjectURL(url);
+            const first = await reportingApi.report(report, { ...filters, page: 1 }, 100);
+            const rows = [...first.data];
+            for (let page = 2; page <= first.meta.last_page; page += 1)
+                rows.push(...(await reportingApi.report(report, { ...filters, page }, 100)).data);
+            downloadCsv(`${report}-analysis.csv`, csvRows(report, rows, t));
         } catch (requestError) {
-            setError(message(requestError));
+            setError(errorMessage(requestError, t('Unable to export report.')));
         } finally {
             setExporting(false);
         }
     };
-    const summaryKeys =
-        reportName === 'sales'
-            ? ['month_sales', 'year_sales', 'gross_sales', 'units_sold']
-            : reportName === 'way-sales-power'
-              ? ['gross_sales', 'invoices', 'customers', 'paid_base_units', 'foc_base_units']
-              : ['total_issued_units', 'products', 'issues', 'foc_base_units'];
 
     return (
         <div className="admin-page reports-page">
             <header className="page-heading">
                 <div>
-                    <p className="ui-eyebrow">Management intelligence</p>
-                    <h1>Reports</h1>
-                    <p>Analyse posted sales across your assigned locations.</p>
+                    <p className="ui-eyebrow">{t('Management intelligence')}</p>
+                    <h1>{titles[report]}</h1>
+                    <p>{descriptions[report]}</p>
                 </div>
                 <div className="report-rule-note">
                     <Icon name="reports" size={16} />
-                    <span>Financial totals include posted sales only.</span>
+                    <span>{t('Financial totals include posted sales only.')}</span>
                 </div>
             </header>
-
-            <div aria-label="Report sections" className="section-tabs section-tabs--3 reports-page-tabs" role="tablist">
-                {reportTabs.map((tab) => (
+            <nav
+                aria-label={t('Report sections')}
+                className="section-tabs section-tabs--3 report-tabs reports-page-tabs"
+                role="tablist"
+            >
+                {(['sales', 'representatives', 'customers'] as ReportName[]).map((name) => (
                     <button
-                        aria-controls="report-panel"
-                        aria-selected={reportName === tab.value}
-                        id={`report-tab-${tab.value}`}
-                        key={tab.value}
-                        onClick={() => switchReport(tab.value)}
-                        onKeyDown={navigateTabs}
+                        aria-selected={report === name}
+                        key={name}
+                        onClick={() => selectReport(name)}
                         role="tab"
-                        tabIndex={reportName === tab.value ? 0 : -1}
                         type="button"
                     >
-                        <Icon name={tab.icon} size={15} />
-                        <span>{tab.label}</span>
+                        <Icon name={name === 'sales' ? 'reports' : 'customers'} size={16} />
+                        {titles[name]}
                     </button>
                 ))}
-            </div>
-
-            <div
-                aria-labelledby={`report-tab-${reportName}`}
-                className="report-tab-panel"
-                id="report-panel"
-                role="tabpanel"
-            >
-                <section
-                    aria-label={`${reportTabs.find((tab) => tab.value === reportName)?.label} summary`}
-                    className="metric-grid report-metrics"
-                >
-                    {summaryKeys
-                        .filter((key) => key in response.summary)
-                        .map((key) => (
-                            <MetricCard
-                                hint="Current filters"
-                                icon={
-                                    key.includes('unit') || key === 'products'
-                                        ? 'box'
-                                        : key === 'representatives'
-                                          ? 'users'
-                                          : key === 'issues'
-                                            ? 'transfer'
-                                            : 'cash'
-                                }
-                                key={key}
-                                label={key.replaceAll('_', ' ')}
-                                value={
-                                    key.includes('sales') ? money(response.summary[key]) : number(response.summary[key])
-                                }
-                            />
-                        ))}
-                </section>
-
-                {error ? (
-                    <div className="ui-flash ui-flash--danger">
-                        <Icon name="x" size={15} />
-                        {error}
-                        <button onClick={() => void load()}>Retry</button>
-                    </div>
-                ) : null}
-
-                <Panel
-                    actions={
-                        reportName !== 'sales' ? (
-                            <Button
-                                disabled={loading || exporting || response.meta.total === 0}
-                                icon="download"
-                                onClick={() => void exportCurrentReport()}
-                                requiresOnline
-                            >
-                                {exporting ? 'Exporting…' : 'Export CSV'}
-                            </Button>
-                        ) : null
-                    }
-                    eyebrow="Server-side report"
-                    title={reportTabs.find((tab) => tab.value === reportName)?.label ?? 'Report'}
-                >
-                    <form className="filter-toolbar report-filters" onSubmit={apply}>
-                        <div className="report-filter-scroll">
-                            <div className="report-filter-fields">
-                                {reportName === 'sales' ? (
-                                    <label className="filter-search">
-                                        <Icon name="search" size={15} />
-                                        <input
-                                            aria-label="Search report"
-                                            onChange={(event) =>
-                                                setDraft((value) => ({ ...value, search: event.target.value }))
-                                            }
-                                            placeholder="Sale reference"
-                                            type="search"
-                                            value={draft.search ?? ''}
-                                        />
-                                    </label>
-                                ) : null}
+            </nav>
+            <section aria-label={t('Analysis summary')} className="metric-grid report-metrics">
+                {metrics
+                    .filter((key) => key in response.summary)
+                    .map((key) => (
+                        <MetricCard
+                            hint={t('Current filters')}
+                            icon={key.includes('unit') ? 'box' : 'cash'}
+                            key={key}
+                            label={t(key.replaceAll('_', ' '))}
+                            value={
+                                key.includes('sales') || key.includes('purchase') || key.includes('amount')
+                                    ? money(response.summary[key])
+                                    : formatNumber(response.summary[key])
+                            }
+                        />
+                    ))}
+            </section>
+            {error ? (
+                <div className="ui-flash ui-flash--danger" role="alert">
+                    <Icon name="x" size={15} />
+                    {error}
+                    <button onClick={() => void load()} type="button">
+                        {t('Retry')}
+                    </button>
+                </div>
+            ) : null}
+            <Panel eyebrow={t('Server-side report')} title={titles[report]}>
+                <form className="filter-toolbar report-filters" onSubmit={apply}>
+                    <div className="report-filter-scroll">
+                        <div className="report-filter-fields">
+                            {report === 'sales' ? (
+                                <label className="filter-search">
+                                    <Icon name="search" size={15} />
+                                    <input
+                                        aria-label={t('Search report')}
+                                        onChange={(event) =>
+                                            setDraft((value) => ({ ...value, search: event.target.value }))
+                                        }
+                                        placeholder={t('Sale reference')}
+                                        type="search"
+                                        value={draft.search ?? ''}
+                                    />
+                                </label>
+                            ) : null}
+                            {report !== 'customers' ? (
                                 <select
-                                    aria-label="Warehouse"
+                                    aria-label={t('Warehouse')}
                                     onChange={(event) =>
                                         setDraft((value) => ({
                                             ...value,
                                             warehouse_id: Number(event.target.value) || undefined,
-                                            ...(reportName !== 'sales'
-                                                ? { region_id: undefined, way_id: undefined }
-                                                : {}),
                                         }))
                                     }
                                     value={draft.warehouse_id ?? 0}
                                 >
-                                    <option value={0}>All warehouses</option>
-                                    {options.warehouses.map((row) => (
-                                        <option key={row.id} value={row.id}>
-                                            {row.code} · {row.name}
+                                    <option value={0}>{t('All warehouses')}</option>
+                                    {options.warehouses.map((warehouse) => (
+                                        <option key={warehouse.id} value={warehouse.id}>
+                                            {warehouse.code} · {warehouse.name}
                                         </option>
                                     ))}
                                 </select>
-                                {reportName !== 'sales' ? (
-                                    <>
-                                        <select
-                                            aria-label="Region"
-                                            onChange={(event) =>
-                                                setDraft((value) => ({
-                                                    ...value,
-                                                    region_id: Number(event.target.value) || undefined,
-                                                    way_id: undefined,
-                                                }))
-                                            }
-                                            value={draft.region_id ?? 0}
-                                        >
-                                            <option value={0}>All regions</option>
-                                            {options.regions
-                                                .filter(
-                                                    (row) =>
-                                                        !draft.warehouse_id || row.warehouse_id === draft.warehouse_id,
-                                                )
-                                                .map((row) => (
-                                                    <option key={row.id} value={row.id}>
-                                                        {row.name}
-                                                    </option>
-                                                ))}
-                                        </select>
-                                        <select
-                                            aria-label="Way"
-                                            onChange={(event) =>
-                                                setDraft((value) => ({
-                                                    ...value,
-                                                    way_id: Number(event.target.value) || undefined,
-                                                }))
-                                            }
-                                            value={draft.way_id ?? 0}
-                                        >
-                                            <option value={0}>All Ways</option>
-                                            {options.ways
-                                                .filter((row) => {
-                                                    if (draft.region_id) return row.region_id === draft.region_id;
-                                                    if (!draft.warehouse_id) return true;
-                                                    return options.regions.some(
-                                                        (region) =>
-                                                            region.id === row.region_id &&
-                                                            region.warehouse_id === draft.warehouse_id,
-                                                    );
-                                                })
-                                                .map((row) => (
-                                                    <option key={row.id} value={row.id}>
-                                                        {row.code} · {row.name}
-                                                    </option>
-                                                ))}
-                                        </select>
-                                    </>
-                                ) : null}
-                                {reportName === 'sales' ? (
-                                    <select
-                                        aria-label="Status"
-                                        onChange={(event) =>
-                                            setDraft((value) => ({ ...value, status: event.target.value || undefined }))
-                                        }
-                                        value={draft.status ?? ''}
-                                    >
-                                        <option value="">All statuses</option>
-                                        <option value="draft">Draft</option>
-                                        <option value="posted">Posted</option>
-                                        <option value="voided">Voided</option>
-                                    </select>
-                                ) : null}
-                                <DateFilter
-                                    label="From"
-                                    value={draft.date_from}
-                                    onChange={(date_from) => setDraft((value) => ({ ...value, date_from }))}
-                                />
-                                <DateFilter
-                                    label="To"
-                                    value={draft.date_to}
-                                    onChange={(date_to) => setDraft((value) => ({ ...value, date_to }))}
-                                />
-                            </div>
-                        </div>
-                        <div className="report-filter-action">
-                            <Button icon="search" type="submit">
-                                Apply
-                            </Button>
-                        </div>
-                    </form>
-
-                    {loading ? (
-                        <div className="ui-loading">
-                            <span />
-                            Loading {reportTabs.find((tab) => tab.value === reportName)?.label.toLowerCase()}…
-                        </div>
-                    ) : reportName === 'sales' ? (
-                        <SalesAnalysisChart
-                            month={response.analysis?.month_trend ?? []}
-                            products={response.analysis?.top_products ?? []}
-                            year={response.analysis?.year_trend ?? []}
-                        />
-                    ) : (
-                        <>
-                            {reportName === 'way-sales-power' ? (
-                                <WayPowerTable rows={response.data} />
-                            ) : (
-                                <StockIssueTable rows={response.data} />
-                            )}
-                            <Pagination
-                                label={reportName === 'way-sales-power' ? 'Way sales power' : 'Stock issues'}
-                                loading={loading}
-                                meta={response.meta}
-                                onPageChange={(page) => {
-                                    setLoading(true);
-                                    setFilters((value) => ({ ...value, page }));
-                                }}
+                            ) : null}
+                            {report === 'sales' ? (
+                                <select
+                                    aria-label={t('Status')}
+                                    onChange={(event) =>
+                                        setDraft((value) => ({ ...value, status: event.target.value || undefined }))
+                                    }
+                                    value={draft.status ?? ''}
+                                >
+                                    <option value="">{t('All statuses')}</option>
+                                    <option value="draft">{t('Draft')}</option>
+                                    <option value="posted">{t('Posted')}</option>
+                                    <option value="voided">{t('Voided')}</option>
+                                </select>
+                            ) : null}
+                            <DateFilter
+                                ariaLabel={t('Date from')}
+                                label={t('From')}
+                                onChange={(date_from) => setDraft((value) => ({ ...value, date_from }))}
+                                value={draft.date_from}
                             />
-                        </>
-                    )}
-                </Panel>
-            </div>
-        </div>
-    );
-}
-
-function StockIssueTable({ rows }: { rows: Array<Record<string, unknown>> }) {
-    if (!rows.length)
-        return (
-            <EmptyState
-                description="Adjust the Warehouse, Region, Way, or date filters."
-                title="No dispatched stock issues"
-            />
-        );
-    return (
-        <div className="ui-table-wrap">
-            <table className="ui-table report-table">
-                <thead>
-                    <tr>
-                        <th>Product</th>
-                        <th>Base unit</th>
-                        <th className="is-numeric">Paid base</th>
-                        <th className="is-numeric">FOC base</th>
-                        <th className="is-numeric">Total issued</th>
-                        <th className="is-numeric">Issue count</th>
-                        <th className="is-numeric">Representatives</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows.map((row) => {
-                        const product = row.product as { id: number; name: string; sku: string; unit: string };
-                        return (
-                            <tr key={product.id}>
-                                <td>
-                                    <strong>{product.name}</strong>
-                                    <small>{product.sku}</small>
-                                </td>
-                                <td>{product.unit}</td>
-                                <td className="is-numeric">{number(Number(row.paid_base_units ?? 0))}</td>
-                                <td className="is-numeric">{number(Number(row.foc_base_units ?? 0))}</td>
-                                <td className="is-numeric">
-                                    <strong>{number(Number(row.total_issued_units ?? 0))}</strong>
-                                </td>
-                                <td className="is-numeric">{number(Number(row.issues ?? 0))}</td>
-                                <td className="is-numeric">{number(Number(row.representatives ?? 0))}</td>
-                            </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
-        </div>
-    );
-}
-
-function WayPowerTable({ rows }: { rows: Array<Record<string, unknown>> }) {
-    if (!rows.length)
-        return (
-            <EmptyState
-                description="Adjust the Warehouse, Region, Way, status, or date filters."
-                title="No posted Way sales"
-            />
-        );
-    return (
-        <div className="ui-table-wrap">
-            <table className="ui-table">
-                <thead>
-                    <tr>
-                        <th>Way</th>
-                        <th>Region</th>
-                        <th>Representative</th>
-                        <th className="is-numeric">Sales</th>
-                        <th className="is-numeric">Paid base</th>
-                        <th className="is-numeric">FOC base</th>
-                        <th className="is-numeric">Invoices</th>
-                        <th className="is-numeric">Customers</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows.map((row, index) => {
-                        const way = row.way as { code: string; name: string };
-                        const region = row.region as { name: string };
-                        const representative = row.representative as { code: string; name: string };
-                        return (
-                            <tr key={`${way.code}-${representative.code}-${index}`}>
-                                <td>
-                                    <strong>{way.name}</strong>
-                                    <small>{way.code}</small>
-                                </td>
-                                <td>{region.name}</td>
-                                <td>
-                                    <strong>{representative.name}</strong>
-                                    <small>{representative.code}</small>
-                                </td>
-                                <td className="is-numeric">
-                                    <strong>{money(Number(row.sales_amount ?? 0))}</strong>
-                                </td>
-                                <td className="is-numeric">{number(Number(row.paid_base_units ?? 0))}</td>
-                                <td className="is-numeric">{number(Number(row.foc_base_units ?? 0))}</td>
-                                <td className="is-numeric">{number(Number(row.invoices ?? 0))}</td>
-                                <td className="is-numeric">{number(Number(row.customers ?? 0))}</td>
-                            </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
+                            <DateFilter
+                                ariaLabel={t('Date to')}
+                                label={t('To')}
+                                onChange={(date_to) => setDraft((value) => ({ ...value, date_to }))}
+                                value={draft.date_to}
+                            />
+                            {report !== 'sales' ? (
+                                <label className="report-amount">
+                                    <span>
+                                        {report === 'representatives'
+                                            ? t('Minimum sales amount')
+                                            : t('Minimum purchase amount')}
+                                    </span>
+                                    <input
+                                        min="0"
+                                        onChange={(event) =>
+                                            setDraft((value) => ({
+                                                ...value,
+                                                min_amount: Number(event.target.value) || undefined,
+                                            }))
+                                        }
+                                        placeholder="0"
+                                        type="number"
+                                        value={draft.min_amount ?? ''}
+                                    />
+                                </label>
+                            ) : null}
+                        </div>
+                    </div>
+                    <div className="report-filter-action">
+                        <Button icon="search" type="submit">
+                            {t('Apply')}
+                        </Button>
+                        {report !== 'sales' ? (
+                            <Button
+                                disabled={exporting || loading}
+                                icon="download"
+                                onClick={() => void exportCsv()}
+                                tone="secondary"
+                                type="button"
+                            >
+                                {exporting ? t('Exporting…') : t('Export CSV')}
+                            </Button>
+                        ) : null}
+                    </div>
+                </form>
+                {loading ? (
+                    <div className="ui-loading" role="status">
+                        <span />
+                        {t('Loading analysis…')}
+                    </div>
+                ) : report === 'sales' ? (
+                    <SalesAnalysisChart
+                        month={response.analysis?.month_trend ?? []}
+                        products={response.analysis?.top_products ?? []}
+                        year={response.analysis?.year_trend ?? []}
+                    />
+                ) : (
+                    <AnalysisTable dateTime={formatDateTime} money={money} report={report} rows={response.data} t={t} />
+                )}
+                {report !== 'sales' ? (
+                    <Pagination
+                        label={titles[report]}
+                        loading={loading}
+                        meta={response.meta}
+                        onPageChange={(page) => setFilters((value) => ({ ...value, page }))}
+                    />
+                ) : null}
+            </Panel>
         </div>
     );
 }
 
 function DateFilter({
+    ariaLabel,
     label,
     onChange,
     value,
 }: {
+    ariaLabel: string;
     label: string;
     onChange: (value: string | undefined) => void;
     value?: string;
@@ -512,13 +304,150 @@ function DateFilter({
         <label className="report-date">
             <span>{label}</span>
             <input
-                aria-label={`Date ${label.toLowerCase()}`}
+                aria-label={ariaLabel}
                 onChange={(event) => onChange(event.target.value || undefined)}
                 type="date"
                 value={value ?? ''}
             />
         </label>
     );
+}
+type AnalysisRow = {
+    representative?: Identity;
+    customer?: Identity;
+    warehouse: Identity;
+    sale_count?: number;
+    customer_count?: number;
+    sales_amount?: number;
+    purchase_count?: number;
+    purchase_amount?: number;
+    last_purchase_at?: string | null;
+};
+function AnalysisTable({
+    dateTime,
+    money,
+    report,
+    rows,
+    t,
+}: {
+    dateTime: (value: string) => string;
+    money: (value: number) => string;
+    report: Exclude<ReportName, 'sales'>;
+    rows: Record<string, unknown>[];
+    t: (key: string) => string;
+}) {
+    if (!rows.length)
+        return (
+            <EmptyState
+                description={t('Adjust the duration or minimum amount filters.')}
+                title={t('No analysis results')}
+            />
+        );
+    return (
+        <div className="ui-table-wrap">
+            <table className="ui-table report-table report-analysis-table">
+                <thead>
+                    <tr>
+                        <th>{report === 'representatives' ? t('Representative') : t('Customer')}</th>
+                        <th>{t('Warehouse')}</th>
+                        <th>{t('Transactions')}</th>
+                        {report === 'representatives' ? <th>{t('Customers')}</th> : <th>{t('Last purchase')}</th>}
+                        <th>{report === 'representatives' ? t('Sales amount') : t('Purchase amount')}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {(rows as AnalysisRow[]).map((row) => {
+                        const identity = report === 'representatives' ? row.representative! : row.customer!;
+                        return (
+                            <tr key={`${identity.id}-${row.warehouse.id}`}>
+                                <td>
+                                    <strong>{identity.name}</strong>
+                                    <small>{identity.code}</small>
+                                </td>
+                                <td>
+                                    <strong>{row.warehouse.name}</strong>
+                                    <small>{row.warehouse.code}</small>
+                                </td>
+                                <td>{report === 'representatives' ? row.sale_count : row.purchase_count}</td>
+                                <td>
+                                    {report === 'representatives'
+                                        ? row.customer_count
+                                        : row.last_purchase_at
+                                          ? dateTime(row.last_purchase_at)
+                                          : '—'}
+                                </td>
+                                <td>
+                                    <strong>
+                                        {money(
+                                            report === 'representatives'
+                                                ? (row.sales_amount ?? 0)
+                                                : (row.purchase_amount ?? 0),
+                                        )}
+                                    </strong>
+                                </td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+function csvRows(
+    report: ReportName,
+    rows: Record<string, unknown>[],
+    t: (key: string) => string,
+): Array<Array<string | number>> {
+    if (report === 'representatives')
+        return [
+            [
+                t('Representative code'),
+                t('Representative'),
+                t('Warehouse code'),
+                t('Warehouse'),
+                t('Transactions'),
+                t('Customers'),
+                t('Sales amount'),
+            ],
+            ...(rows as AnalysisRow[]).map((row) => [
+                row.representative!.code,
+                row.representative!.name,
+                row.warehouse.code,
+                row.warehouse.name,
+                row.sale_count ?? 0,
+                row.customer_count ?? 0,
+                row.sales_amount ?? 0,
+            ]),
+        ];
+    return [
+        [
+            t('Customer code'),
+            t('Customer'),
+            t('Warehouse code'),
+            t('Warehouse'),
+            t('Transactions'),
+            t('Last purchase'),
+            t('Purchase amount'),
+        ],
+        ...(rows as AnalysisRow[]).map((row) => [
+            row.customer!.code,
+            row.customer!.name,
+            row.warehouse.code,
+            row.warehouse.name,
+            row.purchase_count ?? 0,
+            row.last_purchase_at ?? '',
+            row.purchase_amount ?? 0,
+        ]),
+    ];
+}
+function downloadCsv(filename: string, rows: Array<Array<string | number>>) {
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
 }
 
 function SalesAnalysisChart({
@@ -530,37 +459,39 @@ function SalesAnalysisChart({
     products: Array<{ amount: number; product: ProductIdentity; units: number }>;
     year: Array<{ amount: number; label: string; month: number }>;
 }) {
+    const { formatNumber, t } = useLocale();
+    const money = (value: number) => `${formatNumber(value)} MMK`;
     if (!month.length && !year.length && !products.length)
         return (
             <EmptyState
-                description="Adjust the date or warehouse filters to analyse posted sales."
-                title="No posted sales"
+                description={t('Adjust the date or warehouse filters to analyse posted sales.')}
+                title={t('No posted sales')}
             />
         );
     const maximumUnits = Math.max(...products.map((row) => row.units), 1);
     return (
-        <section aria-label="Posted sales analysis" className="report-sales-analysis-grid">
-            <ChartCard eyebrow="Current month" title="Sales by day">
-                <VerticalSalesChart ariaLabel="Current month sales by day" points={month} />
+        <section aria-label={t('Posted sales analysis')} className="report-sales-analysis-grid">
+            <ChartCard eyebrow={t('Current month')} title={t('Sales by day')}>
+                <VerticalSalesChart ariaLabel={t('Current month sales by day')} points={month} />
             </ChartCard>
-            <ChartCard eyebrow="Current year" title="Sales by month">
-                <VerticalSalesChart ariaLabel="Current year sales by month" points={year} />
+            <ChartCard eyebrow={t('Current year')} title={t('Sales by month')}>
+                <VerticalSalesChart ariaLabel={t('Current year sales by month')} points={year} />
             </ChartCard>
             <div className="report-chart-card">
                 <header>
-                    <p className="ui-eyebrow">Product ranking</p>
-                    <h3>Top-selling products</h3>
+                    <p className="ui-eyebrow">{t('Product ranking')}</p>
+                    <h3>{t('Top-selling products')}</h3>
                 </header>
-                <div className="report-top-products" role="img" aria-label="Top-selling products by units sold">
+                <div className="report-top-products" role="img" aria-label={t('Top-selling products by units sold')}>
                     {products.map((row) => (
                         <div
                             key={row.product.id}
-                            title={`${row.product.name}: ${row.units} ${row.product.unit} · ${money(row.amount)}`}
+                            title={`${row.product.name}: ${formatNumber(row.units)} ${row.product.unit} · ${money(row.amount)}`}
                         >
                             <span>
                                 <strong>{row.product.name}</strong>
                                 <small>
-                                    {row.product.sku} · {row.units} {row.product.unit}
+                                    {row.product.sku} · {formatNumber(row.units)} {row.product.unit}
                                 </small>
                             </span>
                             <i>
@@ -574,8 +505,7 @@ function SalesAnalysisChart({
         </section>
     );
 }
-
-function ChartCard({ children, eyebrow, title }: { children: React.ReactNode; eyebrow: string; title: string }) {
+function ChartCard({ children, eyebrow, title }: { children: ReactNode; eyebrow: string; title: string }) {
     return (
         <div className="report-chart-card">
             <header>
@@ -593,6 +523,7 @@ function VerticalSalesChart({
     ariaLabel: string;
     points: Array<{ amount: number; label: string }>;
 }) {
+    const { formatNumber } = useLocale();
     const maximum = Math.max(...points.map((point) => point.amount), 1);
     return (
         <div className="report-vertical-chart" role="img" aria-label={ariaLabel}>
@@ -600,7 +531,7 @@ function VerticalSalesChart({
                 <div
                     className="report-vertical-chart__item"
                     key={`${point.label}-${index}`}
-                    title={`${point.label}: ${money(point.amount)}`}
+                    title={`${point.label}: ${formatNumber(point.amount)} MMK`}
                 >
                     <div className="report-vertical-chart__track">
                         <span

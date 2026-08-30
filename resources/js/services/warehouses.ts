@@ -12,15 +12,10 @@ export type Warehouse = {
     phone: string | null;
     updated_at: string | null;
     users_count: number;
+    sales_representatives_count?: number;
+    customers_count?: number;
+    active_trips_count?: number;
     regions: WarehouseRegion[];
-};
-export type WarehouseWay = {
-    id: number;
-    region_id: number;
-    code: string;
-    name: string;
-    notes: string | null;
-    is_active: boolean;
 };
 export type WarehouseRegion = {
     id: number;
@@ -28,7 +23,11 @@ export type WarehouseRegion = {
     name: string;
     notes: string | null;
     is_active: boolean;
-    ways: WarehouseWay[];
+    representatives_count?: number | null;
+    active_representatives_count?: number | null;
+    customers_count?: number | null;
+    active_customers_count?: number | null;
+    active_trips_count?: number | null;
 };
 export type CoverageInput = { name: string; notes: string; is_active: boolean };
 
@@ -99,8 +98,4 @@ export const warehouseApi = {
         ),
     updateRegion: (id: number, input: CoverageInput) =>
         request<{ data: WarehouseRegion }>(() => window.axios.put(`api/admin/regions/${id}`, input)),
-    createWay: (regionId: number, input: CoverageInput) =>
-        request<{ data: WarehouseWay }>(() => window.axios.post(`api/admin/regions/${regionId}/ways`, input)),
-    updateWay: (id: number, input: CoverageInput) =>
-        request<{ data: WarehouseWay }>(() => window.axios.put(`api/admin/ways/${id}`, input)),
 };

@@ -15,6 +15,7 @@ use App\Services\AuditLogger;
 use App\Services\CustomerPaymentPostingService;
 use App\Services\DocumentReferenceGenerator;
 use App\Services\IdempotencyService;
+use App\Services\PaymentMethodRegistry;
 use App\Services\WarehouseAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -31,6 +32,7 @@ class CustomerPaymentController extends Controller
         private readonly DocumentReferenceGenerator $references,
         private readonly IdempotencyService $idempotency,
         private readonly CustomerPaymentPostingService $posting,
+        private readonly PaymentMethodRegistry $paymentMethods,
         private readonly AuditLogger $auditLogger,
     ) {}
 
@@ -56,14 +58,14 @@ class CustomerPaymentController extends Controller
         $customers = Customer::query()->with('creditBalance')->whereIn('warehouse_id', $warehouseIds)->whereHas('creditBalance', fn ($query) => $query->where('outstanding_amount', '>', 0))->orderBy('name')->get()->map(fn (Customer $customer) => ['id' => $customer->id, 'code' => $customer->code, 'name' => $customer->name, 'warehouse_id' => $customer->warehouse_id, 'outstanding_amount' => (int) $customer->creditBalance->outstanding_amount]);
         $warehouses = Warehouse::query()->whereIn('id', $warehouseIds)->orderBy('name')->get(['id', 'code', 'name']);
 
-        return response()->json(['customers' => $customers, 'warehouses' => $warehouses, 'payment_methods' => ['cash', 'bank_transfer', 'mobile_money', 'cheque', 'other']]);
+        return response()->json(['customers' => $customers, 'warehouses' => $warehouses, 'payment_methods' => $this->paymentMethods->active()]);
     }
 
     public function index(Request $request): AnonymousResourceCollection
     {
         $data = $request->validate(['warehouse_id' => ['nullable', 'integer', 'exists:warehouses,id'], 'customer_id' => ['nullable', 'integer', 'exists:customers,id'], 'status' => ['nullable', Rule::enum(CustomerPaymentStatus::class)], 'search' => ['nullable', 'string', 'max:100'], 'per_page' => ['nullable', 'integer', 'min:10', 'max:100']]);
         $warehouseIds = $this->warehouseIds($request, $data['warehouse_id'] ?? null);
-        $query = CustomerPayment::query()->with($this->relations())->whereIn('warehouse_id', $warehouseIds)->when($data['customer_id'] ?? null, fn ($query, $id) => $query->where('customer_id', $id))->when($data['status'] ?? null, fn ($query, $status) => $query->where('status', $status))->when($data['search'] ?? null, fn ($query, $search) => $query->where(fn ($inner) => $inner->where('reference', 'like', "%{$search}%")->orWhere('payment_reference', 'like', "%{$search}%")))->latest('id');
+        $query = CustomerPayment::query()->with($this->relations())->whereIn('warehouse_id', $warehouseIds)->when($data['customer_id'] ?? null, fn ($query, $id) => $query->where('customer_id', $id))->when($data['status'] ?? null, fn ($query, $status) => $query->where('status', $status))->when($data['search'] ?? null, fn ($query, $search) => $query->where(fn ($inner) => $inner->where('reference', 'like', "%{$search}%")->orWhere('payment_reference', 'like', "%{$search}%")->orWhereHas('customer', fn ($customer) => $customer->where('code', 'like', "%{$search}%")->orWhere('name', 'like', "%{$search}%"))))->latest('id');
 
         $summary = [
             'draft_amount' => (int) (clone $query)->where('status', CustomerPaymentStatus::Draft)->sum('amount'),
@@ -124,7 +126,7 @@ class CustomerPaymentController extends Controller
     /** @return array<string, mixed> */
     private function rules(): array
     {
-        return ['customer_id' => ['required', 'integer', 'exists:customers,id'], 'amount' => ['required', 'integer', 'min:1', 'max:999999999999999'], 'payment_date' => ['required', 'date'], 'payment_method' => ['required', 'string', 'max:100'], 'payment_reference' => ['nullable', 'string', 'max:100'], 'notes' => ['nullable', 'string', 'max:2000']];
+        return ['customer_id' => ['required', 'integer', 'exists:customers,id'], 'amount' => ['required', 'integer', 'min:1', 'max:999999999999999'], 'payment_date' => ['required', 'date'], 'payment_method' => ['required', Rule::in($this->paymentMethods->activeKeys())], 'payment_reference' => ['nullable', 'string', 'max:100'], 'notes' => ['nullable', 'string', 'max:2000']];
     }
 
     private function customerInScope(Request $request, int $id): Customer
@@ -153,6 +155,6 @@ class CustomerPaymentController extends Controller
     /** @return list<string> */
     private function relations(): array
     {
-        return ['warehouse', 'customer', 'receiver', 'creator', 'poster', 'voider'];
+        return ['trip', 'representative', 'warehouse', 'customer', 'receiver', 'creator', 'poster', 'voider'];
     }
 }

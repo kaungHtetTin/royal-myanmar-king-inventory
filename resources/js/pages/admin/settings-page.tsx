@@ -11,10 +11,12 @@ import {
 import { Icon, type IconName } from '../../ui/icons';
 import { editableNumber } from '../../ui/form-values';
 import { PrintSettingsForm } from '../../ui/invoice-print-dialog';
+import { FontScaleSetting } from '../../ui/font-scale-setting';
 import { Button } from '../../ui/primitives';
 import { RoleManagementSection } from './access-management-page';
+import { useLocale } from '../../localization/locale-context';
 
-type Section = 'profile' | 'branding' | 'operations' | 'printing' | 'roles';
+type Section = 'profile' | 'appearance' | 'branding' | 'operations' | 'payments' | 'printing' | 'roles';
 
 const emptyProfile: ProfileInput = {
     current_password: '',
@@ -36,12 +38,17 @@ const emptySettings: SettingsInput = {
     logo: null,
     low_stock_threshold: 10,
     primary_color: '#087f74',
+    payment_methods: [
+        { key: 'cash', name: 'Cash', adds_to_cash_hold: true, is_active: true },
+        { key: 'banking', name: 'Banking', adds_to_cash_hold: false, is_active: true },
+    ],
     remove_favicon: false,
     remove_logo: false,
     timezone: 'Asia/Yangon',
 };
 const sections: Array<{ description: string; icon: IconName; id: Section; label: string }> = [
     { description: 'Your account and password', icon: 'users', id: 'profile', label: 'Admin profile' },
+    { description: 'Font size on this device', icon: 'adjustments', id: 'appearance', label: 'Display' },
     { description: 'Name, color and assets', icon: 'settings', id: 'branding', label: 'Business branding' },
     {
         description: 'Contacts and system defaults',
@@ -49,6 +56,7 @@ const sections: Array<{ description: string; icon: IconName; id: Section; label:
         id: 'operations',
         label: 'Operational defaults',
     },
+    { description: 'Cash and banking collection rules', icon: 'cash', id: 'payments', label: 'Payment methods' },
     { description: 'Default invoice paper for this device', icon: 'print', id: 'printing', label: 'Printing' },
     { description: 'Access profiles and permissions', icon: 'users', id: 'roles', label: 'Roles & permissions' },
 ];
@@ -80,21 +88,22 @@ function AssetPicker({
     onRemove: () => void;
     preview: string | null;
 }) {
+    const { t } = useLocale();
     return (
         <div className="settings-asset-picker">
             <span className="settings-asset-picker__preview">
-                {preview ? <img alt={`${label} preview`} src={preview} /> : <Icon name="box" size={20} />}
+                {preview ? <img alt={t('{label} preview', { label })} src={preview} /> : <Icon name="box" size={20} />}
             </span>
             <span className="settings-asset-picker__copy">
-                <strong>{label}</strong>
-                <small>{file?.name ?? (preview ? 'Current image' : 'No image uploaded')}</small>
+                <strong>{t(label)}</strong>
+                <small>{file?.name ?? t(preview ? 'Current image' : 'No image uploaded')}</small>
             </span>
             <label className="ui-button ui-button--secondary settings-upload-button">
                 <Icon name="plus" size={15} />
-                <span>Choose</span>
+                <span>{t('Choose')}</span>
                 <input
                     accept={accept}
-                    aria-label={`Choose ${label.toLowerCase()}`}
+                    aria-label={t('Choose {label}', { label })}
                     onChange={(event) => onChange(event.target.files?.[0] ?? null)}
                     type="file"
                 />
@@ -103,7 +112,7 @@ function AssetPicker({
                 <button
                     className="ui-icon-button ui-icon-button--danger"
                     onClick={onRemove}
-                    title={`Remove ${label}`}
+                    title={t('Remove {label}', { label })}
                     type="button"
                 >
                     <Icon name="x" size={16} />
@@ -114,6 +123,7 @@ function AssetPicker({
 }
 
 export function SettingsPage() {
+    const { t } = useLocale();
     const { setBranding } = useBranding();
     const { updateUser } = useSession();
     const [section, setSection] = useState<Section>('profile');
@@ -152,7 +162,7 @@ export function SettingsPage() {
                 setError('');
             })
             .catch((requestError) =>
-                setError(requestError instanceof Error ? requestError.message : 'Unable to load settings.'),
+                setError(requestError instanceof Error ? requestError.message : t('Unable to load settings.')),
             )
             .finally(() => {
                 if (active) setLoading(false);
@@ -160,7 +170,7 @@ export function SettingsPage() {
         return () => {
             active = false;
         };
-    }, []);
+    }, [t]);
 
     useEffect(
         () => () => {
@@ -185,10 +195,10 @@ export function SettingsPage() {
             const updated: AdminProfile = response.profile;
             updateUser({ email: updated.email, name: updated.name, username: updated.username });
             setProfile((value) => ({ ...value, current_password: '', password: '', password_confirmation: '' }));
-            showNotice('Admin profile updated.');
+            showNotice(t('Admin profile updated.'));
         } catch (requestError) {
             const failure =
-                requestError instanceof SettingsError ? requestError : new SettingsError('Unable to save profile.');
+                requestError instanceof SettingsError ? requestError : new SettingsError(t('Unable to save profile.'));
             setError(failure.message);
             setFields(failure.fields);
         } finally {
@@ -218,10 +228,10 @@ export function SettingsPage() {
                 remove_favicon: false,
                 remove_logo: false,
             }));
-            showNotice(section === 'branding' ? 'Business branding updated.' : 'Operational defaults updated.');
+            showNotice(t(section === 'branding' ? 'Business branding updated.' : section === 'payments' ? 'Payment methods updated.' : 'Operational defaults updated.'));
         } catch (requestError) {
             const failure =
-                requestError instanceof SettingsError ? requestError : new SettingsError('Unable to save settings.');
+                requestError instanceof SettingsError ? requestError : new SettingsError(t('Unable to save settings.'));
             setError(failure.message);
             setFields(failure.fields);
         } finally {
@@ -233,9 +243,13 @@ export function SettingsPage() {
         <div className="admin-page settings-page">
             <header className="page-heading">
                 <div>
-                    <p className="ui-eyebrow">Office configuration</p>
-                    <h1>Application settings</h1>
-                    <p>Manage your account, visual identity, printing, contact details, and operational defaults.</p>
+                    <p className="ui-eyebrow">{t('Office configuration')}</p>
+                    <h1>{t('Application settings')}</h1>
+                    <p>
+                        {t(
+                            'Manage your account, visual identity, printing, contact details, and operational defaults.',
+                        )}
+                    </p>
                 </div>
             </header>
 
@@ -253,10 +267,10 @@ export function SettingsPage() {
             ) : null}
 
             <div className="settings-workspace">
-                <aside className="settings-index" aria-label="Settings sections">
+                <aside className="settings-index" aria-label={t('Settings sections')}>
                     <header>
-                        <p className="ui-eyebrow">Configuration</p>
-                        <h2>Application</h2>
+                        <p className="ui-eyebrow">{t('Configuration')}</p>
+                        <h2>{t('Application')}</h2>
                     </header>
                     <nav>
                         {sections.map((item) => (
@@ -275,8 +289,8 @@ export function SettingsPage() {
                                     <Icon name={item.icon} size={17} />
                                 </span>
                                 <span>
-                                    <strong>{item.label}</strong>
-                                    <small>{item.description}</small>
+                                    <strong>{t(item.label)}</strong>
+                                    <small>{t(item.description)}</small>
                                 </span>
                             </button>
                         ))}
@@ -287,7 +301,7 @@ export function SettingsPage() {
                     {loading ? (
                         <div className="ui-loading" role="status">
                             <span />
-                            Loading settings…
+                            {t('Loading settings…')}
                         </div>
                     ) : null}
                     {!loading && section === 'profile' ? (
@@ -330,8 +344,8 @@ export function SettingsPage() {
                                 <header>
                                     <Icon name="warning" size={17} />
                                     <div>
-                                        <strong>Change password</strong>
-                                        <small>Leave these fields blank to keep your current password.</small>
+                                        <strong>{t('Change password')}</strong>
+                                        <small>{t('Leave these fields blank to keep your current password.')}</small>
                                     </div>
                                 </header>
                                 <div className="settings-form-grid settings-form-grid--password">
@@ -383,6 +397,17 @@ export function SettingsPage() {
                         </form>
                     ) : null}
 
+                    {!loading && section === 'appearance' ? (
+                        <div>
+                            <SettingsHeading
+                                eyebrow="Device preference"
+                                title="Display"
+                                description="Adjust application text for this device without changing other users or devices."
+                            />
+                            <FontScaleSetting />
+                        </div>
+                    ) : null}
+
                     {!loading && section === 'branding' ? (
                         <form onSubmit={saveApplication}>
                             <SettingsHeading
@@ -396,9 +421,11 @@ export function SettingsPage() {
                                         <header>
                                             <Icon name="settings" size={17} />
                                             <div>
-                                                <strong>Brand identity</strong>
+                                                <strong>{t('Brand identity')}</strong>
                                                 <small>
-                                                    Business name, short description, and primary interface color.
+                                                    {t(
+                                                        'Business name, short description, and primary interface color.',
+                                                    )}
                                                 </small>
                                             </div>
                                         </header>
@@ -438,7 +465,7 @@ export function SettingsPage() {
                                             >
                                                 <div className="settings-color-field">
                                                     <input
-                                                        aria-label="Choose primary color"
+                                                        aria-label={t('Choose primary color')}
                                                         onChange={(event) =>
                                                             setSettings((value) => ({
                                                                 ...value,
@@ -449,7 +476,7 @@ export function SettingsPage() {
                                                         value={settings.primary_color}
                                                     />
                                                     <input
-                                                        aria-label="Primary color hex value"
+                                                        aria-label={t('Primary color hex value')}
                                                         onChange={(event) =>
                                                             setSettings((value) => ({
                                                                 ...value,
@@ -467,8 +494,10 @@ export function SettingsPage() {
                                         <header>
                                             <Icon name="box" size={17} />
                                             <div>
-                                                <strong>Brand assets</strong>
-                                                <small>PNG, JPG, or WebP. Logo up to 2 MB; favicon up to 1 MB.</small>
+                                                <strong>{t('Brand assets')}</strong>
+                                                <small>
+                                                    {t('PNG, JPG, or WebP. Logo up to 2 MB; favicon up to 1 MB.')}
+                                                </small>
                                             </div>
                                         </header>
                                         <div className="settings-assets">
@@ -536,8 +565,8 @@ export function SettingsPage() {
                                 <header>
                                     <Icon name="building" size={17} />
                                     <div>
-                                        <strong>Business contact</strong>
-                                        <small>Used on invoices and administrative records.</small>
+                                        <strong>{t('Business contact')}</strong>
+                                        <small>{t('Used on invoices and administrative records.')}</small>
                                     </div>
                                 </header>
                                 <div className="settings-form-grid">
@@ -587,8 +616,8 @@ export function SettingsPage() {
                                 <header>
                                     <Icon name="adjustments" size={17} />
                                     <div>
-                                        <strong>Application defaults</strong>
-                                        <small>Currency, local time, stock alerts, and invoice message.</small>
+                                        <strong>{t('Application defaults')}</strong>
+                                        <small>{t('Currency, local time, stock alerts, and invoice message.')}</small>
                                     </div>
                                 </header>
                                 <div className="settings-form-grid">
@@ -602,10 +631,10 @@ export function SettingsPage() {
                                             }
                                             value={settings.currency_code}
                                         >
-                                            <option value="MMK">MMK — Myanmar Kyat</option>
-                                            <option value="USD">USD — US Dollar</option>
-                                            <option value="THB">THB — Thai Baht</option>
-                                            <option value="CNY">CNY — Chinese Yuan</option>
+                                            <option value="MMK">{t('MMK — Myanmar Kyat')}</option>
+                                            <option value="USD">{t('USD — US Dollar')}</option>
+                                            <option value="THB">{t('THB — Thai Baht')}</option>
+                                            <option value="CNY">{t('CNY — Chinese Yuan')}</option>
                                         </select>
                                     </Field>
                                     <Field error={fieldError(fields, 'timezone')} label="Timezone">
@@ -615,10 +644,10 @@ export function SettingsPage() {
                                             }
                                             value={settings.timezone}
                                         >
-                                            <option value="Asia/Yangon">Asia/Yangon (UTC+06:30)</option>
-                                            <option value="Asia/Bangkok">Asia/Bangkok (UTC+07:00)</option>
-                                            <option value="Asia/Singapore">Asia/Singapore (UTC+08:00)</option>
-                                            <option value="UTC">UTC</option>
+                                            <option value="Asia/Yangon">{t('Asia/Yangon (UTC+06:30)')}</option>
+                                            <option value="Asia/Bangkok">{t('Asia/Bangkok (UTC+07:00)')}</option>
+                                            <option value="Asia/Singapore">{t('Asia/Singapore (UTC+08:00)')}</option>
+                                            <option value="UTC">{t('UTC')}</option>
                                         </select>
                                     </Field>
                                     <Field
@@ -651,7 +680,7 @@ export function SettingsPage() {
                                                     invoice_footer: event.target.value,
                                                 }))
                                             }
-                                            placeholder="Thank you for your business."
+                                            placeholder={t('Thank you for your business.')}
                                             rows={3}
                                             value={settings.invoice_footer}
                                         />
@@ -659,6 +688,118 @@ export function SettingsPage() {
                                 </div>
                             </section>
                             <SaveBar label="Save defaults" saving={saving} />
+                        </form>
+                    ) : null}
+                    {!loading && section === 'payments' ? (
+                        <form onSubmit={saveApplication}>
+                            <SettingsHeading
+                                eyebrow="Collection rules"
+                                title="Payment methods"
+                                description="Define the methods available for paid sales and customer credit collections. Only methods marked as cash custody increase a representative's cash hold."
+                            />
+                            <section className="settings-subsection payment-method-settings">
+                                <header>
+                                    <Icon name="cash" size={17} />
+                                    <div>
+                                        <strong>{t('Available methods')}</strong>
+                                        <small>{t('Cash and Banking are provided by default. Add only the methods your team actually uses.')}</small>
+                                    </div>
+                                    <Button
+                                        icon="plus"
+                                        onClick={() =>
+                                            setSettings((value) => ({
+                                                ...value,
+                                                payment_methods: [
+                                                    ...value.payment_methods,
+                                                    {
+                                                        key: `method_${Date.now()}`,
+                                                        name: '',
+                                                        adds_to_cash_hold: false,
+                                                        is_active: true,
+                                                    },
+                                                ],
+                                            }))
+                                        }
+                                        type="button"
+                                    >
+                                        {t('Add method')}
+                                    </Button>
+                                </header>
+                                <div className="payment-method-list">
+                                    {settings.payment_methods.map((method, index) => (
+                                        <article className="payment-method-row" key={`${method.key}-${index}`}>
+                                            <div className="payment-method-row__identity">
+                                                <span><Icon name={method.adds_to_cash_hold ? 'cash' : 'building'} size={17} /></span>
+                                                <label className="settings-field">
+                                                    <strong>{t('Display name')}</strong>
+                                                    <input
+                                                        aria-label={t('Payment method name')}
+                                                        maxLength={80}
+                                                        onChange={(event) =>
+                                                            setSettings((value) => ({
+                                                                ...value,
+                                                                payment_methods: value.payment_methods.map((item, itemIndex) =>
+                                                                    itemIndex === index ? { ...item, name: event.target.value } : item,
+                                                                ),
+                                                            }))
+                                                        }
+                                                        placeholder={t('e.g. Mobile banking')}
+                                                        required
+                                                        value={method.name}
+                                                    />
+                                                </label>
+                                            </div>
+                                            <label className="settings-field payment-method-row__behavior">
+                                                <strong>{t('Cash-hold behavior')}</strong>
+                                                <select
+                                                    onChange={(event) =>
+                                                        setSettings((value) => ({
+                                                            ...value,
+                                                            payment_methods: value.payment_methods.map((item, itemIndex) =>
+                                                                itemIndex === index ? { ...item, adds_to_cash_hold: event.target.value === 'cash' } : item,
+                                                            ),
+                                                        }))
+                                                    }
+                                                    value={method.adds_to_cash_hold ? 'cash' : 'direct'}
+                                                >
+                                                    <option value="cash">{t('Add to representative cash hold')}</option>
+                                                    <option value="direct">{t('Paid directly / banking')}</option>
+                                                </select>
+                                            </label>
+                                            <label className="payment-method-row__toggle">
+                                                <input
+                                                    checked={method.is_active}
+                                                    onChange={(event) =>
+                                                        setSettings((value) => ({
+                                                            ...value,
+                                                            payment_methods: value.payment_methods.map((item, itemIndex) =>
+                                                                itemIndex === index ? { ...item, is_active: event.target.checked } : item,
+                                                            ),
+                                                        }))
+                                                    }
+                                                    type="checkbox"
+                                                />
+                                                <span>{t('Active')}</span>
+                                            </label>
+                                            <button
+                                                aria-label={t('Remove {name}', { name: method.name || t('payment method') })}
+                                                className="ui-icon-button ui-icon-button--danger"
+                                                disabled={settings.payment_methods.length === 1}
+                                                onClick={() => setSettings((value) => ({ ...value, payment_methods: value.payment_methods.filter((_, itemIndex) => itemIndex !== index) }))}
+                                                type="button"
+                                            >
+                                                <Icon name="x" size={16} />
+                                            </button>
+                                        </article>
+                                    ))}
+                                </div>
+                                {fieldError(fields, 'payment_methods') ? <small className="ui-field__error">{fieldError(fields, 'payment_methods')}</small> : null}
+                                <div className="payment-method-note">
+                                    <Icon name="warning" size={16} />
+                                    <span>{t('Only cash-custody methods become money the representative must return to the office. All methods remain visible in trip reporting.')}</span>
+                                </div>
+                            </section>
+                            <SaveBar label="Save payment methods" saving={saving} />
                         </form>
                     ) : null}
                     {!loading && section === 'printing' ? (
@@ -679,11 +820,12 @@ export function SettingsPage() {
 }
 
 function SettingsHeading({ description, eyebrow, title }: { description: string; eyebrow: string; title: string }) {
+    const { t } = useLocale();
     return (
         <header className="settings-editor-heading">
-            <p className="ui-eyebrow">{eyebrow}</p>
-            <h2>{title}</h2>
-            <p>{description}</p>
+            <p className="ui-eyebrow">{t(eyebrow)}</p>
+            <h2>{t(title)}</h2>
+            <p>{t(description)}</p>
         </header>
     );
 }
@@ -699,9 +841,10 @@ function Field({
     error?: string;
     label: string;
 }) {
+    const { t } = useLocale();
     return (
         <label className={`ui-field settings-field ${className}`.trim()}>
-            <span>{label}</span>
+            <span>{t(label)}</span>
             {children}
             {error ? <small className="ui-field__error">{error}</small> : null}
         </label>
@@ -709,33 +852,35 @@ function Field({
 }
 
 function SaveBar({ label, saving }: { label: string; saving: boolean }) {
+    const { t } = useLocale();
     return (
         <footer className="settings-save-bar">
-            <span>Changes take effect across both portals after saving.</span>
+            <span>{t('Changes take effect across both portals after saving.')}</span>
             <Button disabled={saving} icon="check" requiresOnline tone="primary" type="submit">
-                {saving ? 'Saving…' : label}
+                {saving ? t('Saving…') : t(label)}
             </Button>
         </footer>
     );
 }
 
 function BrandPreview({ color, logo, name }: { color: string; logo: string | null; name: string }) {
+    const { t } = useLocale();
     return (
         <aside className="settings-brand-preview">
             <header>
                 <div>
-                    <strong>Live preview</strong>
-                    <small>Admin console</small>
+                    <strong>{t('Live preview')}</strong>
+                    <small>{t('Admin console')}</small>
                 </div>
                 <span>
                     <i style={{ background: color }} />
-                    Primary
+                    {t('Primary')}
                 </span>
             </header>
             <div className="settings-brand-preview__window">
                 <div className="settings-brand-preview__top">
                     <span>{logo ? <img alt="" src={logo} /> : <Icon name="box" size={16} />}</span>
-                    <strong>{name || 'Business name'}</strong>
+                    <strong>{name || t('Business name')}</strong>
                     <i />
                     <i />
                     <i />
@@ -746,7 +891,7 @@ function BrandPreview({ color, logo, name }: { color: string; logo: string | nul
                         <span />
                         <span />
                         <button style={{ background: color }} type="button">
-                            Action
+                            {t('Action')}
                         </button>
                     </main>
                 </div>
@@ -754,7 +899,7 @@ function BrandPreview({ color, logo, name }: { color: string; logo: string | nul
             <footer>
                 <i style={{ background: color }} />
                 <span>
-                    <small>Primary token</small>
+                    <small>{t('Primary token')}</small>
                     <strong>{color}</strong>
                 </span>
             </footer>

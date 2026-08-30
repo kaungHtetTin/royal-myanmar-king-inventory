@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CustomerPayment extends Model
 {
-    protected $fillable = ['reference', 'warehouse_id', 'customer_id', 'amount', 'payment_date', 'payment_method', 'payment_reference', 'notes', 'status', 'received_by', 'created_by', 'posted_by', 'posted_at', 'voided_by', 'voided_at', 'void_reason'];
+    protected $fillable = ['reference', 'trip_id', 'sales_representative_id', 'warehouse_id', 'customer_id', 'amount', 'payment_date', 'payment_method', 'payment_reference', 'notes', 'status', 'received_by', 'created_by', 'posted_by', 'posted_at', 'voided_by', 'voided_at', 'void_reason'];
 
     protected function casts(): array
     {
@@ -18,6 +18,16 @@ class CustomerPayment extends Model
     public function warehouse(): BelongsTo
     {
         return $this->belongsTo(Warehouse::class);
+    }
+
+    public function trip(): BelongsTo
+    {
+        return $this->belongsTo(Trip::class);
+    }
+
+    public function representative(): BelongsTo
+    {
+        return $this->belongsTo(SalesRepresentative::class, 'sales_representative_id');
     }
 
     public function customer(): BelongsTo

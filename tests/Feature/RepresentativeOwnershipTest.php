@@ -117,7 +117,6 @@ class RepresentativeOwnershipTest extends TestCase
     {
         $warehouse = Warehouse::query()->create(compact('code', 'name'));
         $region = $warehouse->regions()->create(['name' => $name.' Region', 'is_active' => true]);
-        $region->ways()->create(['code' => 'WAY-'.$code, 'name' => $name.' Way', 'is_active' => true]);
 
         return $warehouse;
     }

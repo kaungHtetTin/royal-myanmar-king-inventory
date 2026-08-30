@@ -6,7 +6,6 @@ use App\Models\Customer;
 use App\Models\Product;
 use App\Models\Region;
 use App\Models\SalesRepresentative;
-use App\Models\Way;
 use Database\Seeders\AccessControlSeeder;
 use Database\Seeders\CustomerSeeder;
 use Database\Seeders\DatabaseSeeder;
@@ -34,16 +33,14 @@ class DemoDataArchitectureSeederTest extends TestCase
 
         $this->assertDatabaseCount('warehouses', 3);
         $this->assertDatabaseCount('regions', 6);
-        $this->assertDatabaseCount('ways', 12);
-        $this->assertSame(6, Way::query()->distinct()->count('region_id'));
 
         $representative = SalesRepresentative::query()->where('code', 'SR-001')->firstOrFail();
         $this->assertCount(2, $representative->regions);
 
-        $customer = Customer::query()->where('code', 'CUS-SHWE')->with('way.region')->firstOrFail();
-        $this->assertSame('Tamwe', $customer->way->name);
-        $this->assertSame('Yangon East', $customer->way->region->name);
-        $this->assertSame($customer->warehouse_id, $customer->way->region->warehouse_id);
+        $customer = Customer::query()->where('code', 'CUS-SHWE')->with('assignedRegion')->firstOrFail();
+        $this->assertSame('Tamwe', $customer->township);
+        $this->assertSame('Yangon East', $customer->assignedRegion->name);
+        $this->assertSame($customer->warehouse_id, $customer->assignedRegion->warehouse_id);
 
         $product = Product::query()->where('sku', 'DW-1L')->with('units.regionPrices')->firstOrFail();
         $this->assertSame('bottle', $product->units->firstWhere('is_base', true)->name);

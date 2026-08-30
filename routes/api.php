@@ -22,20 +22,21 @@ use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\StockAdjustmentController;
 use App\Http\Controllers\Admin\StockImportController;
 use App\Http\Controllers\Admin\TransferOptionController;
+use App\Http\Controllers\Admin\TripController as AdminTripController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\VehicleController;
 use App\Http\Controllers\Admin\WarehouseController;
 use App\Http\Controllers\Admin\WarehouseTransferController;
-use App\Http\Controllers\Admin\WayController;
 use App\Http\Controllers\Auth\SessionController;
 use App\Http\Controllers\BrandingController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\Sales\CashController as SalesCashController;
+use App\Http\Controllers\Sales\CreditCollectionController;
 use App\Http\Controllers\Sales\CustomerController as SalesCustomerController;
 use App\Http\Controllers\Sales\DashboardController as SalesDashboardController;
-use App\Http\Controllers\Sales\ReportController as SalesReportController;
 use App\Http\Controllers\Sales\RepresentativeStockController;
 use App\Http\Controllers\Sales\SaleController as SalesSaleController;
+use App\Http\Controllers\Sales\TripController as SalesTripController;
 use App\Http\Controllers\SalesRepresentativeController;
 use Illuminate\Support\Facades\Route;
 
@@ -81,11 +82,6 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:'.PermissionName::WarehouseEdit->value);
         Route::put('/regions/{region}', [RegionController::class, 'update'])
             ->middleware('permission:'.PermissionName::WarehouseEdit->value);
-        Route::post('/regions/{region}/ways', [WayController::class, 'store'])
-            ->middleware('permission:'.PermissionName::WarehouseEdit->value);
-        Route::put('/ways/{way}', [WayController::class, 'update'])
-            ->middleware('permission:'.PermissionName::WarehouseEdit->value);
-
         Route::get('/products', [ProductController::class, 'index'])
             ->middleware('permission:'.PermissionName::ProductView->value);
         Route::get('/products/{product}', [ProductController::class, 'show'])
@@ -185,11 +181,25 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
         Route::get('/sales/{sale}', [AdminSaleController::class, 'show'])->middleware('permission:'.PermissionName::SaleView->value);
         Route::post('/sales/{sale}/void', [AdminSaleController::class, 'void'])->middleware('permission:'.PermissionName::SaleVoid->value);
 
+        Route::middleware('permission:'.PermissionName::TripView->value)->group(function (): void {
+            Route::get('/trips', [AdminTripController::class, 'index']);
+            Route::get('/trip-options', [AdminTripController::class, 'options']);
+            Route::get('/trips/{trip}', [AdminTripController::class, 'show']);
+        });
+        Route::middleware('permission:'.PermissionName::TripManage->value)->group(function (): void {
+            Route::post('/trips', [AdminTripController::class, 'store']);
+            Route::post('/trips/{trip}/start', [AdminTripController::class, 'start']);
+            Route::post('/trips/{trip}/begin-ending', [AdminTripController::class, 'beginEnding']);
+            Route::post('/trips/{trip}/cancel', [AdminTripController::class, 'cancel']);
+        });
+        Route::post('/trips/{trip}/complete', [AdminTripController::class, 'complete'])->middleware('permission:'.PermissionName::TripClose->value);
+
         Route::middleware('permission:'.PermissionName::CashView->value)->group(function (): void {
             Route::get('/cash-balances', [AdminCashController::class, 'balances']);
             Route::get('/cash-submissions', [AdminCashController::class, 'submissions']);
         });
         Route::post('/cash-submissions/{cashSubmission}/confirm', [AdminCashController::class, 'confirm'])->middleware('permission:'.PermissionName::CashConfirm->value);
+        Route::post('/cash-submissions', [AdminCashController::class, 'store'])->middleware('permission:'.PermissionName::CashConfirm->value);
         Route::post('/cash-submissions/{cashSubmission}/reverse', [AdminCashController::class, 'reverse'])->middleware('permission:'.PermissionName::CashReverse->value);
 
         Route::middleware('permission:'.PermissionName::CustomerPaymentView->value)->group(function (): void {
@@ -206,8 +216,6 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
 
         Route::middleware('permission:'.PermissionName::ReportView->value)->group(function (): void {
             Route::get('/report-options', [AdminReportController::class, 'options']);
-            Route::get('/reports/way-sales-power/export', [AdminReportController::class, 'exportWaySalesPower']);
-            Route::get('/reports/stock-issues/export', [AdminReportController::class, 'exportStockIssues']);
             Route::get('/reports/{report}', [AdminReportController::class, 'show']);
         });
         Route::get('/audit-logs', AuditLogController::class)->middleware('permission:'.PermissionName::AuditView->value);
@@ -253,25 +261,30 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             Route::post('/receivings/{representativeTransfer}/receive', [RepresentativeStockController::class, 'receive'])
                 ->middleware('permission:'.PermissionName::RepresentativeStockReceive->value);
             Route::get('/sales', [SalesSaleController::class, 'index'])->middleware('permission:'.PermissionName::SaleView->value);
+            Route::get('/sale-history-options', [SalesSaleController::class, 'historyOptions'])->middleware('permission:'.PermissionName::SaleView->value);
             Route::get('/sales/{sale}', [SalesSaleController::class, 'show'])->middleware('permission:'.PermissionName::SaleView->value);
             Route::get('/sale-options', [SalesSaleController::class, 'options'])->middleware('permission:'.PermissionName::SaleCreate->value);
             Route::middleware('permission:'.PermissionName::SaleCreate->value)->group(function (): void {
+                Route::get('/customer-options', [SalesCustomerController::class, 'options']);
                 Route::get('/customers', [SalesCustomerController::class, 'index']);
                 Route::post('/customers', [SalesCustomerController::class, 'store']);
+                Route::post('/credit-collections', [CreditCollectionController::class, 'store']);
                 Route::post('/sales', [SalesSaleController::class, 'store']);
                 Route::put('/sales/{sale}', [SalesSaleController::class, 'update']);
+                Route::delete('/sales/{sale}', [SalesSaleController::class, 'destroy']);
                 Route::post('/sales/{sale}/post', [SalesSaleController::class, 'post']);
             });
+            Route::middleware('permission:'.PermissionName::TripView->value)->group(function (): void {
+                Route::get('/current-trip', [SalesTripController::class, 'current']);
+                Route::post('/trips/{trip}/begin-ending', [SalesTripController::class, 'beginEnding']);
+            });
+            Route::post('/trips/{trip}/expenses', [SalesTripController::class, 'expense'])->middleware('permission:'.PermissionName::TripExpenseCreate->value);
             Route::get('/cash-hold', [SalesCashController::class, 'overview'])->middleware('permission:'.PermissionName::CashView->value);
             Route::get('/cash-submissions', [SalesCashController::class, 'index'])->middleware('permission:'.PermissionName::CashView->value);
             Route::get('/cash-transactions', [SalesCashController::class, 'transactions'])->middleware('permission:'.PermissionName::CashView->value);
             Route::middleware('permission:'.PermissionName::CashSubmit->value)->group(function (): void {
                 Route::post('/cash-submissions', [SalesCashController::class, 'store']);
                 Route::post('/cash-submissions/{cashSubmission}/cancel', [SalesCashController::class, 'cancel']);
-            });
-            Route::middleware('permission:'.PermissionName::ReportView->value)->group(function (): void {
-                Route::get('/report-options', [SalesReportController::class, 'options']);
-                Route::get('/reports/sales', [SalesReportController::class, 'sales']);
             });
         });
     });

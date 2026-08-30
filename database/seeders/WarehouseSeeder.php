@@ -4,7 +4,6 @@ namespace Database\Seeders;
 
 use App\Models\Region;
 use App\Models\Warehouse;
-use App\Models\Way;
 use Illuminate\Database\Seeder;
 
 class WarehouseSeeder extends Seeder
@@ -17,7 +16,6 @@ class WarehouseSeeder extends Seeder
             ['code' => 'NPT-MAIN', 'name' => 'Nay Pyi Taw Warehouse', 'address' => 'Nay Pyi Taw distribution hub', 'regions' => ['Nay Pyi Taw North' => ['Zabuthiri', 'Ottarathiri'], 'Nay Pyi Taw South' => ['Dekkhinathiri', 'Pobbathiri']]],
         ];
 
-        $wayNumber = 1;
         foreach ($warehouses as $warehouse) {
             $model = Warehouse::query()->updateOrCreate(['code' => $warehouse['code']], [
                 'name' => $warehouse['name'],
@@ -25,19 +23,11 @@ class WarehouseSeeder extends Seeder
                 'notes' => 'Demonstration warehouse with regional sales coverage.', 'is_active' => true,
             ]);
 
-            foreach ($warehouse['regions'] as $regionName => $ways) {
-                $region = Region::query()->updateOrCreate(
+            foreach (array_keys($warehouse['regions']) as $regionName) {
+                Region::query()->updateOrCreate(
                     ['warehouse_id' => $model->id, 'name' => $regionName],
                     ['notes' => null, 'is_active' => true],
                 );
-                foreach ($ways as $wayName) {
-                    $way = Way::query()->where('region_id', $region->id)->where('name', $wayName)->first()
-                        ?? new Way(['region_id' => $region->id, 'name' => $wayName]);
-                    $way->fill(['notes' => null, 'is_active' => true]);
-                    $way->code ??= 'WAY-'.str_pad((string) $wayNumber, 6, '0', STR_PAD_LEFT);
-                    $way->save();
-                    $wayNumber++;
-                }
             }
         }
     }

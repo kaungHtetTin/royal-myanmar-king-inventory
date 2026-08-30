@@ -4,7 +4,9 @@ namespace App\Services;
 
 use App\Enums\StockMovementType;
 use App\Enums\TransferStatus;
+use App\Enums\TripStatus;
 use App\Exceptions\DomainConflictException;
+use App\Models\RepresentativeInventory;
 use App\Models\RepresentativeTransfer;
 use App\Models\StockMovement;
 use App\Models\User;
@@ -30,6 +32,9 @@ class RepresentativeTransferPostingService
             $this->requireStatus($transfer, TransferStatus::Draft);
             if ($transfer->direction !== 'issue') {
                 throw new DomainConflictException('Representative returns must use the return posting command.', 'INVALID_DOCUMENT_DIRECTION');
+            }
+            if (! $transfer->trip || ! in_array($transfer->trip->status, [TripStatus::Planning, TripStatus::Operation], true)) {
+                throw new DomainConflictException('Stock issues require a planning or operating trip.', 'INVALID_TRIP_STATE');
             }
             $this->assertPostable($transfer);
             $productIds = $transfer->items->pluck('product_id')->all();
@@ -89,8 +94,40 @@ class RepresentativeTransferPostingService
             if ($transfer->direction !== 'return') {
                 throw new DomainConflictException('Only representative return documents support this command.', 'INVALID_DOCUMENT_DIRECTION');
             }
+            if ($transfer->trip && $transfer->trip->status !== TripStatus::Ending) {
+                throw new DomainConflictException('Trip-linked stock returns require the trip to be in ending state.', 'INVALID_TRIP_STATE');
+            }
             $this->assertPostable($transfer);
-            $productIds = $transfer->items->pluck('product_id')->all();
+            $heldBalances = RepresentativeInventory::query()
+                ->where('sales_representative_id', $transfer->sales_representative_id)
+                ->where(fn ($query) => $query->where('quantity', '>', 0)->orWhere('foc_quantity', '>', 0))
+                ->orderBy('product_id')
+                ->lockForUpdate()
+                ->get();
+            $held = $heldBalances->mapWithKeys(fn (RepresentativeInventory $balance): array => [
+                $balance->product_id => [(int) $balance->quantity, (int) $balance->foc_quantity],
+            ])->all();
+            $returning = $transfer->items->mapWithKeys(fn ($item): array => [
+                $item->product_id => [(int) $item->base_quantity, (int) $item->foc_base_quantity],
+            ])->all();
+            ksort($held);
+            ksort($returning);
+            $invalidReturn = $transfer->trip
+                ? $returning !== $held
+                : collect($returning)->contains(function (array $quantities, int $productId) use ($held): bool {
+                    $available = $held[$productId] ?? [0, 0];
+
+                    return $quantities[0] > $available[0] || $quantities[1] > $available[1];
+                });
+            if ($held === [] || $invalidReturn) {
+                throw new DomainConflictException(
+                    $transfer->trip
+                        ? 'Return every paid and FOC unit currently held by the representative. Partial stock returns are not allowed.'
+                        : 'A return quantity exceeds the stock currently held by the representative.',
+                    'INCOMPLETE_REPRESENTATIVE_RETURN',
+                );
+            }
+            $productIds = array_keys($held);
             $representativeBalances = $this->representatives->lock($transfer->sales_representative_id, $productIds);
             $warehouseBalances = $this->warehouses->lock($transfer->source_warehouse_id, $productIds);
             $occurredAt = now();
@@ -173,7 +210,7 @@ class RepresentativeTransferPostingService
 
     private function locked(RepresentativeTransfer $transfer): RepresentativeTransfer
     {
-        return RepresentativeTransfer::query()->with(['sourceWarehouse', 'representative', 'items.product', 'items.unit', 'items.focUnit'])->lockForUpdate()->findOrFail($transfer->id);
+        return RepresentativeTransfer::query()->with(['trip', 'sourceWarehouse', 'representative', 'items.product', 'items.unit', 'items.focUnit'])->lockForUpdate()->findOrFail($transfer->id);
     }
 
     private function requireStatus(RepresentativeTransfer $transfer, TransferStatus $status): void

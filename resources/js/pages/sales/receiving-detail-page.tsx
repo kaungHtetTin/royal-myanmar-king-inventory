@@ -3,15 +3,13 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { transferApi, type RepresentativeTransfer } from '../../services/transfers';
 import { Icon } from '../../ui/icons';
 import { Button, Dialog, StatusBadge } from '../../ui/primitives';
+import { useLocale } from '../../localization/locale-context';
 
-const dateTime = (value: string | null) =>
-    value
-        ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
-        : '—';
-const message = (error: unknown) => (error instanceof Error ? error.message : 'Unable to load this receiving.');
-const number = (value: number) => new Intl.NumberFormat('en-US').format(value);
+const message = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 
 export function ReceivingDetailPage() {
+    const { formatDateTime, formatNumber, t } = useLocale();
+    const dateTime = (value: string | null) => (value ? formatDateTime(value) : '—');
     const { transferId } = useParams();
     const navigate = useNavigate();
     const id = Number(transferId);
@@ -26,11 +24,11 @@ export function ReceivingDetailPage() {
         try {
             setTransfer((await transferApi.ownReceiving(id)).data);
         } catch (requestError) {
-            setError(message(requestError));
+            setError(message(requestError, t('Unable to load this receiving.')));
         } finally {
             setLoading(false);
         }
-    }, [id]);
+    }, [id, t]);
     useEffect(() => {
         let active = true;
         void transferApi
@@ -39,7 +37,7 @@ export function ReceivingDetailPage() {
                 if (active) setTransfer(response.data);
             })
             .catch((requestError) => {
-                if (active) setError(message(requestError));
+                if (active) setError(message(requestError, t('Unable to load this receiving.')));
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -47,7 +45,7 @@ export function ReceivingDetailPage() {
         return () => {
             active = false;
         };
-    }, [id]);
+    }, [id, t]);
     const submit = async () => {
         if (!transfer) return;
         setWorking(true);
@@ -56,7 +54,7 @@ export function ReceivingDetailPage() {
             await transferApi.receiveOwn(transfer.id);
             navigate('/sales/dashboard');
         } catch (requestError) {
-            setError(message(requestError));
+            setError(message(requestError, t('Unable to load this receiving.')));
         } finally {
             setWorking(false);
         }
@@ -65,7 +63,7 @@ export function ReceivingDetailPage() {
         return (
             <div className="ui-loading" role="status">
                 <span />
-                Loading receiving…
+                {t('Loading receiving…')}
             </div>
         );
     if (!transfer)
@@ -73,18 +71,18 @@ export function ReceivingDetailPage() {
             <div className="receiving-detail-page">
                 <Link className="sale-detail-back" to="/sales/dashboard">
                     <Icon name="chevronLeft" size={13} />
-                    Dashboard
+                    {t('Dashboard')}
                 </Link>
                 <div className="ui-flash ui-flash--danger">
-                    {error || 'Receiving not found.'}
+                    {error || t('Receiving not found.')}
                     <button onClick={() => void load()} type="button">
-                        Retry
+                        {t('Retry')}
                     </button>
                 </div>
             </div>
         );
     const isPending = transfer.status === 'dispatched';
-    const backPath = isPending ? '/sales/my-stock' : '/sales/stock-issue-history';
+    const backPath = isPending ? '/sales/my-stock' : '/sales/my-stock?tab=history';
     const statusTone = transfer.status === 'received' ? 'success' : transfer.status === 'reversed' ? 'danger' : 'info';
     const paidBaseTotal = transfer.items.reduce((sum, item) => sum + (item.base_quantity ?? item.quantity), 0);
     const focBaseTotal = transfer.items.reduce((sum, item) => sum + (item.foc_base_quantity ?? 0), 0);
@@ -95,20 +93,21 @@ export function ReceivingDetailPage() {
                 <div>
                     <Link className="sale-detail-back" to={backPath}>
                         <Icon name="chevronLeft" size={13} />
-                        {isPending ? 'Pending stock' : 'Stock issue history'}
+                        {t(isPending ? 'Pending stock' : 'Issue history')}
                     </Link>
-                    <p className="ui-eyebrow">Stock receiving</p>
+                    <p className="ui-eyebrow">{t('Stock receiving')}</p>
                     <h1>{transfer.reference}</h1>
                     <p>
-                        {transfer.source_warehouse.name} · Dispatched {dateTime(transfer.dispatched_at)}
+                        {transfer.source_warehouse.name} ·{' '}
+                        {t('Dispatched {date}', { date: dateTime(transfer.dispatched_at) })}
                     </p>
                 </div>
                 <StatusBadge tone={statusTone}>
                     {transfer.status === 'received'
-                        ? 'Received'
+                        ? t('Received')
                         : transfer.status === 'reversed'
-                          ? 'Reversed'
-                          : 'In transit'}
+                          ? t('Reversed')
+                          : t('In transit')}
                 </StatusBadge>
             </header>
             {error ? (
@@ -120,20 +119,23 @@ export function ReceivingDetailPage() {
             <section className="sales-section">
                 <header>
                     <div>
-                        <p className="ui-eyebrow">Shipment contents</p>
+                        <p className="ui-eyebrow">{t('Shipment contents')}</p>
                         <h2>
-                            {transfer.items.length} products · {number(physicalBaseTotal)} base units
+                            {t('{products} products · {quantity} base units', {
+                                products: formatNumber(transfer.items.length),
+                                quantity: formatNumber(physicalBaseTotal),
+                            })}
                         </h2>
                     </div>
                 </header>
                 <div className="receiving-detail-items">
-                    <table aria-label="Receiving product lines" className="receiving-detail-table">
+                    <table aria-label={t('Receiving product lines')} className="receiving-detail-table">
                         <thead>
                             <tr>
-                                <th>Product</th>
-                                <th className="is-numeric">Paid</th>
-                                <th className="is-numeric">FOC</th>
-                                <th className="is-numeric">Total base</th>
+                                <th>{t('Product')}</th>
+                                <th className="is-numeric">{t('Paid')}</th>
+                                <th className="is-numeric">{t('FOC')}</th>
+                                <th className="is-numeric">{t('Total base')}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -148,19 +150,25 @@ export function ReceivingDetailPage() {
                                             <small>{item.product.sku}</small>
                                         </td>
                                         <td className="is-numeric">
-                                            <strong>{number(item.quantity)}</strong>
+                                            <strong>{formatNumber(item.quantity)}</strong>
                                             <small>
-                                                {item.unit?.name ?? item.product.unit}, {number(paidBase)} base
+                                                {t('{unit}, {quantity} base', {
+                                                    unit: item.unit?.name ?? item.product.unit,
+                                                    quantity: formatNumber(paidBase),
+                                                })}
                                             </small>
                                         </td>
                                         <td className="is-numeric">
-                                            <strong>{number(item.foc_quantity ?? 0)}</strong>
+                                            <strong>{formatNumber(item.foc_quantity ?? 0)}</strong>
                                             <small>
-                                                {item.foc_unit?.name ?? item.product.unit}, {number(focBase)} base
+                                                {t('{unit}, {quantity} base', {
+                                                    unit: item.foc_unit?.name ?? item.product.unit,
+                                                    quantity: formatNumber(focBase),
+                                                })}
                                             </small>
                                         </td>
                                         <td className="is-numeric">
-                                            <strong>{number(paidBase + focBase)}</strong>
+                                            <strong>{formatNumber(paidBase + focBase)}</strong>
                                         </td>
                                     </tr>
                                 );
@@ -168,15 +176,15 @@ export function ReceivingDetailPage() {
                         </tbody>
                         <tfoot>
                             <tr>
-                                <td>Total base</td>
+                                <td>{t('Total base')}</td>
                                 <td className="is-numeric">
-                                    <strong>{number(paidBaseTotal)}</strong>
+                                    <strong>{formatNumber(paidBaseTotal)}</strong>
                                 </td>
                                 <td className="is-numeric">
-                                    <strong>{number(focBaseTotal)}</strong>
+                                    <strong>{formatNumber(focBaseTotal)}</strong>
                                 </td>
                                 <td className="is-numeric">
-                                    <strong>{number(physicalBaseTotal)}</strong>
+                                    <strong>{formatNumber(physicalBaseTotal)}</strong>
                                 </td>
                             </tr>
                         </tfoot>
@@ -186,29 +194,34 @@ export function ReceivingDetailPage() {
             {isPending ? (
                 <div className="stock-import-form-page__actions">
                     <Button icon="check" onClick={() => setApproveOpen(true)} requiresOnline tone="primary">
-                        Approve receipt
+                        {t('Approve receipt')}
                     </Button>
                 </div>
             ) : null}
             <Dialog
-                description="Confirm that every listed quantity was received. Stock will be added to your inventory."
+                description={t(
+                    'Confirm that every listed quantity was received. Stock will be added to your inventory.',
+                )}
                 footer={
                     <>
                         <Button disabled={working} onClick={() => setApproveOpen(false)}>
-                            Go back
+                            {t('Go back')}
                         </Button>
                         <Button disabled={working} onClick={() => void submit()} requiresOnline tone="primary">
-                            {working ? 'Working…' : 'Approve all received'}
+                            {t(working ? 'Working…' : 'Approve all received')}
                         </Button>
                     </>
                 }
                 onClose={() => setApproveOpen(false)}
                 open={approveOpen}
-                title={`Approve ${transfer.reference}?`}
+                title={t('Approve {reference}?', { reference: transfer.reference })}
                 width="compact"
             >
                 <p>
-                    Approve {number(physicalBaseTotal)} base units from {transfer.source_warehouse.name}.
+                    {t('Approve {quantity} base units from {warehouse}.', {
+                        quantity: formatNumber(physicalBaseTotal),
+                        warehouse: transfer.source_warehouse.name,
+                    })}
                 </p>
             </Dialog>
         </div>

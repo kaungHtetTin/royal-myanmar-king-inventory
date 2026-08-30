@@ -15,13 +15,12 @@ export type Customer = {
     name: string;
     notes: string | null;
     phone: string | null;
-    region: string | null;
+    region: { id: number; name: string; warehouse_id: number } | null;
+    region_id: number;
     township: string | null;
     updated_at: string | null;
     warehouse: CustomerWarehouse;
     warehouse_id: number;
-    way_id: number;
-    way: { id: number; code: string; name: string; region: { id: number; name: string; warehouse_id: number } };
 };
 
 export type CustomerInput = {
@@ -34,10 +33,9 @@ export type CustomerInput = {
     name: string;
     notes: string;
     phone: string;
-    region: string;
+    region_id: number;
     township: string;
     warehouse_id: number;
-    way_id: number;
 };
 
 export type CustomerFilters = {
@@ -50,14 +48,12 @@ export type CustomerFilters = {
     status?: string;
     type?: string;
     warehouse_id?: number | string;
-    way_id?: number | string;
 };
 
 export type CustomerOptions = {
     types: string[];
     warehouses: CustomerWarehouse[];
     regions: Array<{ id: number; warehouse_id: number; name: string }>;
-    ways: Array<{ id: number; region_id: number; code: string; name: string }>;
 };
 export type CustomerSummary = { active: number; credit_enabled: number; credit_limit: number; total: number };
 

@@ -3,14 +3,17 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\TransferStatus;
+use App\Enums\TripStatus;
 use App\Exceptions\DomainConflictException;
 use App\Http\Controllers\Concerns\HandlesTransferCommands;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\RepresentativeTransferResource;
 use App\Models\Product;
 use App\Models\ProductUnit;
+use App\Models\RepresentativeInventory;
 use App\Models\RepresentativeTransfer;
 use App\Models\SalesRepresentative;
+use App\Models\Trip;
 use App\Models\Warehouse;
 use App\Services\AuditLogger;
 use App\Services\DocumentReferenceGenerator;
@@ -65,9 +68,14 @@ class RepresentativeReturnController extends Controller
     {
         $data = $request->validate($this->rules());
         $this->assertScope($request, (int) $data['target_warehouse_id'], (int) $data['sales_representative_id']);
+        $this->assertTrip($data);
         $transfer = DB::transaction(function () use ($request, $data): RepresentativeTransfer {
+            $items = empty($data['trip_id'])
+                ? $this->partialReturnItems((int) $data['sales_representative_id'], $data['items'])
+                : $this->completeReturnItems((int) $data['sales_representative_id'], $data['items']);
             $transfer = RepresentativeTransfer::query()->create([
                 'reference' => $this->references->next('representative_return', 'RRT'),
+                'trip_id' => $data['trip_id'] ?? null,
                 'direction' => 'return',
                 'source_warehouse_id' => $data['target_warehouse_id'],
                 'sales_representative_id' => $data['sales_representative_id'],
@@ -75,7 +83,7 @@ class RepresentativeReturnController extends Controller
                 'notes' => $data['notes'] ?? null,
                 'created_by' => $request->user()->id,
             ]);
-            $transfer->items()->createMany($this->preparedItems($data['items']));
+            $transfer->items()->createMany($items);
             $this->auditLogger->record($request, 'representative_return.created', $request->user(), $transfer, ['new' => $data]);
 
             return $transfer;
@@ -98,18 +106,23 @@ class RepresentativeReturnController extends Controller
         $this->assertScope($request, $representativeReturn->source_warehouse_id, $representativeReturn->sales_representative_id);
         $data = $request->validate($this->rules());
         $this->assertScope($request, (int) $data['target_warehouse_id'], (int) $data['sales_representative_id']);
+        $this->assertTrip($data);
         DB::transaction(function () use ($request, $representativeReturn, $data): void {
             $representativeReturn = RepresentativeTransfer::query()->lockForUpdate()->findOrFail($representativeReturn->id);
             if ($representativeReturn->status !== TransferStatus::Draft) {
                 throw new DomainConflictException('Posted representative return lines are immutable.', 'INVALID_DOCUMENT_STATE');
             }
+            $items = empty($data['trip_id'])
+                ? $this->partialReturnItems((int) $data['sales_representative_id'], $data['items'])
+                : $this->completeReturnItems((int) $data['sales_representative_id'], $data['items']);
             $representativeReturn->update([
+                'trip_id' => $data['trip_id'] ?? null,
                 'source_warehouse_id' => $data['target_warehouse_id'],
                 'sales_representative_id' => $data['sales_representative_id'],
                 'notes' => $data['notes'] ?? null,
             ]);
             $representativeReturn->items()->delete();
-            $representativeReturn->items()->createMany($this->preparedItems($data['items']));
+            $representativeReturn->items()->createMany($items);
             $this->auditLogger->record($request, 'representative_return.updated', $request->user(), $representativeReturn, ['new' => $data]);
         });
 
@@ -146,6 +159,7 @@ class RepresentativeReturnController extends Controller
     private function rules(): array
     {
         return [
+            'trip_id' => ['nullable', 'integer', 'exists:trips,id'],
             'target_warehouse_id' => ['required', 'integer', Rule::exists('warehouses', 'id')->where('is_active', true)],
             'sales_representative_id' => ['required', 'integer', Rule::exists('sales_representatives', 'id')->where('is_active', true)],
             'notes' => ['nullable', 'string', 'max:2000'],
@@ -177,7 +191,26 @@ class RepresentativeReturnController extends Controller
 
     private function relations(): array
     {
-        return ['sourceWarehouse', 'representative', 'items.product', 'items.unit', 'items.focUnit', 'transit', 'creator', 'dispatcher', 'receiver', 'canceller', 'reverser'];
+        return ['trip', 'sourceWarehouse', 'representative', 'items.product', 'items.unit', 'items.focUnit', 'transit', 'creator', 'dispatcher', 'receiver', 'canceller', 'reverser'];
+    }
+
+    private function assertTrip(array $data): void
+    {
+        if (empty($data['trip_id'])) {
+            $representative = SalesRepresentative::query()->findOrFail($data['sales_representative_id']);
+            if ($representative->primary_warehouse_id !== (int) $data['target_warehouse_id']) {
+                throw ValidationException::withMessages(['target_warehouse_id' => ['Outside a trip, stock must return to the representative primary warehouse.']]);
+            }
+
+            return;
+        }
+        $trip = Trip::query()->findOrFail($data['trip_id']);
+        if ($trip->status !== TripStatus::Ending) {
+            throw ValidationException::withMessages(['trip_id' => ['Stock returns are available during trip ending.']]);
+        }
+        if ($trip->warehouse_id !== (int) $data['target_warehouse_id'] || $trip->sales_representative_id !== (int) $data['sales_representative_id']) {
+            throw ValidationException::withMessages(['trip_id' => ['Warehouse and representative must match the selected trip.']]);
+        }
     }
 
     private function load(RepresentativeTransfer $transfer): RepresentativeTransfer
@@ -202,5 +235,59 @@ class RepresentativeReturnController extends Controller
 
             return ['product_id' => $product->id, 'product_unit_id' => $unit->id, 'quantity' => $paidQuantity, 'base_quantity' => $paidQuantity * $unit->conversion_factor, 'foc_product_unit_id' => $focUnit?->id, 'foc_quantity' => $focQuantity, 'foc_base_quantity' => $focQuantity * ($focUnit?->conversion_factor ?? 0)];
         })->all();
+    }
+
+    /** @return list<array<string, int|null>> */
+    private function completeReturnItems(int $representativeId, array $submittedItems): array
+    {
+        $preparedItems = $this->preparedItems($submittedItems);
+        $balances = RepresentativeInventory::query()
+            ->where('sales_representative_id', $representativeId)
+            ->where(fn ($query) => $query->where('quantity', '>', 0)->orWhere('foc_quantity', '>', 0))
+            ->orderBy('product_id')
+            ->lockForUpdate()
+            ->get(['product_id', 'quantity', 'foc_quantity']);
+
+        if ($balances->isEmpty()) {
+            throw ValidationException::withMessages(['items' => ['The representative has no stock to return.']]);
+        }
+
+        $expected = $balances->mapWithKeys(fn (RepresentativeInventory $balance): array => [
+            $balance->product_id => [(int) $balance->quantity, (int) $balance->foc_quantity],
+        ])->all();
+        $submitted = collect($preparedItems)->mapWithKeys(fn (array $item): array => [
+            $item['product_id'] => [(int) $item['base_quantity'], (int) $item['foc_base_quantity']],
+        ])->all();
+
+        ksort($expected);
+        ksort($submitted);
+        if ($submitted !== $expected) {
+            throw ValidationException::withMessages([
+                'items' => ['Return every paid and FOC unit currently held by the representative. Partial stock returns are not allowed.'],
+            ]);
+        }
+
+        return $preparedItems;
+    }
+
+    /** @return list<array<string, int|null>> */
+    private function partialReturnItems(int $representativeId, array $submittedItems): array
+    {
+        $preparedItems = $this->preparedItems($submittedItems);
+        $balances = RepresentativeInventory::query()
+            ->where('sales_representative_id', $representativeId)
+            ->whereIn('product_id', collect($preparedItems)->pluck('product_id'))
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('product_id');
+
+        foreach ($preparedItems as $item) {
+            $balance = $balances->get($item['product_id']);
+            if (! $balance || $item['base_quantity'] > $balance->quantity || $item['foc_base_quantity'] > $balance->foc_quantity) {
+                throw ValidationException::withMessages(['items' => ['A return quantity exceeds the paid or FOC stock currently held by the representative.']]);
+            }
+        }
+
+        return $preparedItems;
     }
 }
