@@ -1,0 +1,1 @@
+function $(r,s,i){const n=Math.trunc(r),a=s.base_unit?.name??s.unit,t=s.default_selling_unit,e=t?.conversion_factor??1;if(!t||e<=1||t.name===a||n===0)return`${i(n)} ${a}`;const f=n<0?-1:1,c=Math.abs(n),l=Math.floor(c/e),u=c%e,o=[];return l>0&&o.push(`${i(l*f)} ${t.name}`),u>0&&o.push(`${i(u)} ${a}`),o.join(" + ")}export{$ as f};

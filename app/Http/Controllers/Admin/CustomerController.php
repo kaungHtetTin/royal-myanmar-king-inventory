@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\PermissionName;
+use App\Enums\SaleStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CustomerResource;
 use App\Models\Customer;
 use App\Models\Region;
+use App\Models\SaleItem;
 use App\Models\Warehouse;
 use App\Services\AuditLogger;
 use App\Services\CustomerAccess;
@@ -96,6 +98,62 @@ class CustomerController extends Controller
         Gate::authorize('view', $customer);
 
         return new CustomerResource($customer->load(['warehouse:id,code,name', 'assignedRegion.warehouse:id,code,name']));
+    }
+
+    public function saleReport(Request $request, Customer $customer): JsonResponse
+    {
+        Gate::authorize('view', $customer);
+        $data = $request->validate([
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+        ]);
+
+        $items = SaleItem::query()
+            ->selectRaw('product_id, SUM(base_quantity) as purchased_quantity, SUM(foc_base_quantity) as foc_quantity')
+            ->whereHas('sale', fn ($query) => $query
+                ->where('customer_id', $customer->id)
+                ->where('status', SaleStatus::Posted)
+                ->when($data['date_from'] ?? null, fn ($saleQuery, string $date) => $saleQuery->whereDate('posted_at', '>=', $date))
+                ->when($data['date_to'] ?? null, fn ($saleQuery, string $date) => $saleQuery->whereDate('posted_at', '<=', $date)))
+            ->with(['product:id,sku,name,unit', 'product.baseUnit:id,product_id,name,conversion_factor', 'product.defaultSellingUnit:id,product_id,name,conversion_factor'])
+            ->groupBy('product_id')
+            ->get()
+            ->map(function (SaleItem $item): array {
+                $purchased = (int) $item->getAttribute('purchased_quantity');
+                $foc = (int) $item->getAttribute('foc_quantity');
+
+                return [
+                    'product' => [
+                        'id' => $item->product->id,
+                        'sku' => $item->product->sku,
+                        'name' => $item->product->name,
+                        'unit' => $item->product->unit,
+                        'base_unit' => $item->product->baseUnit ? [
+                            'name' => $item->product->baseUnit->name,
+                            'conversion_factor' => $item->product->baseUnit->conversion_factor,
+                        ] : null,
+                        'default_selling_unit' => $item->product->defaultSellingUnit ? [
+                            'name' => $item->product->defaultSellingUnit->name,
+                            'conversion_factor' => $item->product->defaultSellingUnit->conversion_factor,
+                        ] : null,
+                    ],
+                    'purchased_quantity' => $purchased,
+                    'foc_quantity' => $foc,
+                    'total_quantity' => $purchased + $foc,
+                ];
+            })
+            ->sortBy(fn (array $item) => $item['product']['name'], SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
+
+        return response()->json([
+            'data' => $items,
+            'summary' => [
+                'products' => $items->count(),
+                'purchased_quantity' => $items->sum('purchased_quantity'),
+                'foc_quantity' => $items->sum('foc_quantity'),
+                'total_quantity' => $items->sum('total_quantity'),
+            ],
+        ]);
     }
 
     public function store(Request $request): JsonResponse

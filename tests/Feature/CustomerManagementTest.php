@@ -2,11 +2,16 @@
 
 namespace Tests\Feature;
 
+use App\Enums\PaymentType;
 use App\Enums\PermissionName;
 use App\Enums\RoleName;
+use App\Enums\SaleStatus;
 use App\Models\AuditLog;
 use App\Models\Customer;
+use App\Models\Product;
 use App\Models\Region;
+use App\Models\Sale;
+use App\Models\SalesRepresentative;
 use App\Models\User;
 use App\Models\Warehouse;
 use Database\Seeders\AccessControlSeeder;
@@ -91,6 +96,87 @@ class CustomerManagementTest extends TestCase
             ->assertJsonPath('data.id', $matching->id)
             ->assertJsonPath('data.warehouse.id', $assigned->id);
         $this->getJson('/api/admin/customers/'.$outsideScope->id)->assertForbidden();
+    }
+
+    public function test_sale_report_aggregates_posted_product_quantities_inside_the_date_range(): void
+    {
+        $admin = $this->superAdmin();
+        $warehouse = Warehouse::factory()->create();
+        $region = $this->region($warehouse);
+        $customer = Customer::factory()->create(['warehouse_id' => $warehouse->id, 'region_id' => $region->id]);
+        $representative = SalesRepresentative::factory()->create(['primary_warehouse_id' => $warehouse->id]);
+        $product = Product::factory()->create(['name' => 'Drinking Water', 'unit' => 'bottle']);
+        $baseUnit = $product->baseUnit()->firstOrFail();
+        $baseUnit->update(['is_default_selling' => false]);
+        $carton = $product->units()->create([
+            'name' => 'carton',
+            'conversion_factor' => 12,
+            'is_base' => false,
+            'is_default_selling' => true,
+            'is_active' => true,
+        ]);
+
+        $posted = Sale::query()->create([
+            'reference' => 'SAL-REPORT-1',
+            'sales_representative_id' => $representative->id,
+            'warehouse_id' => $warehouse->id,
+            'region_id' => $region->id,
+            'customer_id' => $customer->id,
+            'payment_type' => PaymentType::Cash,
+            'payment_method' => 'cash',
+            'total_amount' => 10000,
+            'status' => SaleStatus::Posted,
+            'created_by' => $admin->id,
+            'posted_by' => $admin->id,
+            'posted_at' => '2026-09-02 10:00:00',
+        ]);
+        $posted->items()->create([
+            'product_id' => $product->id,
+            'product_unit_id' => $carton->id,
+            'quantity' => 2,
+            'base_quantity' => 28,
+            'unit_price' => 5000,
+            'line_total' => 10000,
+            'foc_product_unit_id' => $baseUnit->id,
+            'foc_quantity' => 2,
+            'foc_base_quantity' => 2,
+        ]);
+
+        $draft = Sale::query()->create([
+            'reference' => 'SAL-REPORT-DRAFT',
+            'sales_representative_id' => $representative->id,
+            'warehouse_id' => $warehouse->id,
+            'region_id' => $region->id,
+            'customer_id' => $customer->id,
+            'payment_type' => PaymentType::Cash,
+            'payment_method' => 'cash',
+            'total_amount' => 5000,
+            'status' => SaleStatus::Draft,
+            'created_by' => $admin->id,
+        ]);
+        $draft->items()->create([
+            'product_id' => $product->id,
+            'product_unit_id' => $carton->id,
+            'quantity' => 1,
+            'base_quantity' => 12,
+            'unit_price' => 5000,
+            'line_total' => 5000,
+        ]);
+
+        $this->actingAs($admin)->getJson('/api/admin/customers/'.$customer->id.'/sale-report?date_from=2026-09-01&date_to=2026-09-02')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.product.name', 'Drinking Water')
+            ->assertJsonPath('data.0.product.default_selling_unit.name', 'carton')
+            ->assertJsonPath('data.0.product.default_selling_unit.conversion_factor', 12)
+            ->assertJsonPath('data.0.purchased_quantity', 28)
+            ->assertJsonPath('data.0.foc_quantity', 2)
+            ->assertJsonPath('data.0.total_quantity', 30)
+            ->assertJsonPath('summary.products', 1);
+
+        $this->getJson('/api/admin/customers/'.$customer->id.'/sale-report?date_from=2026-09-03&date_to=2026-09-03')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
     }
 
     public function test_creator_without_credit_permission_can_create_cash_only_customer_but_not_credit_customer(): void

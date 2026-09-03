@@ -56,6 +56,23 @@ export type CustomerOptions = {
     regions: Array<{ id: number; warehouse_id: number; name: string }>;
 };
 export type CustomerSummary = { active: number; credit_enabled: number; credit_limit: number; total: number };
+export type CustomerSaleReportProduct = {
+    product: {
+        base_unit: { conversion_factor: number; name: string } | null;
+        default_selling_unit: { conversion_factor: number; name: string } | null;
+        id: number;
+        name: string;
+        sku: string;
+        unit: string;
+    };
+    foc_quantity: number;
+    purchased_quantity: number;
+    total_quantity: number;
+};
+export type CustomerSaleReport = {
+    data: CustomerSaleReportProduct[];
+    summary: { foc_quantity: number; products: number; purchased_quantity: number; total_quantity: number };
+};
 
 export class CustomerApiError extends Error {
     constructor(
@@ -97,6 +114,10 @@ export const customerApi = {
         ),
     options: () => request<CustomerOptions>(() => window.axios.get('api/admin/customer-options')),
     get: (id: number) => request<{ data: Customer }>(() => window.axios.get(`api/admin/customers/${id}`)),
+    saleReport: (id: number, filters: { date_from?: string; date_to?: string }) =>
+        request<CustomerSaleReport>(() =>
+            window.axios.get(`api/admin/customers/${id}/sale-report`, { params: filters }),
+        ),
     create: (input: CustomerInput) =>
         request<{ data: Customer }>(() => window.axios.post('api/admin/customers', input)),
     update: (id: number, input: CustomerInput) =>

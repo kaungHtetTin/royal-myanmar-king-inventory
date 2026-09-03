@@ -147,6 +147,8 @@ class TripManagementTest extends TestCase
 
         $this->getJson("/api/admin/trips/{$tripId}")->assertOk()
             ->assertJsonPath('data.product_summary.0.issued', 10)
+            ->assertJsonPath('data.product_summary.0.product.base_unit.name', 'bottle')
+            ->assertJsonPath('data.product_summary.0.product.default_selling_unit.conversion_factor', 1)
             ->assertJsonPath('data.product_summary.0.sold', 3)
             ->assertJsonPath('data.product_summary.0.returned', 7)
             ->assertJsonPath('data.product_summary.0.remaining', 0)

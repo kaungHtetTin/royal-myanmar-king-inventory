@@ -76,7 +76,11 @@ class TripResource extends JsonResource
         $rows = collect();
         $add = function ($item, string $paid, string $foc) use ($rows): void {
             $row = $rows->get($item->product_id, [
-                'product' => $item->product->only(['id', 'sku', 'name', 'unit']),
+                'product' => [
+                    ...$item->product->only(['id', 'sku', 'name', 'unit']),
+                    'base_unit' => $item->product->baseUnit?->only(['id', 'name', 'conversion_factor']),
+                    'default_selling_unit' => $item->product->defaultSellingUnit?->only(['id', 'name', 'conversion_factor']),
+                ],
                 'issued' => 0, 'issued_foc' => 0, 'sold' => 0, 'sold_foc' => 0, 'returned' => 0, 'returned_foc' => 0,
             ]);
             $row[$paid] += (int) $item->base_quantity;

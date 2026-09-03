@@ -15,7 +15,14 @@ export type TripExpense = {
     created_by: TripActor;
 };
 export type TripProductSummary = {
-    product: { id: number; sku: string; name: string; unit: string };
+    product: {
+        id: number;
+        sku: string;
+        name: string;
+        unit: string;
+        base_unit: { id: number; name: string; conversion_factor: number } | null;
+        default_selling_unit: { id: number; name: string; conversion_factor: number } | null;
+    };
     issued: number;
     issued_foc: number;
     sold: number;

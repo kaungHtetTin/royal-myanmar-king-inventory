@@ -1,0 +1,4 @@
+interface:
+  display_name: "Settings Page Layout Planner"
+  short_description: "Plan scalable responsive settings workspaces"
+  default_prompt: "Use $plan-settings-page-layout to plan a settings page layout for this web application."

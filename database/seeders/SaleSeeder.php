@@ -82,6 +82,7 @@ class SaleSeeder extends Seeder
                 'region_id' => $customer->region_id,
                 'customer_id' => $customer->id,
                 'payment_type' => $paymentType,
+                'payment_method' => $paymentType === PaymentType::Cash ? 'cash' : null,
                 'total_amount' => $items->sum('line_total'),
                 'status' => SaleStatus::Draft,
                 'notes' => $notes,

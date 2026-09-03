@@ -106,6 +106,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:'.PermissionName::CustomerView->value);
         Route::get('/customers/{customer}', [CustomerController::class, 'show'])
             ->middleware('permission:'.PermissionName::CustomerView->value);
+        Route::get('/customers/{customer}/sale-report', [CustomerController::class, 'saleReport'])
+            ->middleware(['permission:'.PermissionName::CustomerView->value, 'permission:'.PermissionName::SaleView->value]);
         Route::get('/customer-options', [CustomerController::class, 'options'])
             ->middleware('permission:'.PermissionName::CustomerView->value);
         Route::post('/customers', [CustomerController::class, 'store'])
