@@ -30,6 +30,20 @@ function saleTone(status: string) {
     return status === 'posted' ? 'success' : status === 'draft' ? 'warning' : 'neutral';
 }
 
+const csvCell = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`;
+
+function downloadCsv(filename: string, headers: string[], rows: Array<Array<string | number>>) {
+    const csv = [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+}
+
 export function CustomerDetailPage() {
     const { formatDateTime, formatNumber, t } = useLocale();
     const money = (value: number) => `${formatNumber(value)} MMK`;
@@ -137,6 +151,23 @@ export function CustomerDetailPage() {
         setDraftRange(emptyDateRange);
         setPage(1);
         setDateRange(emptyDateRange);
+    }
+
+    function exportSaleReport() {
+        const equivalent = (quantity: number, item: CustomerSaleReportProduct) =>
+            formatSellingUnitEquivalent(quantity, item.product, formatNumber);
+        const dateSuffix = [dateRange.date_from, dateRange.date_to].filter(Boolean).join('_to_');
+        downloadCsv(
+            `${customer?.code ?? 'customer'}-sale-report${dateSuffix ? `-${dateSuffix}` : ''}.csv`,
+            ['Product', 'SKU', 'Purchased', 'FOC', 'Total received'].map((label) => t(label)),
+            report.map((item) => [
+                item.product.name,
+                item.product.sku,
+                equivalent(item.purchased_quantity, item),
+                equivalent(item.foc_quantity, item),
+                equivalent(item.total_quantity, item),
+            ]),
+        );
     }
 
     if (loading && !customer) {
@@ -415,7 +446,22 @@ export function CustomerDetailPage() {
                     ) : null}
                 </Panel>
             ) : (
-                <Panel className="customer-sale-report-panel" eyebrow={t('Transactions')} title={t('Sale Report')}>
+                <Panel
+                    actions={
+                        canViewSales ? (
+                            <Button
+                                disabled={reportLoading || report.length === 0}
+                                icon="download"
+                                onClick={exportSaleReport}
+                            >
+                                {t('Export CSV')}
+                            </Button>
+                        ) : undefined
+                    }
+                    className="customer-sale-report-panel"
+                    eyebrow={t('Transactions')}
+                    title={t('Sale Report')}
+                >
                     {!canViewSales ? (
                         <EmptyState
                             title={t('Sale report restricted')}
