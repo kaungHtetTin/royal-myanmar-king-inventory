@@ -112,10 +112,15 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
     const [creationLocation, setCreationLocation] = useState<CreationLocation | null>(null);
     const [locationStatus, setLocationStatus] = useState<LocationStatus>('idle');
     const [locationMessage, setLocationMessage] = useState('');
-    const [locationRequest, setLocationRequest] = useState(0);
     const customerPickerRef = useRef<HTMLDivElement>(null);
-    const lastAutomaticLocationRequest = useRef(-1);
     const captureLocation = useCallback((): Promise<CreationLocation | null> => {
+        if (window.isSecureContext === false) {
+            setLocationStatus('error');
+            setLocationMessage(
+                t('Chrome only allows location access on HTTPS or localhost. Open this app over HTTPS, then retry.'),
+            );
+            return Promise.resolve(null);
+        }
         if (!navigator.geolocation) {
             setLocationStatus('error');
             setLocationMessage(t('Location is not supported by this device or browser.'));
@@ -245,12 +250,6 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
             active = false;
         };
     }, [historyDraft.date_from, historyDraft.date_to, historyDraft.period, t, view]);
-    useEffect(() => {
-        if (view === 'entry' && !editId && lastAutomaticLocationRequest.current !== locationRequest) {
-            lastAutomaticLocationRequest.current = locationRequest;
-            void captureLocation();
-        }
-    }, [captureLocation, editId, locationRequest, view]);
     useEffect(() => {
         const closeActionMenu = (event: KeyboardEvent | PointerEvent) => {
             if (event instanceof KeyboardEvent) {
@@ -394,7 +393,6 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
         setCreationLocation(null);
         setLocationStatus('idle');
         setLocationMessage('');
-        setLocationRequest((value) => value + 1);
         navigate('/sales/new-sale', { replace: true });
     };
     const validate = (forPosting: boolean) => {
@@ -1110,7 +1108,7 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                               )
                                                             : locationMessage ||
                                                               t(
-                                                                  'The office will receive this point with the sale record.',
+                                                                  'Select Allow location so Chrome can ask for permission. The office will receive this point with the sale record.',
                                                               )}
                                                     </small>
                                                 </span>
@@ -1121,7 +1119,9 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                     >
                                                         {locationStatus === 'locating'
                                                             ? t('Locating…')
-                                                            : t('Retry location')}
+                                                            : locationStatus === 'error'
+                                                              ? t('Retry location')
+                                                              : t('Allow location')}
                                                     </Button>
                                                 ) : null}
                                                 {fields.creation_location?.[0] ? (

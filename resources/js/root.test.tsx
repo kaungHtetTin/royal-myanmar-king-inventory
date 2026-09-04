@@ -1302,6 +1302,8 @@ describe('application portals', () => {
         fireEvent.click(screen.getByRole('option', { name: /ABC Shop/ }));
         fireEvent.click(screen.getByRole('radio', { name: 'Credit' }));
         expect(screen.getByRole('radio', { name: 'Credit' })).toBeChecked();
+        expect(screen.getByText('Device location required')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Allow location' }));
         expect(screen.getByText('Device location captured')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Continue to products' }));
 
