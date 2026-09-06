@@ -220,7 +220,7 @@ export function SaleHistoryDetailPage() {
                                                 )}
                                             </td>
                                             <td className="is-numeric">{money(item.unit_price)}</td>
-                                            <td className="is-numeric">{(item.discount_percentage ?? 0) > 0 ? `${item.discount_percentage}% · ${money(item.discount_amount ?? 0)}` : '—'}</td>
+                                            <td className="is-numeric">{(item.discount_percentage ?? 0) > 0 ? `${item.discount_percentage}% · ${money(item.discount_amount ?? 0)}` : '—'}{item.cashback_amount ? <small>{t('Cashback amount')}: -{money(item.cashback_amount)}</small> : null}{item.promotion_amount ? <small>{item.promotion_title || t('Promotion')}: -{money(item.promotion_amount)}</small> : null}</td>
                                             <td className="is-numeric sale-detail-items__line-total">
                                                 {money(item.line_total)}
                                             </td>

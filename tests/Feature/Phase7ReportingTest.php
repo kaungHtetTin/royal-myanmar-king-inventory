@@ -91,7 +91,8 @@ class Phase7ReportingTest extends TestCase
     {
         $fixture = $this->fixture();
         $admin = $this->office($fixture['warehouse'], PermissionName::ReportView);
-        $this->actingAs($admin)->getJson('/api/admin/report-options')->assertOk()->assertJsonPath('reports', ['sales', 'representatives', 'customers']);
+        $this->actingAs($admin)->getJson('/api/admin/report-options')->assertOk()->assertJsonPath('reports', ['sales', 'representatives', 'customers', 'trip']);
+        $this->getJson('/api/admin/reports/trip')->assertOk()->assertJsonCount(0, 'data');
         foreach (['way-sales-power', 'stock-issues', 'warehouse-stock', 'representative-stock', 'stock-movements', 'warehouse-transfers', 'representative-transfers', 'cash-hold', 'customer-credit'] as $removedReport) {
             $this->getJson('/api/admin/reports/'.$removedReport.'?per_page=10')->assertNotFound();
         }

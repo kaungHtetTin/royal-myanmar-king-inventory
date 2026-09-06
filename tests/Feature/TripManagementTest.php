@@ -50,6 +50,11 @@ class TripManagementTest extends TestCase
 
         $this->getJson('/api/admin/trips?date_from='.now()->toDateString().'&date_to='.now()->toDateString())
             ->assertOk()->assertJsonPath('meta.total', 1);
+        $this->getJson('/api/admin/trips?warehouse_id='.$warehouse->id.'&region_id='.$region->id.'&representative_id='.$representative->id)
+            ->assertOk()->assertJsonPath('meta.total', 1)->assertJsonPath('data.0.id', $tripId);
+        $otherRegion = $warehouse->regions()->create(['name' => 'Other Region', 'is_active' => true]);
+        $this->getJson('/api/admin/trips?region_id='.$otherRegion->id)
+            ->assertOk()->assertJsonPath('meta.total', 0);
         $this->getJson('/api/admin/trips?date_from='.now()->addDay()->toDateString())
             ->assertOk()->assertJsonPath('meta.total', 0);
         $this->getJson('/api/admin/trips?date_from='.now()->toDateString().'&date_to='.now()->subDay()->toDateString())
@@ -80,14 +85,14 @@ class TripManagementTest extends TestCase
         $this->assertDatabaseMissing('sale_items', ['sale_id' => $deletedDraftId]);
         $this->assertDatabaseHas('audit_logs', ['event' => 'sale.draft_deleted', 'subject_id' => $deletedDraftId]);
 
-        $cashSaleId = $this->actingAs($repUser)->withHeader('Idempotency-Key', 'cash-sale')->postJson('/api/sales/sales', $this->salePayload($customer, $product, 1, 'cash') + ['promotion_title' => 'Launch cashback', 'promotion_amount' => 100])
-            ->assertCreated()->assertJsonPath('data.promotion_title', 'Launch cashback')->assertJsonPath('data.promotion_amount', 100)->assertJsonPath('data.total_amount', 800)->json('data.id');
+        $cashSaleId = $this->actingAs($repUser)->withHeader('Idempotency-Key', 'cash-sale')->postJson('/api/sales/sales', array_replace_recursive($this->salePayload($customer, $product, 1, 'cash'), ['items' => [['promotion_title' => 'Launch cashback', 'promotion_amount' => 60, 'cashback_amount' => 40]]]))
+            ->assertCreated()->assertJsonPath('data.items.0.promotion_title', 'Launch cashback')->assertJsonPath('data.items.0.promotion_amount', 60)->assertJsonPath('data.items.0.cashback_amount', 40)->assertJsonPath('data.total_amount', 800)->json('data.id');
         $this->getJson("/api/sales/sales/{$cashSaleId}")->assertOk()
             ->assertJsonPath('data.items.0.unit_price', 1000)
             ->assertJsonPath('data.items.0.discount_percentage', 10)
             ->assertJsonPath('data.items.0.discount_amount', 100)
-            ->assertJsonPath('data.items.0.line_total', 900)
-            ->assertJsonPath('data.merchandise_subtotal', 900)
+            ->assertJsonPath('data.items.0.line_total', 800)
+            ->assertJsonPath('data.merchandise_subtotal', 800)
             ->assertJsonPath('data.total_amount', 800);
         $this->actingAs($repUser)->withHeader('Idempotency-Key', 'cash-sale-post')->postJson("/api/sales/sales/{$cashSaleId}/post")->assertOk();
         $this->deleteJson("/api/sales/sales/{$cashSaleId}")->assertConflict()->assertJsonPath('code', 'INVALID_DOCUMENT_STATE');
@@ -164,6 +169,16 @@ class TripManagementTest extends TestCase
             ->assertJsonPath('data.financial_summary.expenses', 500)
             ->assertJsonPath('data.financial_summary.cash_submitted_confirmed', 1200);
 
+        $query = http_build_query(['warehouse_id' => $warehouse->id, 'region_id' => $region->id, 'representative_id' => $representative->id, 'date_from' => today()->toDateString(), 'date_to' => today()->toDateString()]);
+        $this->getJson('/api/admin/reports/trip?'.$query)->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.product.id', $product->id)
+            ->assertJsonPath('data.0.product.default_selling_unit.conversion_factor', 1)
+            ->assertJsonPath('data.0.quantity', 3)
+            ->assertJsonPath('data.0.net_amount', 2600);
+        $this->getJson('/api/admin/reports/trip?date_from=2099-01-01&date_to=2099-01-02')->assertOk()->assertJsonCount(0, 'data');
+        $this->getJson('/api/admin/reports/trip?date_from=2026-09-02&date_to=2026-09-01')->assertUnprocessable();
+
         $this->actingAs($repUser)->getJson('/api/sales/customer-options')->assertOk()
             ->assertJsonPath('regions.0.id', $region->id)
             ->assertJsonPath('payment_methods.0.key', 'cash');
@@ -182,6 +197,6 @@ class TripManagementTest extends TestCase
 
     private function salePayload(Customer $customer, Product $product, int $quantity, string $payment, string $method = 'cash'): array
     {
-        return ['customer_id' => $customer->id, 'payment_type' => $payment, 'payment_method' => $payment === 'cash' ? $method : null, 'creation_latitude' => 16.84, 'creation_longitude' => 96.17, 'items' => [['product_id' => $product->id, 'quantity' => $quantity]]];
+        return ['customer_id' => $customer->id, 'payment_type' => $payment, 'payment_method' => $payment === 'cash' ? $method : null, 'creation_latitude' => 16.84, 'creation_longitude' => 96.17, 'items' => [['product_id' => $product->id, 'quantity' => $quantity, 'discount_percentage' => 10]]];
     }
 }

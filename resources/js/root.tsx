@@ -121,6 +121,7 @@ const VehicleManagementPage = lazy(() =>
         default: module.VehicleManagementPage,
     })),
 );
+const VehicleDetailPage = lazy(() => import('./pages/admin/vehicle-detail-page').then((module) => ({ default: module.VehicleDetailPage })));
 const WarehouseManagementPage = lazy(() =>
     import('./pages/admin/warehouse-management-page').then((module) => ({
         default: module.WarehouseManagementPage,
@@ -275,6 +276,7 @@ export default function Root({ initialUser }: { initialUser?: SessionUser | null
                                                 <Route path="products/new" element={<ProductFormPage />} />
                                                 <Route path="products/:productId/edit" element={<ProductFormPage />} />
                                                 <Route path="vehicles" element={<VehicleManagementPage />} />
+                                                <Route path="vehicles/:vehicleId" element={<VehicleDetailPage />} />
                                                 <Route path="warehouses" element={<WarehouseManagementPage />} />
                                                 <Route
                                                     path="warehouses/:warehouseId/settings"

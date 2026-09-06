@@ -21,6 +21,78 @@ class VehicleManagementTest extends TestCase
         $this->seed(AccessControlSeeder::class);
     }
 
+    public function test_assignments_can_be_managed_from_both_detail_pages(): void
+    {
+        $this->actingAs($this->superAdmin());
+        $rep = SalesRepresentative::factory()->create();
+        $otherRep = SalesRepresentative::factory()->create();
+        $first = Vehicle::factory()->create(['sales_representative_id' => null]);
+        $second = Vehicle::factory()->create(['sales_representative_id' => null]);
+        $this->getJson("/api/admin/vehicles/{$first->id}")->assertOk()->assertJsonPath('data.representative', null);
+        $this->getJson("/api/admin/representatives/{$rep->id}/assignment")->assertOk();
+        $this->putJson("/api/admin/representatives/{$rep->id}/assignment", ['vehicle_id' => $first->id])->assertOk();
+        $this->getJson("/api/admin/vehicles/{$first->id}")->assertOk()->assertJsonPath('data.representative.id', $rep->id);
+        $this->putJson("/api/admin/representatives/{$otherRep->id}/assignment", ['vehicle_id' => $first->id])->assertUnprocessable();
+        $this->putJson("/api/admin/vehicles/{$second->id}/assignment", ['representative_id' => $rep->id])->assertUnprocessable();
+        $this->putJson("/api/admin/representatives/{$rep->id}/assignment", ['vehicle_id' => $second->id])->assertOk();
+        $this->assertDatabaseHas('vehicles', ['id' => $first->id, 'sales_representative_id' => null]);
+        $this->putJson("/api/admin/vehicles/{$second->id}/assignment", ['representative_id' => null])->assertOk();
+        $this->putJson("/api/admin/vehicles/{$first->id}/assignment", ['representative_id' => $otherRep->id])->assertOk();
+        $this->getJson("/api/admin/vehicles/{$first->id}/assignment")->assertOk();
+        $this->assertDatabaseHas('vehicles', ['id' => $first->id, 'sales_representative_id' => $otherRep->id]);
+        $this->assertDatabaseHas('audit_logs', ['event' => 'vehicle.representative_assigned']);
+    }
+
+    public function test_active_trip_blocks_assignment_changes_and_trip_requires_the_assigned_vehicle(): void
+    {
+        $admin = $this->superAdmin();
+        $this->actingAs($admin);
+        $rep = SalesRepresentative::factory()->create();
+        $region = $rep->primaryWarehouse->regions()->create(['name' => 'Assignment region', 'is_active' => true]);
+        $rep->regions()->sync([$region->id]);
+        $vehicle = Vehicle::factory()->create(['sales_representative_id' => $rep->id]);
+        $other = Vehicle::factory()->create(['sales_representative_id' => null]);
+        $input = ['title' => 'Assigned trip', 'warehouse_id' => $rep->primary_warehouse_id, 'region_id' => $region->id, 'sales_representative_id' => $rep->id, 'vehicle_id' => $other->id];
+        $this->postJson('/api/admin/trips', $input)->assertUnprocessable()->assertJsonValidationErrors('vehicle_id');
+        $input['vehicle_id'] = $vehicle->id;
+        $this->postJson('/api/admin/trips', $input)->assertCreated();
+        $this->putJson("/api/admin/representatives/{$rep->id}/assignment", ['vehicle_id' => null])->assertUnprocessable();
+        $this->putJson("/api/admin/vehicles/{$vehicle->id}/assignment", ['representative_id' => null])->assertUnprocessable();
+        $this->assertDatabaseHas('vehicles', ['id' => $vehicle->id, 'sales_representative_id' => $rep->id]);
+    }
+
+    public function test_trip_planning_blocks_busy_representatives_but_allows_finished_trips(): void
+    {
+        $this->actingAs($this->superAdmin());
+        $rep = SalesRepresentative::factory()->create();
+        $region = $rep->primaryWarehouse->regions()->create(['name' => 'Planning region', 'is_active' => true]);
+        $rep->regions()->sync([$region->id]);
+        $vehicle = Vehicle::factory()->create(['sales_representative_id' => $rep->id]);
+        $input = ['title' => 'Planned trip', 'warehouse_id' => $rep->primary_warehouse_id, 'region_id' => $region->id, 'sales_representative_id' => $rep->id, 'vehicle_id' => $vehicle->id];
+        $tripId = $this->postJson('/api/admin/trips', $input)->assertCreated()->json('data.id');
+
+        foreach (['planning', 'operation', 'ending'] as $status) {
+            \App\Models\Trip::query()->findOrFail($tripId)->update(['status' => $status]);
+            $this->getJson('/api/admin/trip-options')->assertOk()->assertJsonPath('representatives.0.has_active_trip', true);
+            $this->postJson('/api/admin/trips', $input)->assertConflict()->assertJsonPath('code', 'REPRESENTATIVE_HAS_ACTIVE_TRIP');
+            $this->assertDatabaseCount('trips', 1);
+        }
+
+        foreach (['completed', 'cancelled'] as $status) {
+            \App\Models\Trip::query()->findOrFail($tripId)->update(['status' => $status]);
+            $this->getJson('/api/admin/trip-options')->assertOk()->assertJsonPath('representatives.0.has_active_trip', false);
+            $tripId = $this->postJson('/api/admin/trips', $input)->assertCreated()->json('data.id');
+        }
+    }
+
+    public function test_assignment_mutations_require_edit_permission(): void
+    {
+        $viewer = $this->viewer();
+        $vehicle = Vehicle::factory()->create();
+        $this->actingAs($viewer)->getJson("/api/admin/vehicles/{$vehicle->id}")->assertOk();
+        $this->putJson("/api/admin/vehicles/{$vehicle->id}/assignment", ['representative_id' => null])->assertForbidden();
+    }
+
     public function test_super_admin_can_create_and_assign_a_normalized_vehicle_with_audit(): void
     {
         $admin = $this->superAdmin();

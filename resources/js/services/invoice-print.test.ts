@@ -30,6 +30,22 @@ const sale: Sale = {
 };
 
 describe('invoice printing', () => {
+    it('prints item incentives and reconciled totals with escaped promotion titles', () => {
+        const document = invoiceDocument({
+            ...sale,
+            gross_amount: 2500,
+            total_discount: 250,
+            total_cashback: 100,
+            total_item_promotion: 50,
+            total_amount: 2100,
+            items: [{ ...sale.items[0], discount_percentage: 10, discount_amount: 250, cashback_amount: 100, promotion_title: '<Launch>', promotion_amount: 50, line_total: 2100 }],
+        });
+        expect(document).toContain('10%');
+        expect(document).toContain('Cashback amount: -100 MMK');
+        expect(document).toContain('&lt;Launch&gt;: -50 MMK');
+        expect(document).toContain('2,100 MMK');
+        expect(document).not.toContain('<Launch>');
+    });
     it('supports full-page and thermal paper sizes', () => {
         expect(invoicePaperSizes.map((option) => option.value)).toEqual(['a4', 'a5', '80mm', '58mm', '50mm']);
 

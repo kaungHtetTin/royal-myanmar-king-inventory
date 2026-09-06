@@ -164,7 +164,7 @@ class SalePostingService
             $gross = $item->quantity * $item->unit_price;
             $discount = (int) round($gross * (float) $item->discount_percentage / 100);
 
-            return $item->discount_amount !== $discount || $item->line_total !== $gross - $discount;
+            return $item->discount_amount !== $discount || $item->cashback_amount < 0 || $item->promotion_amount < 0 || $item->line_total < 0 || $item->line_total !== $gross - $discount - $item->cashback_amount - $item->promotion_amount;
         })) {
             throw new DomainConflictException('Stored sale totals do not reconcile.', 'SALE_TOTAL_MISMATCH');
         }
@@ -194,7 +194,7 @@ class SalePostingService
     /** @return array<string, mixed> */
     private function metadata(Sale $sale): array
     {
-        return ['reference' => $sale->reference, 'sales_representative_id' => $sale->sales_representative_id, 'region_id' => $sale->region_id, 'customer_id' => $sale->customer_id, 'payment_type' => $sale->payment_type->value, 'payment_method' => $sale->payment_method, 'total_amount' => $sale->total_amount, 'promotion_title' => $sale->promotion_title, 'promotion_amount' => $sale->promotion_amount, 'items' => $sale->items->map->only(['product_id', 'product_unit_id', 'quantity', 'base_quantity', 'unit_price', 'discount_percentage', 'discount_amount', 'line_total', 'foc_product_unit_id', 'foc_quantity', 'foc_base_quantity'])->all()];
+        return ['reference' => $sale->reference, 'sales_representative_id' => $sale->sales_representative_id, 'region_id' => $sale->region_id, 'customer_id' => $sale->customer_id, 'payment_type' => $sale->payment_type->value, 'payment_method' => $sale->payment_method, 'total_amount' => $sale->total_amount, 'promotion_title' => $sale->promotion_title, 'promotion_amount' => $sale->promotion_amount, 'items' => $sale->items->map->only(['product_id', 'product_unit_id', 'quantity', 'base_quantity', 'unit_price', 'discount_percentage', 'discount_amount', 'cashback_amount', 'promotion_title', 'promotion_amount', 'line_total', 'foc_product_unit_id', 'foc_quantity', 'foc_base_quantity'])->all()];
     }
 
     /** @return array<string, mixed> */

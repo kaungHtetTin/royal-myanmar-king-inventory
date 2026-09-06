@@ -18,6 +18,9 @@ export type SaleItem = {
     gross_total?: number;
     discount_percentage?: number;
     discount_amount?: number;
+    cashback_amount?: number;
+    promotion_title?: string | null;
+    promotion_amount?: number;
     line_total: number;
     base_quantity?: number;
     unit?: SaleUnit | null;
@@ -62,6 +65,8 @@ export type Sale = {
     total_foc_quantity?: number;
     gross_amount?: number;
     total_discount?: number;
+    total_cashback?: number;
+    total_item_promotion?: number;
     posted_at: string | null;
     voided_at: string | null;
     void_reason: string | null;
@@ -106,7 +111,6 @@ export type SalesCustomer = SalesCustomerInput & {
     } | null;
 };
 export type SaleProductOption = SaleProduct & {
-    discount_percentage: number;
     selling_price: number;
     quantity: number;
     foc_quantity: number;
@@ -155,6 +159,10 @@ export type SaleInput = {
         product_id: number;
         product_unit_id?: number;
         quantity: number;
+        discount_percentage?: number;
+        cashback_amount?: number;
+        promotion_title?: string;
+        promotion_amount?: number;
         foc_product_unit_id?: number;
         foc_quantity?: number;
     }[];

@@ -71,10 +71,12 @@ export type SalesDashboard = {
         dispatched_at: string | null;
     }>;
 };
-export type ReportName = 'sales' | 'representatives' | 'customers';
+export type ReportName = 'sales' | 'representatives' | 'customers' | 'trip';
 export type ReportOptions = {
     warehouses: Identity[];
     reports: ReportName[];
+    regions?: Array<{ id: number; name: string; warehouse_id: number }>;
+    representatives?: Array<Identity & { primary_warehouse_id: number; regions: Array<{ id: number }> }>;
 };
 export type ReportFilters = {
     page?: number;
@@ -84,6 +86,7 @@ export type ReportFilters = {
     product_id?: number;
     category?: string;
     region?: string;
+    region_id?: number;
     status?: string;
     payment_type?: string;
     movement_type?: string;

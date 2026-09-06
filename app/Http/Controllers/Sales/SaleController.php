@@ -151,7 +151,6 @@ class SaleController extends Controller
             ->whereHas('product', fn ($query) => $query->where('is_active', true))->get()->sortBy('product.name')->values()->map(fn (RepresentativeInventory $inventory) => [
                 'id' => $inventory->product->id, 'sku' => $inventory->product->sku, 'name' => $inventory->product->name,
                 'unit' => $inventory->product->unit, 'quantity' => $inventory->quantity, 'foc_quantity' => $inventory->foc_quantity,
-                'discount_percentage' => (float) $inventory->product->discount_percentage,
                 'units' => $inventory->product->units->map(fn (ProductUnit $unit) => [
                     'id' => $unit->id, 'name' => $unit->name, 'conversion_factor' => $unit->conversion_factor,
                     'is_base' => $unit->is_base, 'is_default_selling' => $unit->is_default_selling,
@@ -195,6 +194,12 @@ class SaleController extends Controller
             $request->merge(['payment_method' => $this->paymentMethods->defaultKey()]);
         }
         $data = $request->validate($this->rules(false));
+        if ((isset($data['promotion_amount']) && (int) $data['promotion_amount'] !== $sale->promotion_amount)
+            || (isset($data['promotion_title']) && (string) $data['promotion_title'] !== (string) $sale->promotion_title)) {
+            throw ValidationException::withMessages(['promotion_amount' => ['Add promotions on individual items. Existing invoice promotions cannot be changed.']]);
+        }
+        $data['promotion_amount'] = $sale->promotion_amount;
+        $data['promotion_title'] = $sale->promotion_title;
         [$customer, $items, $total] = $this->preparedDraft($representative, $data, $trip);
         DB::transaction(function () use ($request, $sale, $customer, $data, $items, $total): void {
             $sale = Sale::query()->lockForUpdate()->findOrFail($sale->id);
@@ -247,7 +252,7 @@ class SaleController extends Controller
             'payment_method' => ['nullable', 'required_if:payment_type,cash', Rule::in($this->paymentMethods->activeKeys())],
             'notes' => ['nullable', 'string', 'max:2000'],
             'promotion_title' => ['nullable', 'string', 'max:150'],
-            'promotion_amount' => ['nullable', 'integer', 'min:0', 'max:999999999999999'],
+            'promotion_amount' => ['nullable', 'integer', 'min:0', $creating ? 'max:0' : 'max:999999999999999'],
             'creation_latitude' => [$creating ? 'required' : 'prohibited', 'numeric', 'between:-90,90'],
             'creation_longitude' => [$creating ? 'required' : 'prohibited', 'numeric', 'between:-180,180'],
             'location_accuracy_meters' => [$creating ? 'nullable' : 'prohibited', 'numeric', 'min:0', 'max:1000000'],
@@ -255,6 +260,10 @@ class SaleController extends Controller
             'items.*.product_id' => ['required', 'integer', 'distinct', 'exists:products,id'],
             'items.*.product_unit_id' => ['nullable', 'integer', 'exists:product_units,id'],
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:4294967295'],
+            'items.*.discount_percentage' => ['nullable', 'numeric', 'min:0', 'max:100', 'decimal:0,2'],
+            'items.*.cashback_amount' => ['nullable', 'integer', 'min:0', 'max:999999999999999'],
+            'items.*.promotion_title' => ['nullable', 'string', 'max:150'],
+            'items.*.promotion_amount' => ['nullable', 'integer', 'min:0', 'max:999999999999999'],
             'items.*.foc_product_unit_id' => ['nullable', 'integer', 'exists:product_units,id'],
             'items.*.foc_quantity' => ['nullable', 'integer', 'min:0', 'max:4294967295'],
         ];
@@ -271,7 +280,7 @@ class SaleController extends Controller
         if ($products->count() !== count($data['items'])) {
             throw ValidationException::withMessages(['items' => ['Every sale product must be active and available for selection.']]);
         }
-        $items = collect($data['items'])->map(function (array $item) use ($products, $customer): array {
+        $items = collect($data['items'])->map(function (array $item, int $index) use ($products, $customer): array {
             $product = $products->get($item['product_id']);
             $unit = $product->units->firstWhere('id', $item['product_unit_id'] ?? null) ?? $product->units->firstWhere('is_default_selling', true);
             $price = $unit?->regionPrices->firstWhere('region_id', $customer->region_id);
@@ -285,10 +294,16 @@ class SaleController extends Controller
             }
 
             $gross = (int) $price->price * (int) $item['quantity'];
-            $discountPercentage = (float) $product->discount_percentage;
+            $discountPercentage = (float) ($item['discount_percentage'] ?? 0);
             $discountAmount = (int) round($gross * $discountPercentage / 100);
+            $cashback = (int) ($item['cashback_amount'] ?? 0);
+            $promotion = (int) ($item['promotion_amount'] ?? 0);
+            $promotionTitle = trim((string) ($item['promotion_title'] ?? ''));
+            if ($discountAmount + $cashback + $promotion > $gross) {
+                throw ValidationException::withMessages(["items.{$index}.cashback_amount" => ['Discount, cashback and promotion cannot exceed this item total.']]);
+            }
 
-            return ['product_id' => (int) $item['product_id'], 'product_unit_id' => $unit->id, 'quantity' => (int) $item['quantity'], 'base_quantity' => (int) $item['quantity'] * $unit->conversion_factor, 'unit_price' => (int) $price->price, 'discount_percentage' => $discountPercentage, 'discount_amount' => $discountAmount, 'line_total' => $gross - $discountAmount, 'foc_product_unit_id' => $focUnit?->id, 'foc_quantity' => $focQuantity, 'foc_base_quantity' => $focQuantity * ($focUnit?->conversion_factor ?? 0)];
+            return ['product_id' => (int) $item['product_id'], 'product_unit_id' => $unit->id, 'quantity' => (int) $item['quantity'], 'base_quantity' => (int) $item['quantity'] * $unit->conversion_factor, 'unit_price' => (int) $price->price, 'discount_percentage' => $discountPercentage, 'discount_amount' => $discountAmount, 'cashback_amount' => $cashback, 'promotion_title' => $promotionTitle ?: null, 'promotion_amount' => $promotion, 'line_total' => $gross - $discountAmount - $cashback - $promotion, 'foc_product_unit_id' => $focUnit?->id, 'foc_quantity' => $focQuantity, 'foc_base_quantity' => $focQuantity * ($focUnit?->conversion_factor ?? 0)];
         })->all();
 
         $subtotal = (int) collect($items)->sum('line_total');

@@ -471,7 +471,6 @@ function ProductForm({
         barcode: '',
         category: '',
         description: '',
-        discount_percentage: 0,
         is_active: true,
         name: '',
         selling_price: 0,
@@ -536,7 +535,6 @@ function ProductForm({
             barcode: product?.barcode ?? '',
             category: product?.category ?? '',
             description: product?.description ?? '',
-            discount_percentage: product?.discount_percentage ?? 0,
             is_active: product?.is_active ?? true,
             name: product?.name ?? '',
             selling_price: product?.selling_price ?? 0,
@@ -661,12 +659,6 @@ function ProductForm({
                             disabled
                             value={form.units.find((unit) => unit.is_default_selling)?.name ?? t('Not selected')}
                         />
-                    </label>
-                    <label className="ui-field">
-                        <span>{t('Item discount (%)')}</span>
-                        <input max={100} min={0} onChange={(event) => change('discount_percentage', Number(event.target.value))} step="0.01" type="number" value={form.discount_percentage} />
-                        <small>{t('Applied to this product in every region during sales.')}</small>
-                        <FieldError errors={errors} name="discount_percentage" />
                     </label>
                     <section className="product-unit-editor form-grid__wide">
                         <header>

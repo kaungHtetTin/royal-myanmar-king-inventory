@@ -1327,6 +1327,17 @@ describe('application portals', () => {
         expect(await screen.findByText('Only 5 FOC base units are available.')).toBeInTheDocument();
 
         fireEvent.change(focQuantity, { target: { value: '2' } });
+        const incentives = screen.getByText('Item discounts and promotions').closest('details')!;
+        expect(incentives).not.toHaveAttribute('open');
+        expect(screen.queryByLabelText('Promotion title — Drinking Water 1 Litre')).not.toBeInTheDocument();
+        fireEvent.click(within(incentives).getByText('Item discounts and promotions'));
+        expect(incentives).toHaveAttribute('open');
+        fireEvent.change(screen.getByLabelText('Discount (%) — Drinking Water 1 Litre'), { target: { value: '10' } });
+        fireEvent.change(screen.getByLabelText('Cashback amount — Drinking Water 1 Litre'), { target: { value: '100' } });
+        fireEvent.change(screen.getByLabelText('Promotion amount — Drinking Water 1 Litre'), { target: { value: '50' } });
+        fireEvent.click(within(incentives).getByText('Item discounts and promotions'));
+        expect(incentives).not.toHaveAttribute('open');
+        expect(within(incentives).getByText(/Save/)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Review sale' }));
         expect(screen.getByRole('heading', { name: 'Review & submit' })).toBeInTheDocument();
         expect(screen.queryByText('Server preview')).not.toBeInTheDocument();
@@ -1353,6 +1364,9 @@ describe('application portals', () => {
                         expect.objectContaining({
                             foc_quantity: 2,
                             quantity: 2,
+                            discount_percentage: 10,
+                            cashback_amount: 100,
+                            promotion_amount: 50,
                         }),
                     ],
                 }),

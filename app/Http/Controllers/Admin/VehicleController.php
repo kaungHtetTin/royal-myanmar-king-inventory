@@ -79,12 +79,23 @@ class VehicleController extends Controller
         ]);
     }
 
+    public function show(Vehicle $vehicle): VehicleResource
+    {
+        Gate::authorize('view', $vehicle);
+        return new VehicleResource($vehicle->load('representative:id,code,name'));
+    }
+
     public function store(Request $request): JsonResponse
     {
         Gate::authorize('create', Vehicle::class);
         $request->merge($this->prepared($request));
         $data = $request->validate($this->rules());
-        $vehicle = Vehicle::query()->create($data);
+        $vehicle = \Illuminate\Support\Facades\DB::transaction(function () use ($data) {
+            $representativeId = $data['sales_representative_id'] ?? null;
+            $vehicle = Vehicle::query()->create(array_replace($data, ['sales_representative_id' => null]));
+            if ($representativeId) app(\App\Services\VehicleAssignmentService::class)->assign(SalesRepresentative::findOrFail($representativeId), $vehicle->id);
+            return $vehicle->fresh();
+        });
         $this->auditLogger->record($request, 'vehicle.created', $request->user(), $vehicle, ['new' => $vehicle->toArray()]);
 
         return (new VehicleResource($vehicle->load('representative:id,code,name')))->response()->setStatusCode(201);
@@ -96,7 +107,16 @@ class VehicleController extends Controller
         $request->merge($this->prepared($request));
         $data = $request->validate($this->rules($vehicle));
         $old = $vehicle->only(array_keys($data));
-        $vehicle->update($data);
+        \Illuminate\Support\Facades\DB::transaction(function () use ($vehicle, $data): void {
+            $next = array_key_exists('sales_representative_id', $data) ? $data['sales_representative_id'] : $vehicle->sales_representative_id;
+            if ($next !== $vehicle->sales_representative_id) {
+                $assignments = app(\App\Services\VehicleAssignmentService::class);
+                if ($vehicle->sales_representative_id) $assignments->assign(SalesRepresentative::findOrFail($vehicle->sales_representative_id), null);
+                if ($next) $assignments->assign(SalesRepresentative::findOrFail($next), $vehicle->id);
+            }
+            $vehicle->update(collect($data)->except('sales_representative_id')->all());
+        });
+        $vehicle->refresh();
         $this->auditLogger->record($request, 'vehicle.updated', $request->user(), $vehicle, [
             'old' => $old,
             'new' => $vehicle->only(array_keys($old)),

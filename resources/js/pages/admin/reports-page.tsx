@@ -11,6 +11,9 @@ import {
 import { Icon } from '../../ui/icons';
 import { Button, EmptyState, MetricCard, Pagination, Panel } from '../../ui/primitives';
 import { useLocale } from '../../localization/locale-context';
+import { formatSellingUnitEquivalent, type SellingEquivalentProduct } from '../../ui/selling-unit-equivalent';
+
+type TripReportRow = { product: ProductIdentity & SellingEquivalentProduct; quantity: number; net_amount: number };
 
 const emptyOptions: ReportOptions = { warehouses: [], reports: [] };
 const emptyResponse = (report: ReportName): ReportResponse => ({
@@ -64,11 +67,13 @@ export function ReportsPage() {
         sales: t('Sales analysis'),
         representatives: t('Representative analysis'),
         customers: t('Customer analysis'),
+        trip: t('Trip'),
     };
     const descriptions: Record<ReportName, string> = {
         sales: t('Analyse posted sales across your assigned locations.'),
         representatives: t('Compare representative sales power across warehouses and durations.'),
         customers: t('Compare customer purchase power for a selected duration.'),
+        trip: t('Posted trip sales grouped by product. Quantities exclude FOC; net amounts include item discounts, cashback and promotions.'),
     };
     const metrics =
         report === 'sales'
@@ -117,10 +122,10 @@ export function ReportsPage() {
             </header>
             <nav
                 aria-label={t('Report sections')}
-                className="section-tabs section-tabs--3 report-tabs reports-page-tabs"
+                className="section-tabs section-tabs--4 report-tabs reports-page-tabs"
                 role="tablist"
             >
-                {(['sales', 'representatives', 'customers'] as ReportName[]).map((name) => (
+                {(['sales', 'representatives', 'customers', 'trip'] as ReportName[]).map((name) => (
                     <button
                         aria-selected={report === name}
                         key={name}
@@ -184,6 +189,8 @@ export function ReportsPage() {
                                         setDraft((value) => ({
                                             ...value,
                                             warehouse_id: Number(event.target.value) || undefined,
+                                            region_id: undefined,
+                                            representative_id: undefined,
                                         }))
                                     }
                                     value={draft.warehouse_id ?? 0}
@@ -196,6 +203,16 @@ export function ReportsPage() {
                                     ))}
                                 </select>
                             ) : null}
+                            {report === 'trip' ? <>
+                                <select aria-label={t('Region')} value={draft.region_id ?? 0} onChange={(event) => setDraft((value) => ({ ...value, region_id: Number(event.target.value) || undefined, representative_id: undefined }))}>
+                                    <option value={0}>{t('All regions')}</option>
+                                    {(options.regions ?? []).filter((item) => !draft.warehouse_id || item.warehouse_id === draft.warehouse_id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                                </select>
+                                <select aria-label={t('Sales representative')} value={draft.representative_id ?? 0} onChange={(event) => setDraft((value) => ({ ...value, representative_id: Number(event.target.value) || undefined }))}>
+                                    <option value={0}>{t('All representatives')}</option>
+                                    {(options.representatives ?? []).filter((item) => (!draft.warehouse_id || item.primary_warehouse_id === draft.warehouse_id) && (!draft.region_id || item.regions.some((region) => region.id === draft.region_id))).map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
+                                </select>
+                            </> : null}
                             {report === 'sales' ? (
                                 <select
                                     aria-label={t('Status')}
@@ -222,7 +239,7 @@ export function ReportsPage() {
                                 onChange={(date_to) => setDraft((value) => ({ ...value, date_to }))}
                                 value={draft.date_to}
                             />
-                            {report !== 'sales' ? (
+                            {report !== 'sales' && report !== 'trip' ? (
                                 <label className="report-amount">
                                     <span>
                                         {report === 'representatives'
@@ -273,6 +290,11 @@ export function ReportsPage() {
                         products={response.analysis?.top_products ?? []}
                         year={response.analysis?.year_trend ?? []}
                     />
+                ) : report === 'trip' ? (
+                    response.data.length === 0 ? <EmptyState title={t('No sales found')} description={t('Adjust the date or warehouse filters to analyse posted sales.')} /> :
+                    <div className="ui-table-wrap"><table className="ui-table"><thead><tr><th>{t('Product')}</th><th className="is-numeric">{t('Quantity')}</th><th className="is-numeric">{t('Net amount')}</th></tr></thead><tbody>
+                        {(response.data as TripReportRow[]).map((row) => <tr key={row.product.id}><td><strong>{row.product.name}</strong><small>{row.product.sku}</small></td><td className="is-numeric">{formatSellingUnitEquivalent(row.quantity, row.product, formatNumber)}</td><td className="is-numeric">{money(row.net_amount)}</td></tr>)}
+                    </tbody></table></div>
                 ) : (
                     <AnalysisTable dateTime={formatDateTime} money={money} report={report} rows={response.data} t={t} />
                 )}
@@ -332,7 +354,7 @@ function AnalysisTable({
 }: {
     dateTime: (value: string) => string;
     money: (value: number) => string;
-    report: Exclude<ReportName, 'sales'>;
+    report: Exclude<ReportName, 'sales' | 'trip'>;
     rows: Record<string, unknown>[];
     t: (key: string) => string;
 }) {
@@ -398,6 +420,10 @@ function csvRows(
     rows: Record<string, unknown>[],
     t: (key: string) => string,
 ): Array<Array<string | number>> {
+    if (report === 'trip') return [
+        [t('Product'), t('Quantity'), t('Net amount')],
+        ...(rows as TripReportRow[]).map((row) => [row.product.name, formatSellingUnitEquivalent(row.quantity, row.product, String), row.net_amount]),
+    ];
     if (report === 'representatives')
         return [
             [

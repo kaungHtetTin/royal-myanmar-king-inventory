@@ -98,13 +98,13 @@ class InventoryController extends Controller
         return response()->streamDownload(function () use ($query): void {
             $output = fopen('php://output', 'wb');
             fwrite($output, "\xEF\xBB\xBF");
-            fputcsv($output, ['SKU', 'Product', 'Base unit', 'On hand', 'Last changed']);
+            fputcsv($output, ['SKU', 'Product', 'Default selling unit', 'On hand', 'Last changed']);
             foreach ($query->lazy(500) as $row) {
                 fputcsv($output, [
                     $this->csvValue($row->product->sku),
                     $this->csvValue($row->product->name),
-                    $this->csvValue($row->product->baseUnit?->name ?? $row->product->unit),
-                    (int) $row->quantity,
+                    $this->csvValue($row->product->defaultSellingUnit?->name ?? $row->product->unit),
+                    $this->sellingUnitEquivalent((int) $row->quantity, $row->product),
                     $row->updated_at?->toISOString(),
                 ]);
             }
@@ -117,6 +117,29 @@ class InventoryController extends Controller
         $value ??= '';
 
         return preg_match('/^[=+\-@]/', $value) ? "'{$value}" : $value;
+    }
+
+    private function sellingUnitEquivalent(int $baseQuantity, Product $product): string
+    {
+        $baseName = $product->baseUnit?->name ?? $product->unit;
+        $sellingUnit = $product->defaultSellingUnit;
+        $conversion = (int) ($sellingUnit?->conversion_factor ?? 1);
+
+        if (! $sellingUnit || $conversion <= 1 || $sellingUnit->name === $baseName || $baseQuantity === 0) {
+            return "{$baseQuantity} {$baseName}";
+        }
+
+        $sellingQuantity = intdiv($baseQuantity, $conversion);
+        $remainder = $baseQuantity % $conversion;
+        $parts = [];
+        if ($sellingQuantity > 0) {
+            $parts[] = "{$sellingQuantity} {$sellingUnit->name}";
+        }
+        if ($remainder > 0) {
+            $parts[] = "{$remainder} {$baseName}";
+        }
+
+        return implode(' + ', $parts);
     }
 
     private function unitData(?ProductUnit $unit): ?array

@@ -26,15 +26,19 @@ class ReportController extends Controller
 
         return response()->json([
             'warehouses' => Warehouse::query()->whereIn('id', $warehouseIds)->orderBy('name')->get(['id', 'code', 'name']),
-            'reports' => ['sales', 'representatives', 'customers'],
+            'regions' => \App\Models\Region::query()->whereIn('warehouse_id', $warehouseIds)->orderBy('name')->get(['id', 'name', 'warehouse_id']),
+            'representatives' => \App\Models\SalesRepresentative::query()->whereIn('primary_warehouse_id', $warehouseIds)->with('regions:id')->orderBy('name')->get(['id', 'code', 'name', 'primary_warehouse_id']),
+            'reports' => ['sales', 'representatives', 'customers', 'trip'],
         ]);
     }
 
     public function show(Request $request, string $report): JsonResponse
     {
-        abort_unless(in_array($report, ['sales', 'representatives', 'customers'], true), 404);
+        abort_unless(in_array($report, ['sales', 'representatives', 'customers', 'trip'], true), 404);
         $data = $request->validate([
             'warehouse_id' => ['nullable', 'integer', 'exists:warehouses,id'],
+            'region_id' => ['nullable', 'integer', 'exists:regions,id'],
+            'representative_id' => ['nullable', 'integer', 'exists:sales_representatives,id'],
             'status' => ['nullable', Rule::in(['draft', 'posted', 'voided'])],
             'search' => ['nullable', 'string', 'max:100'],
             'date_from' => ['nullable', 'date'],
@@ -50,10 +54,36 @@ class ReportController extends Controller
         );
 
         return match ($report) {
+            'trip' => $this->trip($data, $warehouseIds),
             'representatives' => $this->representatives($data, $warehouseIds),
             'customers' => $this->customers($data, $warehouseIds),
             default => $this->sales($data, $warehouseIds),
         };
+    }
+
+    private function trip(array $data, $warehouseIds): JsonResponse
+    {
+        $query = SaleItem::query()
+            ->whereHas('sale', fn ($query) => $query->whereIn('warehouse_id', $warehouseIds)
+                ->whereNotNull('trip_id')->where('status', SaleStatus::Posted)
+                ->when($data['region_id'] ?? null, fn ($query, $id) => $query->where('region_id', $id))
+                ->when($data['representative_id'] ?? null, fn ($query, $id) => $query->where('sales_representative_id', $id))
+                ->when($data['date_from'] ?? null, fn ($query, $date) => $query->whereDate('posted_at', '>=', $date))
+                ->when($data['date_to'] ?? null, fn ($query, $date) => $query->whereDate('posted_at', '<=', $date)))
+            ->selectRaw('product_id, SUM(base_quantity) as quantity, SUM(line_total) as net_amount')
+            ->with(['product:id,sku,name,unit', 'product.baseUnit', 'product.defaultSellingUnit'])
+            ->groupBy('product_id');
+        $paginator = $query->orderBy('product_id')->paginate($data['per_page'] ?? 25)->withQueryString();
+        $paginator->setCollection($paginator->getCollection()->map(fn ($row) => [
+            'product' => array_merge($row->product->only(['id', 'sku', 'name', 'unit']), [
+                'base_unit' => $row->product->baseUnit?->only(['name', 'conversion_factor']),
+                'default_selling_unit' => $row->product->defaultSellingUnit?->only(['name', 'conversion_factor']),
+            ]),
+            'quantity' => (int) $row->quantity,
+            'net_amount' => (int) $row->net_amount,
+        ]));
+
+        return $this->response('trip', $paginator, []);
     }
 
     private function sales(array $data, $warehouseIds): JsonResponse

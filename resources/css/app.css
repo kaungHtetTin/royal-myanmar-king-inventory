@@ -6003,27 +6003,53 @@ button:disabled {
 }
 .admin-sale-detail-items .ui-table {
     width: 100%;
-    min-width: 0;
+    min-width: 900px;
     table-layout: fixed;
 }
+.admin-sale-detail-items .ui-table-wrap {
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    padding-bottom: 8px;
+}
 .admin-sale-detail-items .ui-table th:first-child {
-    width: 32%;
+    width: 24%;
 }
 .admin-sale-detail-items .ui-table th:nth-child(2) {
-    width: 10%;
+    width: 9%;
 }
 .admin-sale-detail-items .ui-table th:nth-child(3) {
-    width: 12%;
+    width: 8%;
 }
 .admin-sale-detail-items .ui-table th:nth-child(4) {
-    width: 11%;
+    width: 10%;
 }
 .admin-sale-detail-items .ui-table th:nth-child(5),
+.admin-sale-detail-items .ui-table th:nth-child(7) {
+    width: 14%;
+}
 .admin-sale-detail-items .ui-table th:nth-child(6) {
-    width: 17.5%;
+    width: 21%;
 }
 .admin-sale-detail-items .ui-table .is-numeric {
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
+}
+.admin-sale-detail-items .ui-table td > strong,
+.admin-sale-detail-items .ui-table td > small {
+    display: block;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+.admin-sale-detail-items .ui-table td > small {
+    margin-top: 4px;
+    line-height: 1.5;
+}
+.admin-sale-detail-items .ui-table th {
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 .admin-sale-detail-items tfoot td {
     border-top: 2px solid var(--color-border);
@@ -7864,13 +7890,124 @@ button:disabled {
     }
 }
 
+.sale-item-incentives {
+    grid-column: 1 / -1;
+    min-width: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-soft);
+    overflow: hidden;
+}
+.vehicle-assignment-panel {
+    display: grid;
+    gap: 12px;
+    padding: var(--admin-panel-pad);
+    min-width: 0;
+}
+.vehicle-assignment-panel > div > strong,
+.vehicle-assignment-panel > div > small { display: block; }
+.vehicle-assignment-panel form { display: grid; gap: 12px; }
+.vehicle-assignment-panel select {
+    width: 100%;
+    min-width: 0;
+    min-height: var(--admin-control-height);
+    padding: 8px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+}
+.sale-item-incentives__toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 52px;
+    padding: 10px 12px;
+    cursor: pointer;
+    list-style: none;
+}
+.sale-item-incentives__toggle::-webkit-details-marker { display: none; }
+.sale-item-incentives__toggle:hover {
+    background: var(--color-primary-soft);
+}
+.sale-item-incentives__toggle:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -3px;
+}
+.sale-item-incentives__heading {
+    display: grid;
+    gap: 3px;
+    flex: 1;
+    min-width: 0;
+}
+.sale-item-incentives__heading > strong {
+    color: var(--color-text);
+    font-size: calc(12px * var(--app-font-scale, 1));
+}
+.sale-item-incentives__toggle > svg {
+    flex-shrink: 0;
+    color: var(--color-muted);
+    transition: transform 150ms ease;
+}
+.sale-item-incentives[open] > summary > svg { transform: rotate(180deg); }
+.sale-item-incentives__fields {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    padding: 12px;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface);
+    align-items: start;
+}
+.sale-item-incentives__fields .ui-field {
+    min-width: 0;
+    margin: 0;
+    gap: 4px;
+}
+.sale-item-incentives__fields input {
+    width: 100%;
+    min-width: 0;
+}
+.sale-item-incentives__fields .ui-field > span {
+    overflow-wrap: anywhere;
+}
+.sale-item-incentives__payable {
+    display: grid;
+    gap: 3px;
+    text-align: right;
+    color: var(--color-muted);
+    font-size: calc(12px * var(--app-font-scale, 1));
+}
+.sale-item-incentives__payable > strong {
+    color: var(--color-primary);
+    font-variant-numeric: tabular-nums;
+}
+.sale-item-incentives__error { grid-column: 1 / -1; }
+@media (max-width: 600px) {
+    .sale-item-incentives__fields { grid-template-columns: minmax(0, 1fr); }
+    .sale-item-incentives__toggle { flex-wrap: wrap; gap: 8px; }
+    .sale-item-incentives__heading { flex-basis: calc(100% - 32px); }
+    .sale-item-incentives__toggle > svg { order: 1; }
+    .sale-item-incentives__payable { order: 2; width: 100%; text-align: left; }
+}
 /* Trip planning, operation, ending, and reconciliation */
 .trip-table {
     min-width: 980px;
 }
 .filter-toolbar.trip-filters {
-    grid-template-columns: minmax(260px, 1fr) 150px 142px 142px auto;
-    align-items: end;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: var(--admin-section-gap);
+}
+.trip-filter-fields .filter-search {
+    flex: 1 0 240px;
+}
+.trip-filter-fields .filter-field {
+    flex: 0 0 160px;
+}
+.trip-filter-fields .filter-field--date {
+    flex-basis: 142px;
 }
 .trip-filters .filter-search,
 .trip-filters .ui-button {
@@ -8259,12 +8396,7 @@ button:disabled {
 }
 
 @media (max-width: 1100px) {
-    .filter-toolbar.trip-filters {
-        grid-template-columns: minmax(240px, 1fr) minmax(140px, 0.55fr) minmax(140px, 0.55fr);
-    }
-    .trip-filters .filter-search {
-        grid-column: span 2;
-    }
+    .trip-filter-fields .filter-search { flex-basis: 220px; }
 }
 
 .sales-trip-hero {
@@ -8525,13 +8657,10 @@ button:disabled {
 
 @media (max-width: 760px) {
     .filter-toolbar.trip-filters {
-        grid-template-columns: 1fr;
-    }
-    .trip-filters .filter-search {
-        grid-column: auto;
+        grid-template-columns: minmax(0, 1fr) auto;
     }
     .trip-filters .ui-button {
-        min-height: 42px;
+        min-height: var(--admin-control-height);
     }
     .trip-coverage-selectors,
     .trip-create-assignment {

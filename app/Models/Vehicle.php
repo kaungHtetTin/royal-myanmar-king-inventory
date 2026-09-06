@@ -22,7 +22,7 @@ class Vehicle extends Model
 
     protected function casts(): array
     {
-        return ['is_active' => 'boolean'];
+        return ['is_active' => 'boolean', 'sales_representative_id' => 'integer'];
     }
 
     public function representative(): BelongsTo

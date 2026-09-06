@@ -75,6 +75,7 @@ async function request<T>(operation: () => Promise<{ data: T }>) {
 }
 
 export const vehicleApi = {
+    show: (id: number) => request<{ data: Vehicle }>(() => window.axios.get(`api/admin/vehicles/${id}`)),
     list: (filters: VehicleFilters) =>
         request<{ data: Vehicle[]; meta: PaginationMeta; summary: VehicleSummary }>(() =>
             window.axios.get('api/admin/vehicles', {

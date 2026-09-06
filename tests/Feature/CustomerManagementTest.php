@@ -136,7 +136,11 @@ class CustomerManagementTest extends TestCase
             'quantity' => 2,
             'base_quantity' => 28,
             'unit_price' => 5000,
-            'line_total' => 10000,
+            'discount_percentage' => 10,
+            'discount_amount' => 1000,
+            'cashback_amount' => 200,
+            'promotion_amount' => 300,
+            'line_total' => 8500,
             'foc_product_unit_id' => $baseUnit->id,
             'foc_quantity' => 2,
             'foc_base_quantity' => 2,
@@ -172,7 +176,19 @@ class CustomerManagementTest extends TestCase
             ->assertJsonPath('data.0.purchased_quantity', 28)
             ->assertJsonPath('data.0.foc_quantity', 2)
             ->assertJsonPath('data.0.total_quantity', 30)
+            ->assertJsonPath('data.0.net_amount', 8500)
             ->assertJsonPath('summary.products', 1);
+
+        $secondSale = $posted->replicate();
+        $secondSale->reference = 'SAL-REPORT-2';
+        $secondSale->save();
+        $secondItem = $posted->items()->firstOrFail()->replicate();
+        $secondItem->sale_id = $secondSale->id;
+        $secondItem->save();
+        $this->getJson('/api/admin/customers/'.$customer->id.'/sale-report?date_from=2026-09-01&date_to=2026-09-02')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.net_amount', 17000);
 
         $this->getJson('/api/admin/customers/'.$customer->id.'/sale-report?date_from=2026-09-03&date_to=2026-09-03')
             ->assertOk()

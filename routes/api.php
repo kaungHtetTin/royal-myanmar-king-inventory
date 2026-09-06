@@ -95,6 +95,11 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
 
         Route::get('/vehicles', [VehicleController::class, 'index'])
             ->middleware('permission:'.PermissionName::VehicleView->value);
+        Route::get('/vehicles/{vehicle}', [VehicleController::class, 'show'])->middleware('permission:'.PermissionName::VehicleView->value);
+        Route::get('/vehicles/{vehicle}/assignment', [\App\Http\Controllers\Admin\VehicleAssignmentController::class, 'vehicleOptions'])->middleware('permission:'.PermissionName::VehicleEdit->value);
+        Route::put('/vehicles/{vehicle}/assignment', [\App\Http\Controllers\Admin\VehicleAssignmentController::class, 'vehicle'])->middleware('permission:'.PermissionName::VehicleEdit->value);
+        Route::get('/representatives/{salesRepresentative}/assignment', [\App\Http\Controllers\Admin\VehicleAssignmentController::class, 'representativeOptions'])->middleware('permission:'.PermissionName::RepresentativeEdit->value);
+        Route::put('/representatives/{salesRepresentative}/assignment', [\App\Http\Controllers\Admin\VehicleAssignmentController::class, 'representative'])->middleware('permission:'.PermissionName::RepresentativeEdit->value);
         Route::get('/vehicle-options', [VehicleController::class, 'options'])
             ->middleware('permission:'.PermissionName::VehicleView->value);
         Route::post('/vehicles', [VehicleController::class, 'store'])

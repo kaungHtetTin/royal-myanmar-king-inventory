@@ -36,10 +36,11 @@ export function TripManagementPage() {
     const [meta, setMeta] = useState(emptyMeta);
     const [summary, setSummary] = useState({ total: 0, planning: 0, operation: 0, ending: 0 });
     const [options, setOptions] = useState(emptyOptions);
-    const [filters, setFilters] = useState({ page: 1, status: '', search: '', date_from: '', date_to: '' });
-    const [draft, setDraft] = useState({ status: '', search: '', date_from: '', date_to: '' });
+    const [filters, setFilters] = useState({ page: 1, status: '', search: '', warehouse_id: '', region_id: '', representative_id: '', date_from: '', date_to: '' });
+    const [draft, setDraft] = useState({ status: '', search: '', warehouse_id: '', region_id: '', representative_id: '', date_from: '', date_to: '' });
     const [form, setForm] = useState(emptyInput);
     const [errors, setErrors] = useState<Record<string, string[]>>({});
+    const [formError, setFormError] = useState('');
     const [dialogOpen, setDialogOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -58,16 +59,27 @@ export function TripManagementPage() {
     useEffect(() => { void load(); }, [load]);
 
     const regions = options.regions.filter((region) => region.warehouse_id === form.warehouse_id);
-    const representatives = options.representatives.filter((representative) => representative.primary_warehouse_id === form.warehouse_id && (!form.region_id || representative.regions.some((region) => region.id === form.region_id)));
-    const vehicles = options.vehicles.filter((vehicle) => !vehicle.sales_representative_id || !form.sales_representative_id || vehicle.sales_representative_id === form.sales_representative_id);
+    const representatives = options.representatives.filter((representative) => !representative.has_active_trip && representative.primary_warehouse_id === form.warehouse_id && (!form.region_id || representative.regions.some((region) => region.id === form.region_id)));
+    const filterRegions = options.regions.filter((region) => String(region.warehouse_id) === draft.warehouse_id);
+    const filterRepresentatives = options.representatives.filter((representative) =>
+        String(representative.primary_warehouse_id) === draft.warehouse_id
+        && representative.regions.some((region) => String(region.id) === draft.region_id),
+    );
+    const vehicles = options.vehicles.filter((vehicle) => vehicle.sales_representative_id === form.sales_representative_id);
     const openCreate = () => {
         setForm(emptyInput);
-        setErrors({}); setDialogOpen(true);
+        setErrors({}); setFormError(''); setDialogOpen(true);
     };
     const create = async () => {
-        setSaving(true); setErrors({});
+        setSaving(true); setErrors({}); setFormError('');
         try { await tripApi.create(form); setDialogOpen(false); await load(); }
-        catch (requestError) { setErrors(requestError instanceof TripApiError ? requestError.fields : {}); setError(errorMessage(requestError, t('Unable to create trip.'))); }
+        catch (requestError) {
+            const message = errorMessage(requestError, t('Unable to create trip.'));
+            setErrors(requestError instanceof TripApiError
+                ? requestError.code === 'REPRESENTATIVE_HAS_ACTIVE_TRIP' ? { sales_representative_id: [message] } : requestError.fields
+                : {});
+            setFormError(message);
+        }
         finally { setSaving(false); }
     };
     return <div className="admin-page trip-management-page">
@@ -80,12 +92,17 @@ export function TripManagementPage() {
         </div>
         {error ? <div className="ui-flash ui-flash--danger" role="alert">{error}<button onClick={() => void load()}>{t('Retry')}</button></div> : null}
         <Panel eyebrow={t('Trip register')} title={t('Planned and active trips')}>
-            <form className="filter-toolbar trip-filters" onSubmit={(event: FormEvent) => { event.preventDefault(); setFilters({ ...draft, page: 1 }); }}>
-                <label className="filter-search"><input aria-label={t('Search trips')} onChange={(event) => setDraft({ ...draft, search: event.target.value })} placeholder={t('Reference or title')} value={draft.search} /></label>
-                <label className="filter-field"><span>{t('Status')}</span><select onChange={(event) => setDraft({ ...draft, status: event.target.value })} value={draft.status}><option value="">{t('All statuses')}</option>{['planning','operation','ending','completed','cancelled'].map((status) => <option key={status} value={status}>{t(status)}</option>)}</select></label>
-                <label className="filter-field"><span>{t('From')}</span><input max={draft.date_to || undefined} onChange={(event) => setDraft({ ...draft, date_from: event.target.value })} type="date" value={draft.date_from} /></label>
-                <label className="filter-field"><span>{t('To')}</span><input min={draft.date_from || undefined} onChange={(event) => setDraft({ ...draft, date_to: event.target.value })} type="date" value={draft.date_to} /></label>
-                <Button icon="search" type="submit">{t('Apply')}</Button>
+            <form aria-label={t('Trip filters')} className="filter-toolbar report-filters trip-filters" onSubmit={(event: FormEvent) => { event.preventDefault(); setFilters({ ...draft, page: 1 }); }}>
+                <div className="report-filter-scroll"><div className="report-filter-fields trip-filter-fields">
+                    <label className="filter-search"><input aria-label={t('Search trips')} onChange={(event) => setDraft({ ...draft, search: event.target.value })} placeholder={t('Reference or title')} value={draft.search} /></label>
+                    <label className="filter-field"><span>{t('Warehouse')}</span><select onChange={(event) => setDraft({ ...draft, warehouse_id: event.target.value, region_id: '', representative_id: '' })} value={draft.warehouse_id}><option value="">{t('All warehouses')}</option>{options.warehouses.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}</select></label>
+                    <label className="filter-field"><span>{t('Region')}</span><select disabled={!draft.warehouse_id} onChange={(event) => setDraft({ ...draft, region_id: event.target.value, representative_id: '' })} value={draft.region_id}><option value="">{draft.warehouse_id ? t('All regions') : t('Select warehouse first')}</option>{filterRegions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+                    <label className="filter-field"><span>{t('Sales representative')}</span><select disabled={!draft.region_id} onChange={(event) => setDraft({ ...draft, representative_id: event.target.value })} value={draft.representative_id}><option value="">{draft.region_id ? t('All representatives') : t('Select region first')}</option>{filterRepresentatives.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}</select></label>
+                    <label className="filter-field"><span>{t('Status')}</span><select onChange={(event) => setDraft({ ...draft, status: event.target.value })} value={draft.status}><option value="">{t('All statuses')}</option>{['planning','operation','ending','completed','cancelled'].map((status) => <option key={status} value={status}>{t(status)}</option>)}</select></label>
+                    <label className="filter-field filter-field--date"><span>{t('From')}</span><input max={draft.date_to || undefined} onChange={(event) => setDraft({ ...draft, date_from: event.target.value })} type="date" value={draft.date_from} /></label>
+                    <label className="filter-field filter-field--date"><span>{t('To')}</span><input min={draft.date_from || undefined} onChange={(event) => setDraft({ ...draft, date_to: event.target.value })} type="date" value={draft.date_to} /></label>
+                </div></div>
+                <div className="report-filter-action"><Button icon="search" type="submit">{t('Apply')}</Button></div>
             </form>
             <div className="ui-table-wrap"><table className="ui-table trip-table"><thead><tr><th>{t('Trip')}</th><th>{t('Representative')}</th><th>{t('Coverage')}</th><th>{t('Vehicle')}</th><th>{t('Status')}</th><th>{t('Created')}</th><th className="ui-table__actions"><span className="sr-only">{t('Actions')}</span></th></tr></thead><tbody>
                 {!loading && rows.length === 0 ? <tr><td colSpan={7}><EmptyState title={t('No trips found')} description={t('Plan a trip to begin controlled field operations.')} /></td></tr> : rows.map((trip) => <tr key={trip.id}><td><strong>{trip.title}</strong><small>{trip.reference}</small></td><td><strong>{trip.representative.name}</strong><small>{trip.representative.code}</small></td><td><strong>{trip.region.name}</strong><small>{trip.warehouse.name}</small></td><td><strong>{trip.vehicle.vehicle_number}</strong><small>{trip.vehicle.vehicle_type}</small></td><td><StatusBadge tone={statusTone(trip.status)}>{t(trip.status)}</StatusBadge></td><td>{formatDateTime(trip.created_at)}</td><td className="ui-table__actions"><IconLink icon="chevronRight" label={t('Open trip {reference}', { reference: trip.reference })} to={`/admin/trips/${trip.id}`} /></td></tr>)}</tbody></table></div>
@@ -93,6 +110,7 @@ export function TripManagementPage() {
         </Panel>
         <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} title={t('Plan a trip')} description={t('Set the coverage first, then assign the representative and vehicle.')} footer={<><Button onClick={() => setDialogOpen(false)}>{t('Cancel')}</Button><Button disabled={saving || !form.title.trim() || !form.warehouse_id || !form.region_id || !form.sales_representative_id || !form.vehicle_id} onClick={() => void create()} tone="primary">{saving ? t('Saving...') : t('Create trip')}</Button></>}>
             <div className="management-form trip-create-form">
+                {formError ? <div className="ui-flash ui-flash--danger" role="alert">{formError}</div> : null}
                 <section className="trip-create-section">
                     <div className="trip-create-section__heading"><span>1</span><div><strong>{t('Trip information')}</strong><small>{t('Give this trip a clear operational title.')}</small></div></div>
                     <label className="ui-field"><span>{t('Title')}</span><input autoFocus maxLength={150} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder={t('Example: North region morning route')} value={form.title} />{errors.title?.[0] ? <small className="ui-field__error">{errors.title[0]}</small> : null}</label>
@@ -102,13 +120,13 @@ export function TripManagementPage() {
                     <div className="trip-coverage-selectors">
                         <label className="ui-field"><span>{t('Warehouse')}</span><select onChange={(event) => setForm({ ...form, warehouse_id: Number(event.target.value), region_id: 0, sales_representative_id: 0, vehicle_id: 0 })} value={form.warehouse_id}><option value={0}>{t('Select warehouse')}</option>{options.warehouses.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}</select>{errors.warehouse_id?.[0] ? <small className="ui-field__error">{errors.warehouse_id[0]}</small> : <small>{t('Stock will be issued from here.')}</small>}</label>
                         <label className="ui-field"><span>{t('Region')}</span><select disabled={!form.warehouse_id} onChange={(event) => setForm({ ...form, region_id: Number(event.target.value), sales_representative_id: 0, vehicle_id: 0 })} value={form.region_id}><option value={0}>{form.warehouse_id ? t('Select region') : t('Select warehouse first')}</option>{regions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>{errors.region_id?.[0] ? <small className="ui-field__error">{errors.region_id[0]}</small> : <small>{t('Only regions in the warehouse are shown.')}</small>}</label>
-                        <label className="ui-field"><span>{t('Sales representative')}</span><select disabled={!form.region_id} onChange={(event) => setForm({ ...form, sales_representative_id: Number(event.target.value), vehicle_id: 0 })} value={form.sales_representative_id}><option value={0}>{form.region_id ? t('Select representative') : t('Select region first')}</option>{representatives.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}</select>{errors.sales_representative_id?.[0] ? <small className="ui-field__error">{errors.sales_representative_id[0]}</small> : <small>{t('Only representatives assigned to this region are shown.')}</small>}</label>
+                        <label className="ui-field"><span>{t('Sales representative')}</span><select disabled={!form.region_id} onChange={(event) => setForm({ ...form, sales_representative_id: Number(event.target.value), vehicle_id: options.vehicles.find((vehicle) => vehicle.sales_representative_id === Number(event.target.value))?.id ?? 0 })} value={form.sales_representative_id}><option value={0}>{form.region_id ? t('Select representative') : t('Select region first')}</option>{representatives.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}</select>{errors.sales_representative_id?.[0] ? <small className="ui-field__error">{errors.sales_representative_id[0]}</small> : <small>{t('Only representatives assigned to this region are shown.')}</small>}</label>
                     </div>
                 </section>
                 <section className="trip-create-section">
                     <div className="trip-create-section__heading"><span>3</span><div><strong>{t('Vehicle and notes')}</strong><small>{t('Complete the assignment before creating the trip.')}</small></div></div>
                     <div className="form-grid trip-create-assignment">
-                        <label className="ui-field"><span>{t('Vehicle')}</span><select disabled={!form.sales_representative_id} onChange={(event) => setForm({ ...form, vehicle_id: Number(event.target.value) })} value={form.vehicle_id}><option value={0}>{form.sales_representative_id ? t('Select vehicle') : t('Select representative first')}</option>{vehicles.map((item) => <option key={item.id} value={item.id}>{item.vehicle_number} · {item.vehicle_type}</option>)}</select>{errors.vehicle_id?.[0] ? <small className="ui-field__error">{errors.vehicle_id[0]}</small> : <small>{t('Unavailable vehicles are excluded.')}</small>}</label>
+                        <label className="ui-field"><span>{t('Vehicle')}</span><select disabled onChange={(event) => setForm({ ...form, vehicle_id: Number(event.target.value) })} value={form.vehicle_id}><option value={0}>{form.sales_representative_id ? t('No assigned vehicle available') : t('Select representative first')}</option>{vehicles.map((item) => <option key={item.id} value={item.id}>{item.vehicle_number} · {item.vehicle_type}</option>)}</select>{errors.vehicle_id?.[0] ? <small className="ui-field__error">{errors.vehicle_id[0]}</small> : <small>{t('The assigned vehicle is selected automatically. Assign an available vehicle in the representative or vehicle details.')}</small>}</label>
                         <label className="ui-field"><span>{t('Notes')} <small className="trip-create-optional">{t('Optional')}</small></span><textarea maxLength={2000} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder={t('Add instructions or operational context')} rows={3} value={form.notes} /></label>
                     </div>
                 </section>

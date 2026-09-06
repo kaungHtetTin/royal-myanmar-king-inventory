@@ -8,6 +8,7 @@ import { transferApi, type RepresentativeInventory } from '../../services/transf
 import { Icon } from '../../ui/icons';
 import { EmptyState, MetricCard, Pagination, Panel, StatusBadge } from '../../ui/primitives';
 import { useLocale } from '../../localization/locale-context';
+import { VehicleAssignmentPanel } from '../../ui/vehicle-assignment-panel';
 
 const emptyMeta: PaginationMeta = { current_page: 1, from: null, last_page: 1, per_page: 10, to: null, total: 0 };
 
@@ -186,6 +187,7 @@ export function RepresentativeDetailPage() {
                 />
             </section>
 
+            <VehicleAssignmentPanel kind="representatives" id={representativeId} currentId={representative.vehicle?.id ?? null} currentName={representative.vehicle?.vehicle_number ?? null} onSaved={load} />
             <div className="representative-detail-overview">
                 <Panel eyebrow={t('Profile')} title={t('Assignment & contact')}>
                     <dl className="representative-detail-facts">

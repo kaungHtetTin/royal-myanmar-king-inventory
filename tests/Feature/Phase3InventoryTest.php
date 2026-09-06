@@ -73,6 +73,16 @@ class Phase3InventoryTest extends TestCase
                 'product_id' => $product->id,
                 'quantity' => $number,
             ]);
+            if ($number === 25) {
+                $product->defaultSellingUnit()->update(['is_default_selling' => false]);
+                $product->units()->create([
+                    'name' => 'box',
+                    'conversion_factor' => 12,
+                    'is_base' => false,
+                    'is_default_selling' => true,
+                    'is_active' => true,
+                ]);
+            }
         }
         $excluded = Product::factory()->create(['sku' => 'OTHER-001', 'name' => 'Excluded Product']);
         WarehouseInventory::query()->create([
@@ -85,9 +95,9 @@ class Phase3InventoryTest extends TestCase
 
         $response->assertOk()->assertDownload();
         $content = $response->streamedContent();
-        $this->assertStringContainsString('SKU,Product,"Base unit","On hand","Last changed"', $content);
-        $this->assertStringContainsString('EXP-001,"Export Product 001",piece,1,', $content);
-        $this->assertStringContainsString('EXP-025,"Export Product 025",piece,25,', $content);
+        $this->assertStringContainsString('SKU,Product,"Default selling unit","On hand","Last changed"', $content);
+        $this->assertStringContainsString('EXP-001,"Export Product 001",piece,"1 piece",', $content);
+        $this->assertStringContainsString('EXP-025,"Export Product 025",box,"2 box + 1 piece",', $content);
         $this->assertSame(26, substr_count(trim($content), "\n") + 1);
         $this->assertStringNotContainsString('OTHER-001', $content);
     }

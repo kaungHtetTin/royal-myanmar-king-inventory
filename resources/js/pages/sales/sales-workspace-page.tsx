@@ -73,6 +73,10 @@ function formFromSale(sale: Sale): SaleInput {
             product_id: item.product.id,
             product_unit_id: item.unit?.id,
             quantity: item.quantity,
+            discount_percentage: item.discount_percentage ?? 0,
+            cashback_amount: item.cashback_amount ?? 0,
+            promotion_title: item.promotion_title ?? '',
+            promotion_amount: item.promotion_amount ?? 0,
             foc_product_unit_id: item.foc_unit?.id,
             foc_quantity: item.foc_quantity,
         })),
@@ -105,7 +109,6 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
     const [fields, setFields] = useState<Record<string, string[]>>({});
     const [actionMenuSaleId, setActionMenuSaleId] = useState<number | null>(null);
     const [wizardStep, setWizardStep] = useState<SaleWizardStep>(1);
-    const [promotionExpanded, setPromotionExpanded] = useState(false);
     const [customerQuery, setCustomerQuery] = useState('');
     const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
     const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
@@ -310,10 +313,9 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
         [lineUnit, selectedRegionId],
     );
     const lineNetTotal = useCallback((line: SaleInput['items'][number]) => {
-        const product = options.products.find((item) => item.id === line.product_id);
         const gross = line.quantity * linePrice(line);
-        return gross - Math.round(gross * (product?.discount_percentage ?? 0) / 100);
-    }, [linePrice, options.products]);
+        return gross - Math.round(gross * (line.discount_percentage ?? 0) / 100) - (line.cashback_amount ?? 0) - (line.promotion_amount ?? 0);
+    }, [linePrice]);
     const lineFocUnit = useCallback(
         (line: SaleInput['items'][number], product = options.products.find((item) => item.id === line.product_id)) =>
             (product ? productUnits(product) : []).find((unit) => unit.id === line.foc_product_unit_id) ??
@@ -389,14 +391,28 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
         setCustomerQuery('');
         setCustomerPickerOpen(false);
         setWizardStep(1);
-        setPromotionExpanded(false);
         setCreationLocation(null);
         setLocationStatus('idle');
         setLocationMessage('');
         navigate('/sales/new-sale', { replace: true });
     };
+    const validateIncentives = (next: Record<string, string[]>) => {
+        form.items.forEach((line, index) => {
+            const percentage = Number(line.discount_percentage ?? 0);
+            if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100 || Math.abs(percentage * 100 - Math.round(percentage * 100)) > 0.000001)
+                next[`items.${index}.discount_percentage`] = [t('Enter a discount from 0 to 100 with up to two decimal places.')];
+            for (const key of ['cashback_amount', 'promotion_amount'] as const) {
+                const amount = Number(line[key] ?? 0);
+                if (!Number.isSafeInteger(amount) || amount < 0)
+                    next[`items.${index}.${key}`] = [t('Enter a whole amount of 0 or more.')];
+            }
+            if (lineNetTotal(line) < 0)
+                next[`items.${index}.cashback_amount`] = [t('Item reductions cannot exceed the item total.')];
+        });
+    };
     const validate = (forPosting: boolean) => {
         const next: Record<string, string[]> = {};
+        validateIncentives(next);
         if (!form.customer_id) next.customer_id = [t('Select a customer.')];
         if (!editing && !creationLocation)
             next.creation_location = [t('Capture the device location before creating this sale.')];
@@ -474,6 +490,7 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
             });
         }
         if (step === 3) {
+            validateIncentives(next);
             form.items.forEach((line, index) => {
                 const product = options.products.find((item) => item.id === line.product_id);
                 if (!Number.isInteger(line.quantity) || line.quantity < 1)
@@ -1184,7 +1201,7 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                                 )}
                                                             </strong>
                                                             <small>
-                                                                {product.discount_percentage > 0 ? t('{discount}% discount · {region} price', { discount: product.discount_percentage, region: selectedRegionName }) : t('{region} price', { region: selectedRegionName })}
+                                                                {t('{region} price', { region: selectedRegionName })}
                                                             </small>
                                                         </span>
                                                     </label>
@@ -1363,6 +1380,33 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                                 ) : null}
                                                             </label>
                                                         </div>
+                                                        <details className="sale-item-incentives" onInvalidCapture={(event) => { event.currentTarget.open = true; }}>
+                                                            <summary className="sale-item-incentives__toggle">
+                                                                <span className="sale-item-incentives__heading">
+                                                                    <strong>{t('Item discounts and promotions')}</strong>
+                                                                    <small>{line.quantity * linePrice(line) - lineNetTotal(line) > 0
+                                                                        ? t('Save {amount}', { amount: money(line.quantity * linePrice(line) - lineNetTotal(line)) })
+                                                                        : t('No reductions applied')}</small>
+                                                                </span>
+                                                                <span className="sale-item-incentives__payable"><small>{t('Payable total')}</small><strong>{money(lineNetTotal(line))}</strong></span>
+                                                                <Icon name="chevronDown" size={16} />
+                                                            </summary>
+                                                            <div className="sale-item-incentives__fields">
+                                                                {([
+                                                                    ['discount_percentage', 'Discount (%)', 100, '0.01'],
+                                                                    ['cashback_amount', 'Cashback amount', line.quantity * linePrice(line), '1'],
+                                                                    ['promotion_amount', 'Promotion amount', line.quantity * linePrice(line), '1'],
+                                                                ] as const).map(([key, label, max, step]) => (
+                                                                    <label className="ui-field" key={key}>
+                                                                        <span>{t(label)}</span>
+                                                                        <input aria-label={t(label) + ' — ' + product.name} type="number" inputMode={key === 'discount_percentage' ? 'decimal' : 'numeric'} min={0} max={max} step={step} value={line[key] ?? 0}
+                                                                            onChange={(event) => setForm((value) => ({ ...value, items: value.items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: editableNumber(event.target.value) } : item) }))} />
+                                                                        {fields[`items.${index}.${key}`]?.[0] ? <small className="ui-field__error">{fields[`items.${index}.${key}`][0]}</small> : null}
+                                                                    </label>
+                                                                ))}
+                                                            </div>
+                                                        </details>
+                                                        {lineNetTotal(line) < 0 ? <small className="ui-field__error sale-item-incentives__error">{t('Item reductions cannot exceed the item total.')}</small> : null}
                                                     </article>
                                                 );
                                             })}
@@ -1411,9 +1455,10 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                                     {line.quantity} {lineUnit(line, product)?.name} ×{' '}
                                                                     {money(linePrice(line))}
                                                                 </span>
-                                                                {product.discount_percentage > 0 ? (
+                                                                {discount > 0 ? (
                                                                     <span className="sale-review__discount">
-                                                                        {t('{discount}% discount', { discount: product.discount_percentage })} · {t('Save {amount}', { amount: money(discount) })}
+                                                                        {t('{discount}% discount', { discount: line.discount_percentage ?? 0 })} · {t('Save {amount}', { amount: money(discount) })}
+                                                                        <small>{t('Cashback amount')}: {money(line.cashback_amount ?? 0)} · {line.promotion_title || t('Promotion')}: {money(line.promotion_amount ?? 0)}</small>
                                                                         <small>{t('Gross {amount}', { amount: money(gross) })}</small>
                                                                     </span>
                                                                 ) : (
@@ -1432,16 +1477,6 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                         </article>
                                                     );
                                                 })}
-                                                <section className={`sale-review__promotion ${promotionExpanded ? 'is-expanded' : ''}`}>
-                                                    <button aria-expanded={promotionExpanded} className="sale-review__promotion-toggle" onClick={() => setPromotionExpanded((value) => !value)} type="button">
-                                                        <span><strong>{t('Promotion cashback')}</strong><small>{form.promotion_amount > 0 ? `${form.promotion_title} · -${money(form.promotion_amount)}` : t('No promotion applied')}</small></span>
-                                                        <span><small>{t('Maximum {amount}', { amount: money(preview) })}</small><Icon name="chevronDown" size={16} /></span>
-                                                    </button>
-                                                    {promotionExpanded ? <div className="sale-review__promotion-fields">
-                                                        <label className="ui-field"><span>{t('Promotion title')}</span><input maxLength={150} onChange={(event) => setForm((value) => ({ ...value, promotion_title: event.target.value }))} placeholder={t('Summer cashback')} value={form.promotion_title} />{fields.promotion_title?.[0] ? <small className="ui-field__error">{fields.promotion_title[0]}</small> : null}</label>
-                                                        <label className="ui-field"><span>{t('Cashback amount')}</span><input inputMode="numeric" max={preview} min={0} onChange={(event) => setForm((value) => ({ ...value, promotion_amount: editableNumber(event.target.value.replace(/\D/g, '')) }))} pattern="[0-9]*" type="text" value={form.promotion_amount} />{fields.promotion_amount?.[0] ? <small className="ui-field__error">{fields.promotion_amount[0]}</small> : null}</label>
-                                                    </div> : null}
-                                                </section>
                                                 <div className="sale-review__totals">
                                                     <span><small>{t('Merchandise subtotal')}</small><strong>{money(preview)}</strong></span>
                                                     <span className={form.promotion_amount > 0 ? 'is-discount' : ''}><small>{form.promotion_title || t('Promotion cashback')}</small><strong>-{money(form.promotion_amount)}</strong></span>

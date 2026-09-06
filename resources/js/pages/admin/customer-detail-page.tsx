@@ -159,13 +159,14 @@ export function CustomerDetailPage() {
         const dateSuffix = [dateRange.date_from, dateRange.date_to].filter(Boolean).join('_to_');
         downloadCsv(
             `${customer?.code ?? 'customer'}-sale-report${dateSuffix ? `-${dateSuffix}` : ''}.csv`,
-            ['Product', 'SKU', 'Purchased', 'FOC', 'Total received'].map((label) => t(label)),
+            ['Product', 'SKU', 'Purchased', 'FOC', 'Total received', 'Net amount'].map((label) => t(label)),
             report.map((item) => [
                 item.product.name,
                 item.product.sku,
                 equivalent(item.purchased_quantity, item),
                 equivalent(item.foc_quantity, item),
                 equivalent(item.total_quantity, item),
+                item.net_amount,
             ]),
         );
     }
@@ -504,6 +505,7 @@ export function CustomerDetailPage() {
                                             <th className="is-numeric">{t('Purchased')}</th>
                                             <th className="is-numeric">{t('FOC')}</th>
                                             <th className="is-numeric">{t('Total received')}</th>
+                                            <th className="is-numeric">{t('Net amount')}</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -536,6 +538,7 @@ export function CustomerDetailPage() {
                                                         )}
                                                     </strong>
                                                 </td>
+                                                <td className="is-numeric"><strong>{money(item.net_amount)}</strong></td>
                                             </tr>
                                         ))}
                                     </tbody>

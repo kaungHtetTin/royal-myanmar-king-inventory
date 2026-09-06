@@ -45,6 +45,7 @@ class TripController extends Controller
         $data = $request->validate([
             'status' => ['nullable', Rule::enum(TripStatus::class)],
             'warehouse_id' => ['nullable', 'integer', 'exists:warehouses,id'],
+            'region_id' => ['nullable', 'integer', 'exists:regions,id'],
             'representative_id' => ['nullable', 'integer', 'exists:sales_representatives,id'],
             'search' => ['nullable', 'string', 'max:100'],
             'date_from' => ['nullable', 'date'],
@@ -55,6 +56,7 @@ class TripController extends Controller
         $query = Trip::query()->with($this->summaryRelations())->whereIn('warehouse_id', $warehouseIds)
             ->when($data['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
             ->when($data['warehouse_id'] ?? null, fn ($query, $id) => $query->where('warehouse_id', $id))
+            ->when($data['region_id'] ?? null, fn ($query, $id) => $query->where('region_id', $id))
             ->when($data['representative_id'] ?? null, fn ($query, $id) => $query->where('sales_representative_id', $id))
             ->when($data['search'] ?? null, fn ($query, $search) => $query->where(fn ($inner) => $inner->where('reference', 'like', "%{$search}%")->orWhere('title', 'like', "%{$search}%")))
             ->when($data['date_from'] ?? null, fn ($query, $date) => $query->whereDate('created_at', '>=', $date))
@@ -79,7 +81,11 @@ class TripController extends Controller
         return response()->json([
             'warehouses' => Warehouse::query()->whereIn('id', $warehouseIds)->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
             'regions' => Region::query()->whereIn('warehouse_id', $warehouseIds)->where('is_active', true)->orderBy('name')->get(['id', 'warehouse_id', 'name']),
-            'representatives' => SalesRepresentative::query()->with('regions:id,name,warehouse_id')->whereIn('primary_warehouse_id', $warehouseIds)->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'primary_warehouse_id']),
+            'representatives' => SalesRepresentative::query()
+                ->select(['id', 'code', 'name', 'primary_warehouse_id'])
+                ->with('regions:id,name,warehouse_id')
+                ->withExists(['trips as has_active_trip' => fn ($query) => $query->whereIn('status', [TripStatus::Planning, TripStatus::Operation, TripStatus::Ending])])
+                ->whereIn('primary_warehouse_id', $warehouseIds)->where('is_active', true)->orderBy('name')->get(),
             'vehicles' => Vehicle::query()
                 ->where('is_active', true)
                 ->whereNotIn('id', Trip::query()
@@ -119,8 +125,8 @@ class TripController extends Controller
             if (Trip::query()->where('sales_representative_id', $representative->id)->whereIn('status', [TripStatus::Planning, TripStatus::Operation, TripStatus::Ending])->exists()) {
                 throw new DomainConflictException('This representative already has an active trip.', 'REPRESENTATIVE_HAS_ACTIVE_TRIP');
             }
-            if ($vehicle->sales_representative_id !== null && $vehicle->sales_representative_id !== $representative->id) {
-                throw ValidationException::withMessages(['vehicle_id' => ['The vehicle is assigned to another representative.']]);
+            if ($vehicle->sales_representative_id !== $representative->id) {
+                throw ValidationException::withMessages(['vehicle_id' => ['Choose the vehicle assigned to this representative.']]);
             }
             if (Trip::query()->where('vehicle_id', $vehicle->id)->whereIn('status', [TripStatus::Planning, TripStatus::Operation, TripStatus::Ending])->exists()) {
                 throw new DomainConflictException('This vehicle is already assigned to an active trip.', 'VEHICLE_HAS_ACTIVE_TRIP');

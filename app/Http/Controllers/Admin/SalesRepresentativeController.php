@@ -177,7 +177,7 @@ class SalesRepresentativeController extends Controller
             $representative = SalesRepresentative::query()->create($this->profileData($data, $user->id));
             $representative->regions()->sync($data['region_ids']);
             if ($data['vehicle_id']) {
-                Vehicle::query()->whereKey($data['vehicle_id'])->update(['sales_representative_id' => $representative->id]);
+                app(\App\Services\VehicleAssignmentService::class)->assign($representative, (int) $data['vehicle_id']);
             }
             $this->auditLogger->record($request, 'representative.created', $request->user(), $representative, [
                 'new' => $this->auditData($representative, $user, $data['vehicle_id']),
@@ -218,10 +218,7 @@ class SalesRepresentativeController extends Controller
             $salesRepresentative->regions()->sync($data['region_ids']);
 
             if ($oldVehicleId !== $data['vehicle_id']) {
-                Vehicle::query()->where('sales_representative_id', $salesRepresentative->id)->update(['sales_representative_id' => null]);
-                if ($data['vehicle_id']) {
-                    Vehicle::query()->whereKey($data['vehicle_id'])->update(['sales_representative_id' => $salesRepresentative->id]);
-                }
+                app(\App\Services\VehicleAssignmentService::class)->assign($salesRepresentative, $data['vehicle_id'] ? (int) $data['vehicle_id'] : null);
             }
             $this->auditLogger->record($request, 'representative.updated', $request->user(), $salesRepresentative, [
                 'old' => $old,

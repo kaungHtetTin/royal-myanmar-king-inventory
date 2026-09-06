@@ -109,7 +109,7 @@ class CustomerController extends Controller
         ]);
 
         $items = SaleItem::query()
-            ->selectRaw('product_id, SUM(base_quantity) as purchased_quantity, SUM(foc_base_quantity) as foc_quantity')
+            ->selectRaw('product_id, SUM(base_quantity) as purchased_quantity, SUM(foc_base_quantity) as foc_quantity, SUM(line_total) as net_amount')
             ->whereHas('sale', fn ($query) => $query
                 ->where('customer_id', $customer->id)
                 ->where('status', SaleStatus::Posted)
@@ -140,6 +140,7 @@ class CustomerController extends Controller
                     'purchased_quantity' => $purchased,
                     'foc_quantity' => $foc,
                     'total_quantity' => $purchased + $foc,
+                    'net_amount' => (int) $item->getAttribute('net_amount'),
                 ];
             })
             ->sortBy(fn (array $item) => $item['product']['name'], SORT_NATURAL | SORT_FLAG_CASE)

@@ -68,6 +68,7 @@ export type CustomerSaleReportProduct = {
     foc_quantity: number;
     purchased_quantity: number;
     total_quantity: number;
+    net_amount: number;
 };
 export type CustomerSaleReport = {
     data: CustomerSaleReportProduct[];

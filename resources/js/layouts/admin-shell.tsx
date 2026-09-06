@@ -179,6 +179,8 @@ export function AdminShell({ children }: AdminShellProps) {
     const { locale, setLocale, t } = useLocale();
     const pageTitleKey = location.pathname.startsWith('/admin/representatives/')
         ? 'Representative details'
+        : location.pathname.startsWith('/admin/vehicles/')
+          ? 'Vehicle details'
         : location.pathname.startsWith('/admin/warehouses/')
           ? 'Warehouse settings'
           : location.pathname.startsWith('/admin/trips/')

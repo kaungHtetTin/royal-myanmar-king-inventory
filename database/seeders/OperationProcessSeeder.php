@@ -312,7 +312,7 @@ class OperationProcessSeeder extends Seeder
                 }
 
                 $gross = $line['quantity'] * $unitPrice;
-                $discountPercentage = (float) $line['product']->discount_percentage;
+                $discountPercentage = 0;
                 $discountAmount = (int) round($gross * $discountPercentage / 100);
                 $focUnit = isset($line['foc_unit'])
                     ? $line['product']->units()->where('name', $line['foc_unit'])->firstOrFail()

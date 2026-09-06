@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useSession } from '../../auth/session-context';
+import { Link } from 'react-router-dom';
 import type { PaginationMeta } from '../../services/administration';
 import {
     VehicleApiError,
@@ -274,7 +275,7 @@ export function VehicleManagementPage() {
                                 {vehicles.map((vehicle) => (
                                     <tr key={vehicle.id}>
                                         <td>
-                                            <strong>{vehicle.vehicle_number}</strong>
+                                            <Link className="inventory-reference-link" to={`/admin/vehicles/${vehicle.id}`}><strong>{vehicle.vehicle_number}</strong></Link>
                                             <small>{vehicle.vehicle_type}</small>
                                         </td>
                                         <td>

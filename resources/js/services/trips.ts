@@ -95,6 +95,7 @@ export type TripOptions = {
         code: string;
         name: string;
         primary_warehouse_id: number;
+        has_active_trip?: boolean;
         regions: Array<{ id: number; name: string; warehouse_id: number }>;
     }>;
     vehicles: Array<{
@@ -141,7 +142,7 @@ async function request<T>(operation: () => Promise<{ data: T }>) {
 
 export const tripApi = {
     options: () => request<TripOptions>(() => window.axios.get('api/admin/trip-options')),
-    list: (filters: { page?: number; status?: string; search?: string; date_from?: string; date_to?: string } = {}) =>
+    list: (filters: { page?: number; status?: string; search?: string; warehouse_id?: string; region_id?: string; representative_id?: string; date_from?: string; date_to?: string } = {}) =>
         request<{ data: Trip[]; meta: PaginationMeta; summary: { total: number; planning: number; operation: number; ending: number } }>(() =>
             window.axios.get('api/admin/trips', { params: { ...filters, per_page: 20 } }),
         ),
