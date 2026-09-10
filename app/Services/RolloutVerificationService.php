@@ -123,7 +123,7 @@ class RolloutVerificationService
         $rows = Sale::query()->with('items')
             ->when($warehouse, fn ($query) => $query->where('warehouse_id', $warehouse->id))
             ->get();
-        $mismatches = $rows->filter(fn (Sale $sale): bool => $sale->total_amount !== (int) $sale->items->sum('line_total'))->count();
+        $mismatches = $rows->filter(fn (Sale $sale): bool => $sale->total_amount !== (int) $sale->items->sum('line_total') - $sale->cashback_amount - $sale->promotion_amount)->count();
 
         return $this->result($rows->count(), $mismatches);
     }

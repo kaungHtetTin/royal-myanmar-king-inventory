@@ -265,6 +265,7 @@ export function SalesManagementPage() {
                                     <th>{t('Customer')}</th>
                                     <th>{t('Products')}</th>
                                     <th>{t('Payment')}</th>
+                                    <th className="is-numeric">{t('Cashback amount')}</th>
                                     <th className="is-numeric">{t('Total')}</th>
                                     <th>{t('Status')}</th>
                                     <th className="ui-table__actions">{t('Actions')}</th>
@@ -309,6 +310,9 @@ export function SalesManagementPage() {
                                             <small>
                                                 {t(sale.payment_type === 'credit' ? 'Outstanding credit' : sale.adds_to_cash_hold ? 'Cash hold' : 'Direct / banking')}
                                             </small>
+                                        </td>
+                                        <td className="is-numeric">
+                                            {sale.cashback_amount ? `-${money(sale.cashback_amount)}` : '—'}
                                         </td>
                                         <td className="is-numeric">
                                             <strong>{money(sale.total_amount)}</strong>

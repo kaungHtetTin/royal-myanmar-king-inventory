@@ -206,7 +206,7 @@ export function AdminSaleDetailPage() {
                                                 : '—'}
                                         </td>
                                         <td className="is-numeric">{money(item.unit_price)}</td>
-                                        <td className="is-numeric">{(item.discount_percentage ?? 0) > 0 ? `${item.discount_percentage}% · ${money(item.discount_amount ?? 0)}` : '—'}{item.cashback_amount ? <small>{t('Cashback amount')}: -{money(item.cashback_amount)}</small> : null}{item.promotion_amount ? <small>{item.promotion_title || t('Promotion')}: -{money(item.promotion_amount)}</small> : null}</td>
+                                        <td className="is-numeric">{(item.discount_percentage ?? 0) > 0 ? `${item.discount_percentage}% · ${money(item.discount_amount ?? 0)}` : '—'}{item.promotion_amount ? <small>{item.promotion_title || t('Promotion')}: -{money(item.promotion_amount)}</small> : null}</td>
                                         <td className="is-numeric">
                                             <strong>{money(item.line_total)}</strong>
                                         </td>
@@ -215,7 +215,7 @@ export function AdminSaleDetailPage() {
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <td colSpan={2}>{t('Total')}</td>
+                                    <td colSpan={2}>{t('Merchandise subtotal')}</td>
                                     <td className="is-numeric">
                                         <strong>{formatNumber(sale.total_quantity)}</strong>
                                     </td>
@@ -223,10 +223,22 @@ export function AdminSaleDetailPage() {
                                         <strong>{formatNumber(sale.total_foc_quantity ?? 0)}</strong>
                                     </td>
                                     <td />
-                                    <td className="is-numeric"><strong>{money(sale.total_discount ?? 0)}</strong><small>{t('Cashback amount')}: {money(sale.total_cashback ?? 0)}</small><small>{t('Item promotions')}: {money(sale.total_item_promotion ?? 0)}</small></td>
+                                    <td className="is-numeric"><strong>{money(sale.total_discount ?? 0)}</strong><small>{t('Item promotions')}: {money(sale.total_item_promotion ?? 0)}</small></td>
                                     <td className="is-numeric">
-                                        <strong>{money(sale.total_amount)}</strong>
+                                        <strong>{money(sale.merchandise_subtotal ?? sale.total_amount)}</strong>
                                     </td>
+                                </tr>
+                                <tr>
+                                    <td colSpan={6}>{t('Cashback amount')}</td>
+                                    <td className="is-numeric"><strong>-{money(sale.cashback_amount ?? 0)}</strong></td>
+                                </tr>
+                                {sale.promotion_amount ? <tr>
+                                    <td colSpan={6}>{sale.promotion_title || t('Promotion cashback')}</td>
+                                    <td className="is-numeric"><strong>-{money(sale.promotion_amount)}</strong></td>
+                                </tr> : null}
+                                <tr>
+                                    <td colSpan={6}>{t('Payable total')}</td>
+                                    <td className="is-numeric"><strong>{money(sale.total_amount)}</strong></td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -267,6 +279,10 @@ export function AdminSaleDetailPage() {
                             <div>
                                 <dt>{t('Payment')}</dt>
                                 <dd>{t(sale.payment_type)}{sale.payment_method ? ` · ${sale.payment_method_name ?? t(sale.payment_method)}` : ''}</dd>
+                            </div>
+                            <div>
+                                <dt>{t('Cashback amount')}</dt>
+                                <dd>{sale.cashback_amount ? `-${money(sale.cashback_amount)}` : t('None')}</dd>
                             </div>
                             <div>
                                 <dt>{t('Promotion cashback')}</dt>

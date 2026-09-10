@@ -73,7 +73,7 @@ export function ReportsPage() {
         sales: t('Analyse posted sales across your assigned locations.'),
         representatives: t('Compare representative sales power across warehouses and durations.'),
         customers: t('Compare customer purchase power for a selected duration.'),
-        trip: t('Posted trip sales grouped by product. Quantities exclude FOC; net amounts include item discounts, cashback and promotions.'),
+        trip: t('Posted trip sales grouped by product. Quantities exclude FOC; net amounts include item discounts and item promotions. Invoice-level cashback is reflected only in invoice totals.'),
     };
     const metrics =
         report === 'sales'

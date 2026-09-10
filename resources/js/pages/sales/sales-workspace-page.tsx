@@ -32,6 +32,7 @@ const emptyForm: SaleInput = {
     notes: '',
     promotion_title: '',
     promotion_amount: 0,
+    cashback_amount: 0,
     payment_type: 'cash',
     payment_method: 'cash',
 };
@@ -69,12 +70,12 @@ function formFromSale(sale: Sale): SaleInput {
         notes: sale.notes ?? '',
         promotion_title: sale.promotion_title ?? '',
         promotion_amount: sale.promotion_amount ?? 0,
+        cashback_amount: sale.cashback_amount ?? 0,
         items: sale.items.map((item) => ({
             product_id: item.product.id,
             product_unit_id: item.unit?.id,
             quantity: item.quantity,
             discount_percentage: item.discount_percentage ?? 0,
-            cashback_amount: item.cashback_amount ?? 0,
             promotion_title: item.promotion_title ?? '',
             promotion_amount: item.promotion_amount ?? 0,
             foc_product_unit_id: item.foc_unit?.id,
@@ -314,7 +315,7 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
     );
     const lineNetTotal = useCallback((line: SaleInput['items'][number]) => {
         const gross = line.quantity * linePrice(line);
-        return gross - Math.round(gross * (line.discount_percentage ?? 0) / 100) - (line.cashback_amount ?? 0) - (line.promotion_amount ?? 0);
+        return gross - Math.round(gross * (line.discount_percentage ?? 0) / 100) - (line.promotion_amount ?? 0);
     }, [linePrice]);
     const lineFocUnit = useCallback(
         (line: SaleInput['items'][number], product = options.products.find((item) => item.id === line.product_id)) =>
@@ -351,7 +352,7 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
         () => form.items.reduce((total, line) => total + lineNetTotal(line), 0),
         [form.items, lineNetTotal],
     );
-    const payablePreview = Math.max(0, preview - form.promotion_amount);
+    const payablePreview = Math.max(0, preview - form.cashback_amount - form.promotion_amount);
     const paidBaseTotal = useMemo(
         () => form.items.reduce((total, line) => total + line.quantity * (lineUnit(line)?.conversion_factor ?? 1), 0),
         [form.items, lineUnit],
@@ -401,18 +402,22 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
             const percentage = Number(line.discount_percentage ?? 0);
             if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100 || Math.abs(percentage * 100 - Math.round(percentage * 100)) > 0.000001)
                 next[`items.${index}.discount_percentage`] = [t('Enter a discount from 0 to 100 with up to two decimal places.')];
-            for (const key of ['cashback_amount', 'promotion_amount'] as const) {
+            for (const key of ['promotion_amount'] as const) {
                 const amount = Number(line[key] ?? 0);
                 if (!Number.isSafeInteger(amount) || amount < 0)
                     next[`items.${index}.${key}`] = [t('Enter a whole amount of 0 or more.')];
             }
             if (lineNetTotal(line) < 0)
-                next[`items.${index}.cashback_amount`] = [t('Item reductions cannot exceed the item total.')];
+                next[`items.${index}.promotion_amount`] = [t('Item reductions cannot exceed the item total.')];
         });
     };
     const validate = (forPosting: boolean) => {
         const next: Record<string, string[]> = {};
         validateIncentives(next);
+        if (!Number.isSafeInteger(form.cashback_amount) || form.cashback_amount < 0)
+            next.cashback_amount = [t('Enter a whole amount of 0 or more.')];
+        else if (form.cashback_amount + form.promotion_amount > preview)
+            next.cashback_amount = [t('Cashback cannot exceed the merchandise subtotal.')];
         if (!form.customer_id) next.customer_id = [t('Select a customer.')];
         if (!editing && !creationLocation)
             next.creation_location = [t('Capture the device location before creating this sale.')];
@@ -1394,7 +1399,6 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                             <div className="sale-item-incentives__fields">
                                                                 {([
                                                                     ['discount_percentage', 'Discount (%)', 100, '0.01'],
-                                                                    ['cashback_amount', 'Cashback amount', line.quantity * linePrice(line), '1'],
                                                                     ['promotion_amount', 'Promotion amount', line.quantity * linePrice(line), '1'],
                                                                 ] as const).map(([key, label, max, step]) => (
                                                                     <label className="ui-field" key={key}>
@@ -1458,7 +1462,7 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                                 {discount > 0 ? (
                                                                     <span className="sale-review__discount">
                                                                         {t('{discount}% discount', { discount: line.discount_percentage ?? 0 })} · {t('Save {amount}', { amount: money(discount) })}
-                                                                        <small>{t('Cashback amount')}: {money(line.cashback_amount ?? 0)} · {line.promotion_title || t('Promotion')}: {money(line.promotion_amount ?? 0)}</small>
+                                                                        <small>{line.promotion_title || t('Promotion')}: {money(line.promotion_amount ?? 0)}</small>
                                                                         <small>{t('Gross {amount}', { amount: money(gross) })}</small>
                                                                     </span>
                                                                 ) : (
@@ -1479,6 +1483,13 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                 })}
                                                 <div className="sale-review__totals">
                                                     <span><small>{t('Merchandise subtotal')}</small><strong>{money(preview)}</strong></span>
+                                                    <label className="ui-field">
+                                                        <span>{t('Cashback amount')}</span>
+                                                        <input aria-label={t('Cashback amount')} type="number" inputMode="numeric" min={0} max={preview} step="1" value={form.cashback_amount}
+                                                            onChange={(event) => setForm((value) => ({ ...value, cashback_amount: editableNumber(event.target.value) }))} />
+                                                        {fields.cashback_amount?.[0] ? <small className="ui-field__error">{fields.cashback_amount[0]}</small> : null}
+                                                    </label>
+                                                    <span className={form.cashback_amount > 0 ? 'is-discount' : ''}><small>{t('Cashback amount')}</small><strong>-{money(form.cashback_amount)}</strong></span>
                                                     <span className={form.promotion_amount > 0 ? 'is-discount' : ''}><small>{form.promotion_title || t('Promotion cashback')}</small><strong>-{money(form.promotion_amount)}</strong></span>
                                                     <span className="is-total"><small>{t('Payable total')}</small><strong>{money(payablePreview)}</strong></span>
                                                 </div>

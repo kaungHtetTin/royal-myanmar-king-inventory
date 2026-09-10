@@ -1333,13 +1333,13 @@ describe('application portals', () => {
         fireEvent.click(within(incentives).getByText('Item discounts and promotions'));
         expect(incentives).toHaveAttribute('open');
         fireEvent.change(screen.getByLabelText('Discount (%) — Drinking Water 1 Litre'), { target: { value: '10' } });
-        fireEvent.change(screen.getByLabelText('Cashback amount — Drinking Water 1 Litre'), { target: { value: '100' } });
         fireEvent.change(screen.getByLabelText('Promotion amount — Drinking Water 1 Litre'), { target: { value: '50' } });
         fireEvent.click(within(incentives).getByText('Item discounts and promotions'));
         expect(incentives).not.toHaveAttribute('open');
         expect(within(incentives).getByText(/Save/)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Review sale' }));
         expect(screen.getByRole('heading', { name: 'Review & submit' })).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText('Cashback amount'), { target: { value: '100' } });
         expect(screen.queryByText('Server preview')).not.toBeInTheDocument();
         expect(screen.queryByRole('heading', { name: 'Sale summary' })).not.toBeInTheDocument();
         expect(screen.queryByText(/7,500 MMK available/)).not.toBeInTheDocument();
@@ -1365,10 +1365,10 @@ describe('application portals', () => {
                             foc_quantity: 2,
                             quantity: 2,
                             discount_percentage: 10,
-                            cashback_amount: 100,
                             promotion_amount: 50,
                         }),
                     ],
+                    cashback_amount: 100,
                 }),
                 expect.any(Object),
             ),
@@ -1599,7 +1599,7 @@ describe('application portals', () => {
             within(lineItems)
                 .getAllByRole('columnheader')
                 .map((header) => header.textContent),
-        ).toEqual(['Product', 'Unit', 'Paid qty', 'FOC', 'Unit price', 'Line total']);
+        ).toEqual(['Product', 'Unit', 'Paid qty', 'FOC', 'Unit price', 'Discount', 'Line total']);
         expect(within(lineItems).getAllByRole('row')).toHaveLength(2);
         expect(screen.getByText('Drinking Water 1 Litre')).toBeInTheDocument();
         expect(screen.getByText('Deliver before noon')).toBeInTheDocument();

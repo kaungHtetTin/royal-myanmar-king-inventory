@@ -52,19 +52,19 @@ class SaleItemIncentivesTest extends TestCase
     {
         $plain = $this->withHeader('Idempotency-Key', 'plain')->postJson('/api/sales/sales', $this->payload())
             ->assertCreated()->assertJsonPath('data.total_amount', 2000)->assertJsonPath('data.items.0.discount_percentage', 0);
-        $input = $this->payload(['discount_percentage' => 10, 'cashback_amount' => 100, 'promotion_title' => 'Launch', 'promotion_amount' => 50, 'foc_quantity' => 1]);
+        $input = $this->payload(['discount_percentage' => 10, 'promotion_title' => 'Launch', 'promotion_amount' => 50, 'foc_quantity' => 1]) + ['cashback_amount' => 100];
         $id = $this->withHeader('Idempotency-Key', 'incentives')->postJson('/api/sales/sales', $input)
             ->assertCreated()->assertJsonPath('data.total_amount', 1650)->assertJsonPath('data.items.0.discount_amount', 200)
             ->assertJsonPath('data.total_cashback', 100)->assertJsonPath('data.total_item_promotion', 50)->json('data.id');
         unset($input['creation_latitude'], $input['creation_longitude']);
-        $input['items'][0]['cashback_amount'] = 150;
+        $input['cashback_amount'] = 150;
         $this->putJson("/api/sales/sales/{$id}", $input)->assertOk()->assertJsonPath('data.total_amount', 1600)
             ->assertJsonPath('data.items.0.promotion_title', 'Launch');
         $this->withHeader('Idempotency-Key', 'post')->postJson("/api/sales/sales/{$id}/post")->assertOk();
         $this->assertDatabaseHas('representative_cash_balances', ['sales_representative_id' => $this->representative->id, 'amount' => 1600]);
         $this->assertDatabaseHas('representative_inventories', ['sales_representative_id' => $this->representative->id, 'quantity' => 98, 'foc_quantity' => 9]);
         $this->putJson("/api/sales/sales/{$id}", $input)->assertConflict();
-        $plain->assertJsonPath('data.items.0.cashback_amount', 0);
+        $plain->assertJsonPath('data.cashback_amount', 0);
     }
 
     public function test_invalid_incentives_are_rejected_without_saving(): void
@@ -72,21 +72,22 @@ class SaleItemIncentivesTest extends TestCase
         foreach ([
             [['discount_percentage' => 101], 'discount_percentage'],
             [['discount_percentage' => 1.234], 'discount_percentage'],
-            [['cashback_amount' => -1], 'cashback_amount'],
-            [['cashback_amount' => 0.5], 'cashback_amount'],
-            [['discount_percentage' => 90, 'cashback_amount' => 201], 'cashback_amount'],
         ] as $index => [$item, $field]) {
             $this->withHeader('Idempotency-Key', "invalid-{$index}")->postJson('/api/sales/sales', $this->payload($item))
                 ->assertUnprocessable()->assertJsonValidationErrors("items.0.{$field}");
+        }
+        foreach ([-1, 0.5, 2001] as $index => $cashback) {
+            $this->withHeader('Idempotency-Key', "invalid-cashback-{$index}")->postJson('/api/sales/sales', $this->payload() + ['cashback_amount' => $cashback])
+                ->assertUnprocessable()->assertJsonValidationErrors('cashback_amount');
         }
         $this->assertDatabaseCount('sales', 0);
     }
 
     public function test_posting_detects_tampered_item_totals(): void
     {
-        $id = $this->withHeader('Idempotency-Key', 'tamper')->postJson('/api/sales/sales', $this->payload(['cashback_amount' => 100]))
+        $id = $this->withHeader('Idempotency-Key', 'tamper')->postJson('/api/sales/sales', $this->payload() + ['cashback_amount' => 100])
             ->assertCreated()->json('data.id');
-        Sale::findOrFail($id)->items()->update(['cashback_amount' => 200]);
+        Sale::findOrFail($id)->items()->update(['line_total' => 1900]);
         $this->withHeader('Idempotency-Key', 'tamper-post')->postJson("/api/sales/sales/{$id}/post")
             ->assertConflict()->assertJsonPath('code', 'SALE_TOTAL_MISMATCH');
     }
@@ -105,7 +106,7 @@ class SaleItemIncentivesTest extends TestCase
 
     public function test_credit_and_void_use_the_net_amount_and_preserve_stock_quantities(): void
     {
-        $input = $this->payload(['discount_percentage' => 12.34, 'cashback_amount' => 100, 'promotion_title' => 'Offer', 'promotion_amount' => 50]);
+        $input = $this->payload(['discount_percentage' => 12.34, 'promotion_title' => 'Offer', 'promotion_amount' => 50]) + ['cashback_amount' => 100];
         $input['payment_type'] = 'credit';
         $id = $this->withHeader('Idempotency-Key', 'credit')->postJson('/api/sales/sales', $input)
             ->assertCreated()->assertJsonPath('data.items.0.discount_amount', 247)->assertJsonPath('data.total_amount', 1603)->json('data.id');
@@ -136,8 +137,9 @@ class SaleItemIncentivesTest extends TestCase
     {
         $other = Product::factory()->create(['unit' => 'box', 'selling_price' => 500]);
         $input = $this->payload(['discount_percentage' => 100]);
-        $input['items'][] = ['product_id' => $other->id, 'quantity' => 1, 'cashback_amount' => 50];
+        $input['items'][] = ['product_id' => $other->id, 'quantity' => 1];
+        $input['cashback_amount'] = 50;
         $this->withHeader('Idempotency-Key', 'multiple')->postJson('/api/sales/sales', $input)->assertCreated()
-            ->assertJsonPath('data.items.0.line_total', 0)->assertJsonPath('data.items.1.line_total', 450)->assertJsonPath('data.total_amount', 450);
+            ->assertJsonPath('data.items.0.line_total', 0)->assertJsonPath('data.items.1.line_total', 500)->assertJsonPath('data.total_amount', 450);
     }
 }

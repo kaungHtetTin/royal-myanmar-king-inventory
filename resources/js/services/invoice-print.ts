@@ -77,7 +77,7 @@ export function invoiceDocument(
                 <td class="item-sold number" data-label="${escapeHtml(t('Sold'))}">${item.quantity} ${escapeHtml(item.unit?.name ?? item.product.unit)}</td>
                 <td class="item-foc number" data-label="FOC">${item.foc_quantity ? `${item.foc_quantity} ${escapeHtml(item.foc_unit?.name ?? item.unit?.name ?? item.product.unit)}` : '—'}</td>
                 <td class="item-price number" data-label="${escapeHtml(t('Price'))}">${escapeHtml(money(item.unit_price))}</td>
-                <td class="item-discount number" data-label="${escapeHtml(t('Discount'))}">${(item.discount_percentage ?? 0) > 0 ? `${item.discount_percentage}% · ${escapeHtml(money(item.discount_amount ?? 0))}` : '—'}${item.cashback_amount ? `<small>${escapeHtml(t('Cashback amount'))}: -${escapeHtml(money(item.cashback_amount))}</small>` : ''}${item.promotion_amount ? `<small>${escapeHtml(item.promotion_title || t('Promotion'))}: -${escapeHtml(money(item.promotion_amount))}</small>` : ''}</td>
+                <td class="item-discount number" data-label="${escapeHtml(t('Discount'))}">${(item.discount_percentage ?? 0) > 0 ? `${item.discount_percentage}% · ${escapeHtml(money(item.discount_amount ?? 0))}` : '—'}${item.promotion_amount ? `<small>${escapeHtml(item.promotion_title || t('Promotion'))}: -${escapeHtml(money(item.promotion_amount))}</small>` : ''}</td>
                 <td class="item-amount number" data-label="${escapeHtml(t('Amount'))}"><strong>${escapeHtml(money(item.line_total))}</strong></td>
             </tr>`,
         )

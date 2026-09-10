@@ -18,7 +18,6 @@ export type SaleItem = {
     gross_total?: number;
     discount_percentage?: number;
     discount_amount?: number;
-    cashback_amount?: number;
     promotion_title?: string | null;
     promotion_amount?: number;
     line_total: number;
@@ -49,6 +48,7 @@ export type Sale = {
     payment_method_name?: string | null;
     adds_to_cash_hold?: boolean;
     total_amount: number;
+    cashback_amount?: number;
     promotion_title?: string | null;
     promotion_amount?: number;
     merchandise_subtotal?: number;
@@ -152,6 +152,7 @@ export type SaleInput = {
     notes: string;
     promotion_title: string;
     promotion_amount: number;
+    cashback_amount: number;
     creation_latitude?: number;
     creation_longitude?: number;
     location_accuracy_meters?: number;
@@ -160,7 +161,6 @@ export type SaleInput = {
         product_unit_id?: number;
         quantity: number;
         discount_percentage?: number;
-        cashback_amount?: number;
         promotion_title?: string;
         promotion_amount?: number;
         foc_product_unit_id?: number;

@@ -36,12 +36,13 @@ describe('invoice printing', () => {
             gross_amount: 2500,
             total_discount: 250,
             total_cashback: 100,
+            cashback_amount: 100,
             total_item_promotion: 50,
             total_amount: 2100,
-            items: [{ ...sale.items[0], discount_percentage: 10, discount_amount: 250, cashback_amount: 100, promotion_title: '<Launch>', promotion_amount: 50, line_total: 2100 }],
+            items: [{ ...sale.items[0], discount_percentage: 10, discount_amount: 250, promotion_title: '<Launch>', promotion_amount: 50, line_total: 2100 }],
         });
         expect(document).toContain('10%');
-        expect(document).toContain('Cashback amount: -100 MMK');
+        expect(document).toContain('Cashback amount</td><td class="number"><strong>-100 MMK');
         expect(document).toContain('&lt;Launch&gt;: -50 MMK');
         expect(document).toContain('2,100 MMK');
         expect(document).not.toContain('<Launch>');

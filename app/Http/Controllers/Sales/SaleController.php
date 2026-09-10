@@ -174,6 +174,7 @@ class SaleController extends Controller
         $result = $this->idempotency->execute($request->user(), 'sale:create', $this->idempotencyKey($request), function () use ($request, $representative, $trip, $data): array {
             [$customer, $items, $total] = $this->preparedDraft($representative, $data, $trip);
             $sale = Sale::query()->create(['reference' => $this->references->next('sale', 'SAL'), 'trip_id' => $trip->id, 'sales_representative_id' => $representative->id, 'warehouse_id' => $customer->assignedRegion->warehouse_id, 'region_id' => $customer->region_id, 'customer_id' => $customer->id, 'payment_type' => $data['payment_type'], 'payment_method' => $data['payment_type'] === PaymentType::Cash->value ? $data['payment_method'] : null, 'total_amount' => $total, 'promotion_title' => $data['promotion_title'] ?? null, 'promotion_amount' => $data['promotion_amount'] ?? 0, 'status' => SaleStatus::Draft, 'notes' => $data['notes'] ?? null, 'creation_latitude' => $data['creation_latitude'], 'creation_longitude' => $data['creation_longitude'], 'location_accuracy_meters' => isset($data['location_accuracy_meters']) ? (int) round($data['location_accuracy_meters']) : null, 'location_captured_at' => now(), 'created_by' => $request->user()->id]);
+            $sale->update(['cashback_amount' => $data['cashback_amount'] ?? 0]);
             $sale->items()->createMany($items);
             $this->auditLogger->record($request, 'sale.created', $request->user(), $sale, ['new' => $data, 'server_total' => $total]);
 
@@ -208,6 +209,7 @@ class SaleController extends Controller
             }
             $old = $sale->load('items')->toArray();
             $sale->update(['warehouse_id' => $customer->assignedRegion->warehouse_id, 'region_id' => $customer->region_id, 'customer_id' => $customer->id, 'payment_type' => $data['payment_type'], 'payment_method' => $data['payment_type'] === PaymentType::Cash->value ? $data['payment_method'] : null, 'total_amount' => $total, 'promotion_title' => $data['promotion_title'] ?? null, 'promotion_amount' => $data['promotion_amount'] ?? 0, 'notes' => $data['notes'] ?? null]);
+            $sale->update(['cashback_amount' => $data['cashback_amount'] ?? 0]);
             $sale->items()->delete();
             $sale->items()->createMany($items);
             $this->auditLogger->record($request, 'sale.updated', $request->user(), $sale, ['old' => $old, 'new' => $data, 'server_total' => $total]);
@@ -251,6 +253,7 @@ class SaleController extends Controller
             'payment_type' => ['required', Rule::enum(PaymentType::class)],
             'payment_method' => ['nullable', 'required_if:payment_type,cash', Rule::in($this->paymentMethods->activeKeys())],
             'notes' => ['nullable', 'string', 'max:2000'],
+            'cashback_amount' => ['nullable', 'integer', 'min:0', 'max:999999999999999'],
             'promotion_title' => ['nullable', 'string', 'max:150'],
             'promotion_amount' => ['nullable', 'integer', 'min:0', $creating ? 'max:0' : 'max:999999999999999'],
             'creation_latitude' => [$creating ? 'required' : 'prohibited', 'numeric', 'between:-90,90'],
@@ -261,7 +264,6 @@ class SaleController extends Controller
             'items.*.product_unit_id' => ['nullable', 'integer', 'exists:product_units,id'],
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:4294967295'],
             'items.*.discount_percentage' => ['nullable', 'numeric', 'min:0', 'max:100', 'decimal:0,2'],
-            'items.*.cashback_amount' => ['nullable', 'integer', 'min:0', 'max:999999999999999'],
             'items.*.promotion_title' => ['nullable', 'string', 'max:150'],
             'items.*.promotion_amount' => ['nullable', 'integer', 'min:0', 'max:999999999999999'],
             'items.*.foc_product_unit_id' => ['nullable', 'integer', 'exists:product_units,id'],
@@ -296,26 +298,26 @@ class SaleController extends Controller
             $gross = (int) $price->price * (int) $item['quantity'];
             $discountPercentage = (float) ($item['discount_percentage'] ?? 0);
             $discountAmount = (int) round($gross * $discountPercentage / 100);
-            $cashback = (int) ($item['cashback_amount'] ?? 0);
             $promotion = (int) ($item['promotion_amount'] ?? 0);
             $promotionTitle = trim((string) ($item['promotion_title'] ?? ''));
-            if ($discountAmount + $cashback + $promotion > $gross) {
-                throw ValidationException::withMessages(["items.{$index}.cashback_amount" => ['Discount, cashback and promotion cannot exceed this item total.']]);
+            if ($discountAmount + $promotion > $gross) {
+                throw ValidationException::withMessages(["items.{$index}.promotion_amount" => ['Discount and promotion cannot exceed this item total.']]);
             }
 
-            return ['product_id' => (int) $item['product_id'], 'product_unit_id' => $unit->id, 'quantity' => (int) $item['quantity'], 'base_quantity' => (int) $item['quantity'] * $unit->conversion_factor, 'unit_price' => (int) $price->price, 'discount_percentage' => $discountPercentage, 'discount_amount' => $discountAmount, 'cashback_amount' => $cashback, 'promotion_title' => $promotionTitle ?: null, 'promotion_amount' => $promotion, 'line_total' => $gross - $discountAmount - $cashback - $promotion, 'foc_product_unit_id' => $focUnit?->id, 'foc_quantity' => $focQuantity, 'foc_base_quantity' => $focQuantity * ($focUnit?->conversion_factor ?? 0)];
+            return ['product_id' => (int) $item['product_id'], 'product_unit_id' => $unit->id, 'quantity' => (int) $item['quantity'], 'base_quantity' => (int) $item['quantity'] * $unit->conversion_factor, 'unit_price' => (int) $price->price, 'discount_percentage' => $discountPercentage, 'discount_amount' => $discountAmount, 'promotion_title' => $promotionTitle ?: null, 'promotion_amount' => $promotion, 'line_total' => $gross - $discountAmount - $promotion, 'foc_product_unit_id' => $focUnit?->id, 'foc_quantity' => $focQuantity, 'foc_base_quantity' => $focQuantity * ($focUnit?->conversion_factor ?? 0)];
         })->all();
 
         $subtotal = (int) collect($items)->sum('line_total');
+        $cashbackAmount = (int) ($data['cashback_amount'] ?? 0);
         $promotionAmount = (int) ($data['promotion_amount'] ?? 0);
         if ($promotionAmount > 0 && empty(trim((string) ($data['promotion_title'] ?? '')))) {
             throw ValidationException::withMessages(['promotion_title' => ['Enter a title for the promotion cashback.']]);
         }
-        if ($promotionAmount > $subtotal) {
-            throw ValidationException::withMessages(['promotion_amount' => ['Promotion cashback cannot exceed the discounted merchandise subtotal.']]);
+        if ($cashbackAmount + $promotionAmount > $subtotal) {
+            throw ValidationException::withMessages(['cashback_amount' => ['Cashback and invoice promotion cannot exceed the discounted merchandise subtotal.']]);
         }
 
-        return [$customer, $items, $subtotal - $promotionAmount];
+        return [$customer, $items, $subtotal - $cashbackAmount - $promotionAmount];
     }
 
     private function representative(Request $request): SalesRepresentative
