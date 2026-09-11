@@ -18,4 +18,21 @@ describe('formatSellingUnitEquivalent', () => {
         expect(formatSellingUnitEquivalent(4, cartonProduct, formatNumber)).toBe('4 bottle');
         expect(formatSellingUnitEquivalent(0, cartonProduct, formatNumber)).toBe('0 bottle');
     });
+
+    it('formats every configured unit from largest to smallest', () => {
+        expect(
+            formatSellingUnitEquivalent(
+                157,
+                {
+                    ...cartonProduct,
+                    units: [
+                        { name: 'bottle', conversion_factor: 1 },
+                        { name: 'box', conversion_factor: 12 },
+                        { name: 'pallet', conversion_factor: 144 },
+                    ],
+                },
+                formatNumber,
+            ),
+        ).toBe('1 pallet + 1 box + 1 bottle');
+    });
 });

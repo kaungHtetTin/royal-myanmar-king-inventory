@@ -8,6 +8,13 @@ export type ProductIdentity = {
     name: string;
     category?: string | null;
     unit: string;
+    units?: Array<{
+        id: number;
+        name: string;
+        conversion_factor: number;
+        is_base?: boolean;
+        is_default_selling?: boolean;
+    }>;
 };
 export type AdminDashboard = {
     as_of: string;
@@ -67,7 +74,12 @@ export type SalesDashboard = {
         warehouse: Identity;
         total_quantity: number;
         products: number;
-        items: Array<{ id: number; quantity: number; product: ProductIdentity }>;
+        items: Array<{
+            id: number;
+            quantity: number;
+            unit?: { id: number; name: string; conversion_factor: number } | null;
+            product: ProductIdentity;
+        }>;
         dispatched_at: string | null;
     }>;
 };

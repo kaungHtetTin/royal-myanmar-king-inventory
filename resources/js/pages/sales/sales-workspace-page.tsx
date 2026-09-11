@@ -17,6 +17,7 @@ import { Icon } from '../../ui/icons';
 import { InvoicePrintButton } from '../../ui/invoice-print-dialog';
 import { editableNumber } from '../../ui/form-values';
 import { Button, Dialog, Drawer, EmptyState, IconButton, Pagination, StatusBadge } from '../../ui/primitives';
+import { formatSellingUnitEquivalent } from '../../ui/selling-unit-equivalent';
 import { useLocale } from '../../localization/locale-context';
 
 const emptyOptions: SaleOptions = {
@@ -308,15 +309,23 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
             (product ? productUnits(product) : [])[0],
         [options.products, productUnits],
     );
+    const formatBaseQuantity = useCallback(
+        (quantity: number, product: SaleOptions['products'][number]) =>
+            formatSellingUnitEquivalent(quantity, { ...product, units: productUnits(product) }, formatNumber),
+        [formatNumber, productUnits],
+    );
     const linePrice = useCallback(
         (line: SaleInput['items'][number]) =>
             lineUnit(line)?.prices?.find((price) => price.region_id === selectedRegionId)?.price ?? 0,
         [lineUnit, selectedRegionId],
     );
-    const lineNetTotal = useCallback((line: SaleInput['items'][number]) => {
-        const gross = line.quantity * linePrice(line);
-        return gross - Math.round(gross * (line.discount_percentage ?? 0) / 100) - (line.promotion_amount ?? 0);
-    }, [linePrice]);
+    const lineNetTotal = useCallback(
+        (line: SaleInput['items'][number]) => {
+            const gross = line.quantity * linePrice(line);
+            return gross - Math.round((gross * (line.discount_percentage ?? 0)) / 100) - (line.promotion_amount ?? 0);
+        },
+        [linePrice],
+    );
     const lineFocUnit = useCallback(
         (line: SaleInput['items'][number], product = options.products.find((item) => item.id === line.product_id)) =>
             (product ? productUnits(product) : []).find((unit) => unit.id === line.foc_product_unit_id) ??
@@ -400,8 +409,15 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
     const validateIncentives = (next: Record<string, string[]>) => {
         form.items.forEach((line, index) => {
             const percentage = Number(line.discount_percentage ?? 0);
-            if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100 || Math.abs(percentage * 100 - Math.round(percentage * 100)) > 0.000001)
-                next[`items.${index}.discount_percentage`] = [t('Enter a discount from 0 to 100 with up to two decimal places.')];
+            if (
+                !Number.isFinite(percentage) ||
+                percentage < 0 ||
+                percentage > 100 ||
+                Math.abs(percentage * 100 - Math.round(percentage * 100)) > 0.000001
+            )
+                next[`items.${index}.discount_percentage`] = [
+                    t('Enter a discount from 0 to 100 with up to two decimal places.'),
+                ];
             for (const key of ['promotion_amount'] as const) {
                 const amount = Number(line[key] ?? 0);
                 if (!Number.isSafeInteger(amount) || amount < 0)
@@ -436,8 +452,8 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                 line.quantity * (lineUnit(line, product)?.conversion_factor ?? 1) > product.quantity
             )
                 next[`items.${index}.quantity`] = [
-                    t('Only {count} base units are currently available.', {
-                        count: formatNumber(product.quantity),
+                    t('Only {quantity} is currently available.', {
+                        quantity: formatBaseQuantity(product.quantity, product),
                     }),
                 ];
             if (!Number.isInteger(line.foc_quantity ?? 0) || (line.foc_quantity ?? 0) < 0)
@@ -447,8 +463,8 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                 (product?.foc_quantity ?? 0)
             )
                 next[`items.${index}.foc_quantity`] = [
-                    t('Only {count} FOC base units are available.', {
-                        count: formatNumber(product?.foc_quantity ?? 0),
+                    t('Only {quantity} FOC is available.', {
+                        quantity: product ? formatBaseQuantity(product.foc_quantity ?? 0, product) : formatNumber(0),
                     }),
                 ];
             if (
@@ -505,9 +521,8 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                     line.quantity * (lineUnit(line, product)?.conversion_factor ?? 1) > product.quantity
                 )
                     next[`items.${index}.quantity`] = [
-                        t('Only {count} {units} are currently available.', {
-                            count: formatNumber(product.quantity),
-                            units: t((lineUnit(line, product)?.conversion_factor ?? 1) === 1 ? 'units' : 'base units'),
+                        t('Only {quantity} is currently available.', {
+                            quantity: formatBaseQuantity(product.quantity, product),
                         }),
                     ];
                 if (!Number.isInteger(line.foc_quantity ?? 0) || (line.foc_quantity ?? 0) < 0)
@@ -518,8 +533,8 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                         (product.foc_quantity ?? 0)
                 )
                     next[`items.${index}.foc_quantity`] = [
-                        t('Only {count} FOC base units are available.', {
-                            count: formatNumber(product.foc_quantity ?? 0),
+                        t('Only {quantity} FOC is available.', {
+                            quantity: formatBaseQuantity(product.foc_quantity ?? 0, product),
                         }),
                     ];
             });
@@ -597,7 +612,8 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                 effect: t(
                                     sale.payment_type === 'credit'
                                         ? 'Customer credit'
-                                        : options.payment_methods.find((method) => method.key === sale.payment_method)?.adds_to_cash_hold
+                                        : options.payment_methods.find((method) => method.key === sale.payment_method)
+                                                ?.adds_to_cash_hold
                                           ? 'Cash hold'
                                           : 'Trip banking total',
                                 ),
@@ -657,7 +673,12 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
     };
     const deleteDraft = async (sale: Sale) => {
         setActionMenuSaleId(null);
-        if (!window.confirm(t('Permanently delete draft {reference}? This action cannot be undone.', { reference: sale.reference }))) return;
+        if (
+            !window.confirm(
+                t('Permanently delete draft {reference}? This action cannot be undone.', { reference: sale.reference }),
+            )
+        )
+            return;
         setSaving(true);
         setError('');
         try {
@@ -744,13 +765,17 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                         <p>{t('Posted sales only')}</p>
                     </article>
                     <article className="sales-summary-card">
-                        <span><Icon name="customers" size={18} /></span>
+                        <span>
+                            <Icon name="customers" size={18} />
+                        </span>
                         <small>{t('Credit sales')}</small>
                         <strong>{money(historySummary.credit_sales)}</strong>
                         <p>{t('Posted sales only')}</p>
                     </article>
                     <article className="sales-summary-card">
-                        <span><Icon name="box" size={18} /></span>
+                        <span>
+                            <Icon name="box" size={18} />
+                        </span>
                         <small>{t('Units sold')}</small>
                         <strong>{formatNumber(historySummary.units_sold)}</strong>
                         <p>{t('Posted base quantities')}</p>
@@ -997,23 +1022,50 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                     <legend>{t('Payment method')}</legend>
                                                     <div>
                                                         {options.payment_methods.map((method) => (
-                                                            <label className={form.payment_method === method.key ? 'is-selected' : ''} key={method.key}>
+                                                            <label
+                                                                className={
+                                                                    form.payment_method === method.key
+                                                                        ? 'is-selected'
+                                                                        : ''
+                                                                }
+                                                                key={method.key}
+                                                            >
                                                                 <input
                                                                     checked={form.payment_method === method.key}
                                                                     name="payment_method"
-                                                                    onChange={() => setForm((value) => ({ ...value, payment_method: method.key }))}
+                                                                    onChange={() =>
+                                                                        setForm((value) => ({
+                                                                            ...value,
+                                                                            payment_method: method.key,
+                                                                        }))
+                                                                    }
                                                                     type="radio"
                                                                     value={method.key}
                                                                 />
-                                                                <Icon name={method.adds_to_cash_hold ? 'cash' : 'building'} size={17} />
+                                                                <Icon
+                                                                    name={
+                                                                        method.adds_to_cash_hold ? 'cash' : 'building'
+                                                                    }
+                                                                    size={17}
+                                                                />
                                                                 <span>
                                                                     <strong>{method.name}</strong>
-                                                                    <small>{t(method.adds_to_cash_hold ? 'Adds to your cash hold' : 'Paid directly; not held as cash')}</small>
+                                                                    <small>
+                                                                        {t(
+                                                                            method.adds_to_cash_hold
+                                                                                ? 'Adds to your cash hold'
+                                                                                : 'Paid directly; not held as cash',
+                                                                        )}
+                                                                    </small>
                                                                 </span>
                                                             </label>
                                                         ))}
                                                     </div>
-                                                    {fields.payment_method?.[0] ? <small className="ui-field__error">{fields.payment_method[0]}</small> : null}
+                                                    {fields.payment_method?.[0] ? (
+                                                        <small className="ui-field__error">
+                                                            {fields.payment_method[0]}
+                                                        </small>
+                                                    ) : null}
                                                 </fieldset>
                                             ) : null}
                                             {selectedCustomer ? (
@@ -1185,11 +1237,18 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                         </span>
                                                         <span className="sale-product-option__stock">
                                                             <span>
-                                                                <strong>{product.quantity}</strong>
+                                                                <strong>
+                                                                    {formatBaseQuantity(product.quantity, product)}
+                                                                </strong>
                                                                 <small>{t('paid')}</small>
                                                             </span>
                                                             <span>
-                                                                <strong>{product.foc_quantity ?? 0}</strong>
+                                                                <strong>
+                                                                    {formatBaseQuantity(
+                                                                        product.foc_quantity ?? 0,
+                                                                        product,
+                                                                    )}
+                                                                </strong>
                                                                 <small>{t('FOC')}</small>
                                                             </span>
                                                         </span>
@@ -1234,9 +1293,12 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                         <div className="sale-quantity-list__identity">
                                                             <strong>{product.name}</strong>
                                                             <small>
-                                                                {t('{paid} paid · {foc} FOC base available', {
-                                                                    paid: formatNumber(product.quantity),
-                                                                    foc: formatNumber(product.foc_quantity ?? 0),
+                                                                {t('{paid} paid · {foc} FOC available', {
+                                                                    paid: formatBaseQuantity(product.quantity, product),
+                                                                    foc: formatBaseQuantity(
+                                                                        product.foc_quantity ?? 0,
+                                                                        product,
+                                                                    ),
                                                                 })}
                                                             </small>
                                                         </div>
@@ -1385,32 +1447,99 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                                 ) : null}
                                                             </label>
                                                         </div>
-                                                        <details className="sale-item-incentives" onInvalidCapture={(event) => { event.currentTarget.open = true; }}>
+                                                        <details
+                                                            className="sale-item-incentives"
+                                                            onInvalidCapture={(event) => {
+                                                                event.currentTarget.open = true;
+                                                            }}
+                                                        >
                                                             <summary className="sale-item-incentives__toggle">
                                                                 <span className="sale-item-incentives__heading">
-                                                                    <strong>{t('Item discounts and promotions')}</strong>
-                                                                    <small>{line.quantity * linePrice(line) - lineNetTotal(line) > 0
-                                                                        ? t('Save {amount}', { amount: money(line.quantity * linePrice(line) - lineNetTotal(line)) })
-                                                                        : t('No reductions applied')}</small>
+                                                                    <strong>
+                                                                        {t('Item discounts and promotions')}
+                                                                    </strong>
+                                                                    <small>
+                                                                        {line.quantity * linePrice(line) -
+                                                                            lineNetTotal(line) >
+                                                                        0
+                                                                            ? t('Save {amount}', {
+                                                                                  amount: money(
+                                                                                      line.quantity * linePrice(line) -
+                                                                                          lineNetTotal(line),
+                                                                                  ),
+                                                                              })
+                                                                            : t('No reductions applied')}
+                                                                    </small>
                                                                 </span>
-                                                                <span className="sale-item-incentives__payable"><small>{t('Payable total')}</small><strong>{money(lineNetTotal(line))}</strong></span>
+                                                                <span className="sale-item-incentives__payable">
+                                                                    <small>{t('Payable total')}</small>
+                                                                    <strong>{money(lineNetTotal(line))}</strong>
+                                                                </span>
                                                                 <Icon name="chevronDown" size={16} />
                                                             </summary>
                                                             <div className="sale-item-incentives__fields">
-                                                                {([
-                                                                    ['discount_percentage', 'Discount (%)', 100, '0.01'],
-                                                                    ['promotion_amount', 'Promotion amount', line.quantity * linePrice(line), '1'],
-                                                                ] as const).map(([key, label, max, step]) => (
+                                                                {(
+                                                                    [
+                                                                        [
+                                                                            'discount_percentage',
+                                                                            'Discount (%)',
+                                                                            100,
+                                                                            '0.01',
+                                                                        ],
+                                                                        [
+                                                                            'promotion_amount',
+                                                                            'Promotion amount',
+                                                                            line.quantity * linePrice(line),
+                                                                            '1',
+                                                                        ],
+                                                                    ] as const
+                                                                ).map(([key, label, max, step]) => (
                                                                     <label className="ui-field" key={key}>
                                                                         <span>{t(label)}</span>
-                                                                        <input aria-label={t(label) + ' — ' + product.name} type="number" inputMode={key === 'discount_percentage' ? 'decimal' : 'numeric'} min={0} max={max} step={step} value={line[key] ?? 0}
-                                                                            onChange={(event) => setForm((value) => ({ ...value, items: value.items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: editableNumber(event.target.value) } : item) }))} />
-                                                                        {fields[`items.${index}.${key}`]?.[0] ? <small className="ui-field__error">{fields[`items.${index}.${key}`][0]}</small> : null}
+                                                                        <input
+                                                                            aria-label={t(label) + ' — ' + product.name}
+                                                                            type="number"
+                                                                            inputMode={
+                                                                                key === 'discount_percentage'
+                                                                                    ? 'decimal'
+                                                                                    : 'numeric'
+                                                                            }
+                                                                            min={0}
+                                                                            max={max}
+                                                                            step={step}
+                                                                            value={line[key] ?? 0}
+                                                                            onChange={(event) =>
+                                                                                setForm((value) => ({
+                                                                                    ...value,
+                                                                                    items: value.items.map(
+                                                                                        (item, itemIndex) =>
+                                                                                            itemIndex === index
+                                                                                                ? {
+                                                                                                      ...item,
+                                                                                                      [key]: editableNumber(
+                                                                                                          event.target
+                                                                                                              .value,
+                                                                                                      ),
+                                                                                                  }
+                                                                                                : item,
+                                                                                    ),
+                                                                                }))
+                                                                            }
+                                                                        />
+                                                                        {fields[`items.${index}.${key}`]?.[0] ? (
+                                                                            <small className="ui-field__error">
+                                                                                {fields[`items.${index}.${key}`][0]}
+                                                                            </small>
+                                                                        ) : null}
                                                                     </label>
                                                                 ))}
                                                             </div>
                                                         </details>
-                                                        {lineNetTotal(line) < 0 ? <small className="ui-field__error sale-item-incentives__error">{t('Item reductions cannot exceed the item total.')}</small> : null}
+                                                        {lineNetTotal(line) < 0 ? (
+                                                            <small className="ui-field__error sale-item-incentives__error">
+                                                                {t('Item reductions cannot exceed the item total.')}
+                                                            </small>
+                                                        ) : null}
                                                     </article>
                                                 );
                                             })}
@@ -1428,7 +1557,9 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                         <dt>{t('Payment')}</dt>
                                                         <dd>
                                                             {t(form.payment_type)}
-                                                            {form.payment_type === 'cash' ? ` · ${options.payment_methods.find((method) => method.key === form.payment_method)?.name ?? form.payment_method}` : ''}
+                                                            {form.payment_type === 'cash'
+                                                                ? ` · ${options.payment_methods.find((method) => method.key === form.payment_method)?.name ?? form.payment_method}`
+                                                                : ''}
                                                         </dd>
                                                     </div>
                                                     <div>
@@ -1461,12 +1592,27 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                                 </span>
                                                                 {discount > 0 ? (
                                                                     <span className="sale-review__discount">
-                                                                        {t('{discount}% discount', { discount: line.discount_percentage ?? 0 })} · {t('Save {amount}', { amount: money(discount) })}
-                                                                        <small>{line.promotion_title || t('Promotion')}: {money(line.promotion_amount ?? 0)}</small>
-                                                                        <small>{t('Gross {amount}', { amount: money(gross) })}</small>
+                                                                        {t('{discount}% discount', {
+                                                                            discount: line.discount_percentage ?? 0,
+                                                                        })}{' '}
+                                                                        ·{' '}
+                                                                        {t('Save {amount}', {
+                                                                            amount: money(discount),
+                                                                        })}
+                                                                        <small>
+                                                                            {line.promotion_title || t('Promotion')}:{' '}
+                                                                            {money(line.promotion_amount ?? 0)}
+                                                                        </small>
+                                                                        <small>
+                                                                            {t('Gross {amount}', {
+                                                                                amount: money(gross),
+                                                                            })}
+                                                                        </small>
                                                                     </span>
                                                                 ) : (
-                                                                    <span className="sale-review__discount sale-review__discount--none">{t('No discount')}</span>
+                                                                    <span className="sale-review__discount sale-review__discount--none">
+                                                                        {t('No discount')}
+                                                                    </span>
                                                                 )}
                                                                 <small>
                                                                     {t('FOC')}: {formatNumber(line.foc_quantity ?? 0)}{' '}
@@ -1482,16 +1628,45 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                                     );
                                                 })}
                                                 <div className="sale-review__totals">
-                                                    <span><small>{t('Merchandise subtotal')}</small><strong>{money(preview)}</strong></span>
+                                                    <span>
+                                                        <small>{t('Merchandise subtotal')}</small>
+                                                        <strong>{money(preview)}</strong>
+                                                    </span>
                                                     <label className="ui-field">
                                                         <span>{t('Cashback amount')}</span>
-                                                        <input aria-label={t('Cashback amount')} type="number" inputMode="numeric" min={0} max={preview} step="1" value={form.cashback_amount}
-                                                            onChange={(event) => setForm((value) => ({ ...value, cashback_amount: editableNumber(event.target.value) }))} />
-                                                        {fields.cashback_amount?.[0] ? <small className="ui-field__error">{fields.cashback_amount[0]}</small> : null}
+                                                        <input
+                                                            aria-label={t('Cashback amount')}
+                                                            type="number"
+                                                            inputMode="numeric"
+                                                            min={0}
+                                                            max={preview}
+                                                            step="1"
+                                                            value={form.cashback_amount}
+                                                            onChange={(event) =>
+                                                                setForm((value) => ({
+                                                                    ...value,
+                                                                    cashback_amount: editableNumber(event.target.value),
+                                                                }))
+                                                            }
+                                                        />
+                                                        {fields.cashback_amount?.[0] ? (
+                                                            <small className="ui-field__error">
+                                                                {fields.cashback_amount[0]}
+                                                            </small>
+                                                        ) : null}
                                                     </label>
-                                                    <span className={form.cashback_amount > 0 ? 'is-discount' : ''}><small>{t('Cashback amount')}</small><strong>-{money(form.cashback_amount)}</strong></span>
-                                                    <span className={form.promotion_amount > 0 ? 'is-discount' : ''}><small>{form.promotion_title || t('Promotion cashback')}</small><strong>-{money(form.promotion_amount)}</strong></span>
-                                                    <span className="is-total"><small>{t('Payable total')}</small><strong>{money(payablePreview)}</strong></span>
+                                                    <span className={form.cashback_amount > 0 ? 'is-discount' : ''}>
+                                                        <small>{t('Cashback amount')}</small>
+                                                        <strong>-{money(form.cashback_amount)}</strong>
+                                                    </span>
+                                                    <span className={form.promotion_amount > 0 ? 'is-discount' : ''}>
+                                                        <small>{form.promotion_title || t('Promotion cashback')}</small>
+                                                        <strong>-{money(form.promotion_amount)}</strong>
+                                                    </span>
+                                                    <span className="is-total">
+                                                        <small>{t('Payable total')}</small>
+                                                        <strong>{money(payablePreview)}</strong>
+                                                    </span>
                                                 </div>
                                                 <div
                                                     className="sale-review__stock-summary"
@@ -1557,14 +1732,23 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                     <form className="sales-history-filter-bar" onSubmit={applyHistoryFilters} role="search">
                         <label className="ui-field">
                             <span>{t('Search sales')}</span>
-                            <input onChange={(event) => setHistoryDraft({ ...historyDraft, search: event.target.value || undefined })} placeholder={t('Reference, customer name, or code')} type="search" value={historyDraft.search ?? ''} />
+                            <input
+                                onChange={(event) =>
+                                    setHistoryDraft({ ...historyDraft, search: event.target.value || undefined })
+                                }
+                                placeholder={t('Reference, customer name, or code')}
+                                type="search"
+                                value={historyDraft.search ?? ''}
+                            />
                         </label>
                         <label className="ui-field">
                             <span>{t('Status')}</span>
                             <span className="sales-history-status-select">
                                 <select
                                     aria-label={t('Status')}
-                                    onChange={(event) => setHistoryDraft({ ...historyDraft, status: event.target.value || undefined })}
+                                    onChange={(event) =>
+                                        setHistoryDraft({ ...historyDraft, status: event.target.value || undefined })
+                                    }
                                     value={historyDraft.status ?? ''}
                                 >
                                     <option value="">{t('All statuses')}</option>
@@ -1575,8 +1759,12 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                 <Icon name="chevronDown" size={15} />
                             </span>
                         </label>
-                        <Button icon="adjustments" onClick={() => setHistoryFilterOpen(true)} type="button">{t('More filters')}</Button>
-                        <Button icon="search" tone="primary" type="submit">{t('Apply')}</Button>
+                        <Button icon="adjustments" onClick={() => setHistoryFilterOpen(true)} type="button">
+                            {t('More filters')}
+                        </Button>
+                        <Button icon="search" tone="primary" type="submit">
+                            {t('Apply')}
+                        </Button>
                     </form>
                     {loading ? (
                         <div className="ui-loading">
@@ -1723,26 +1911,41 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
             )}
             <Drawer
                 description={t('Choose a duration first, then select from the trips found in that duration.')}
-                footer={<><Button onClick={clearHistoryFilters}>{t('Clear')}</Button><Button form="sales-history-filters" icon="search" tone="primary" type="submit">{t('Apply filters')}</Button></>}
+                footer={
+                    <>
+                        <Button onClick={clearHistoryFilters}>{t('Clear')}</Button>
+                        <Button form="sales-history-filters" icon="search" tone="primary" type="submit">
+                            {t('Apply filters')}
+                        </Button>
+                    </>
+                }
                 onClose={() => setHistoryFilterOpen(false)}
                 open={view === 'history' && historyFilterOpen}
                 title={t('Filter sales')}
             >
-                <form className="sales-report-filter-form sales-report-drawer-form" id="sales-history-filters" onSubmit={applyHistoryFilters}>
+                <form
+                    className="sales-report-filter-form sales-report-drawer-form"
+                    id="sales-history-filters"
+                    onSubmit={applyHistoryFilters}
+                >
                     <label className="ui-field">
                         <span>{t('Duration')}</span>
                         <select
-                            onChange={(event) => setHistoryDraft((current) => ({
-                                ...current,
-                                period: event.target.value || undefined,
-                                date_from: undefined,
-                                date_to: undefined,
-                                trip_id: undefined,
-                            }))}
+                            onChange={(event) =>
+                                setHistoryDraft((current) => ({
+                                    ...current,
+                                    period: event.target.value || undefined,
+                                    date_from: undefined,
+                                    date_to: undefined,
+                                    trip_id: undefined,
+                                }))
+                            }
                             required
                             value={historyDraft.period ?? ''}
                         >
-                            <option value="" disabled>{t('Choose duration')}</option>
+                            <option value="" disabled>
+                                {t('Choose duration')}
+                            </option>
                             <option value="today">{t('Today')}</option>
                             <option value="range">{t('Date range')}</option>
                         </select>
@@ -1753,7 +1956,13 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                 <span>{t('From')}</span>
                                 <input
                                     max={historyDraft.date_to}
-                                    onChange={(event) => setHistoryDraft((current) => ({ ...current, date_from: event.target.value || undefined, trip_id: undefined }))}
+                                    onChange={(event) =>
+                                        setHistoryDraft((current) => ({
+                                            ...current,
+                                            date_from: event.target.value || undefined,
+                                            trip_id: undefined,
+                                        }))
+                                    }
                                     required
                                     type="date"
                                     value={historyDraft.date_from ?? ''}
@@ -1763,7 +1972,13 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                                 <span>{t('To')}</span>
                                 <input
                                     min={historyDraft.date_from}
-                                    onChange={(event) => setHistoryDraft((current) => ({ ...current, date_to: event.target.value || undefined, trip_id: undefined }))}
+                                    onChange={(event) =>
+                                        setHistoryDraft((current) => ({
+                                            ...current,
+                                            date_to: event.target.value || undefined,
+                                            trip_id: undefined,
+                                        }))
+                                    }
                                     required
                                     type="date"
                                     value={historyDraft.date_to ?? ''}
@@ -1776,25 +1991,52 @@ function SalesWorkspacePage({ editId = 0, view }: { editId?: number; view: Sales
                         <select
                             disabled={
                                 historyTripsLoading ||
-                                (historyDraft.period !== 'today' && !(historyDraft.period === 'range' && historyDraft.date_from && historyDraft.date_to))
+                                (historyDraft.period !== 'today' &&
+                                    !(
+                                        historyDraft.period === 'range' &&
+                                        historyDraft.date_from &&
+                                        historyDraft.date_to
+                                    ))
                             }
-                            onChange={(event) => setHistoryDraft({ ...historyDraft, trip_id: Number(event.target.value) || undefined })}
+                            onChange={(event) =>
+                                setHistoryDraft({ ...historyDraft, trip_id: Number(event.target.value) || undefined })
+                            }
                             value={historyDraft.trip_id ?? 0}
                         >
                             <option value={0}>
                                 {historyTripsLoading
                                     ? t('Loading trips…')
-                                    : !historyDraft.period || (historyDraft.period === 'range' && (!historyDraft.date_from || !historyDraft.date_to))
+                                    : !historyDraft.period ||
+                                        (historyDraft.period === 'range' &&
+                                            (!historyDraft.date_from || !historyDraft.date_to))
                                       ? t('Choose duration first')
                                       : historyOptions.trips.length === 0
                                         ? t('No trips in this duration')
                                         : t('All trips in this duration')}
                             </option>
-                            {historyOptions.trips.map((row) => <option key={row.id} value={row.id}>{row.reference} · {row.title}</option>)}
+                            {historyOptions.trips.map((row) => (
+                                <option key={row.id} value={row.id}>
+                                    {row.reference} · {row.title}
+                                </option>
+                            ))}
                         </select>
-                        <small className="sales-history-filter-hint">{t('The trip list updates automatically from the selected duration.')}</small>
+                        <small className="sales-history-filter-hint">
+                            {t('The trip list updates automatically from the selected duration.')}
+                        </small>
                     </label>
-                    <label className="ui-field"><span>{t('Payment')}</span><select onChange={(event) => setHistoryDraft({ ...historyDraft, payment_type: event.target.value || undefined })} value={historyDraft.payment_type ?? ''}><option value="">{t('Cash & credit')}</option><option value="cash">{t('Cash')}</option><option value="credit">{t('Credit')}</option></select></label>
+                    <label className="ui-field">
+                        <span>{t('Payment')}</span>
+                        <select
+                            onChange={(event) =>
+                                setHistoryDraft({ ...historyDraft, payment_type: event.target.value || undefined })
+                            }
+                            value={historyDraft.payment_type ?? ''}
+                        >
+                            <option value="">{t('Cash & credit')}</option>
+                            <option value="cash">{t('Cash')}</option>
+                            <option value="credit">{t('Credit')}</option>
+                        </select>
+                    </label>
                 </form>
             </Drawer>
         </div>
@@ -1927,7 +2169,11 @@ function NewCustomerDialog({
                     </label>
                     <label className="ui-field">
                         <span>{t('Township')}</span>
-                        <input maxLength={100} onChange={(event) => change('township', event.target.value)} value={form.township} />
+                        <input
+                            maxLength={100}
+                            onChange={(event) => change('township', event.target.value)}
+                            value={form.township}
+                        />
                         {fieldError('township')}
                     </label>
                     <label className="ui-field form-grid__wide">

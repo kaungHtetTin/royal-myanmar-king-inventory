@@ -19,6 +19,13 @@ class RepresentativeInventoryResource extends JsonResource
                 'name' => $this->product->name,
                 'unit' => $this->product->unit,
                 'base_unit' => $this->product->baseUnit?->name ?? $this->product->unit,
+                'units' => $this->product->units->map(fn ($unit) => [
+                    'id' => $unit->id,
+                    'name' => $unit->name,
+                    'conversion_factor' => $unit->conversion_factor,
+                    'is_base' => $unit->is_base,
+                    'is_default_selling' => $unit->is_default_selling,
+                ])->values(),
             ],
             'quantity' => $this->quantity,
             'foc_quantity' => $this->foc_quantity,

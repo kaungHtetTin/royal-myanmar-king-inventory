@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { reportingApi, type SalesDashboard } from '../../services/reporting';
 import { Icon } from '../../ui/icons';
 import { EmptyState, StatusBadge } from '../../ui/primitives';
+import { formatSellingUnitEquivalent } from '../../ui/selling-unit-equivalent';
 import { useLocale } from '../../localization/locale-context';
 
 const empty: SalesDashboard = {
@@ -200,8 +201,9 @@ export function RepresentativeDashboardPage() {
                                         <small>{row.product.sku}</small>
                                     </div>
                                     <span className="sales-stock-list__quantity">
-                                        <strong>{row.quantity}</strong>
-                                        <small>{row.product.unit}</small>
+                                        <strong>
+                                            {formatSellingUnitEquivalent(row.quantity, row.product, formatNumber)}
+                                        </strong>
                                     </span>
                                 </article>
                             ))}
@@ -253,7 +255,9 @@ export function RepresentativeDashboardPage() {
                                                     {item.product.sku} · {item.product.unit}
                                                 </small>
                                             </span>
-                                            <b>+{item.quantity}</b>
+                                            <b>
+                                                +{formatNumber(item.quantity)} {item.unit?.name ?? item.product.unit}
+                                            </b>
                                         </div>
                                     ))}
                                 </div>
@@ -270,7 +274,9 @@ export function RepresentativeDashboardPage() {
                 <Icon name="reports" size={18} />
                 <div>
                     <strong>{t('Sales')}</strong>
-                    <small>{t('Review and filter your sales by trip, date, customer, product, and payment type.')}</small>
+                    <small>
+                        {t('Review and filter your sales by trip, date, customer, product, and payment type.')}
+                    </small>
                 </div>
                 <Icon name="chevronRight" />
             </Link>

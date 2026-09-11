@@ -4,6 +4,7 @@ import { saleApi, type Sale, type SaleStatus } from '../../services/sales';
 import { Icon } from '../../ui/icons';
 import { InvoicePrintButton } from '../../ui/invoice-print-dialog';
 import { Button, StatusBadge } from '../../ui/primitives';
+import { formatSellingUnitEquivalent } from '../../ui/selling-unit-equivalent';
 import { useLocale } from '../../localization/locale-context';
 
 function statusTone(status: SaleStatus) {
@@ -127,7 +128,12 @@ export function SaleHistoryDetailPage() {
                             </div>
                             <div>
                                 <dt>{t('Payment type')}</dt>
-                                <dd>{t(sale.payment_type)}{sale.payment_method ? ` · ${sale.payment_method_name ?? t(sale.payment_method)}` : ''}</dd>
+                                <dd>
+                                    {t(sale.payment_type)}
+                                    {sale.payment_method
+                                        ? ` · ${sale.payment_method_name ?? t(sale.payment_method)}`
+                                        : ''}
+                                </dd>
                             </div>
                             <div>
                                 <dt>{t('Warehouse')}</dt>
@@ -140,8 +146,7 @@ export function SaleHistoryDetailPage() {
                                 <dt>{t('Region')}</dt>
                                 <dd>
                                     <strong>{sale.region?.name ?? '—'}</strong>
-                                    <small>
-                                    </small>
+                                    <small></small>
                                 </dd>
                             </div>
                             <div>
@@ -204,23 +209,43 @@ export function SaleHistoryDetailPage() {
                                                 <small>{item.product.sku}</small>
                                             </td>
                                             <td>{item.unit?.name ?? item.product.unit}</td>
-                                            <td className="is-numeric">{formatNumber(item.quantity)}</td>
+                                            <td className="is-numeric">
+                                                {formatSellingUnitEquivalent(
+                                                    item.base_quantity ??
+                                                        item.quantity * (item.unit?.conversion_factor ?? 1),
+                                                    item.product,
+                                                    formatNumber,
+                                                )}
+                                            </td>
                                             <td className="is-numeric">
                                                 {item.foc_quantity ? (
                                                     <>
-                                                        <strong>{formatNumber(item.foc_quantity)}</strong>
-                                                        <small>
-                                                            {item.foc_unit?.name ??
-                                                                item.unit?.name ??
-                                                                item.product.unit}
-                                                        </small>
+                                                        <strong>
+                                                            {formatSellingUnitEquivalent(
+                                                                item.foc_base_quantity ??
+                                                                    item.foc_quantity *
+                                                                        (item.foc_unit?.conversion_factor ?? 1),
+                                                                item.product,
+                                                                formatNumber,
+                                                            )}
+                                                        </strong>
                                                     </>
                                                 ) : (
                                                     '—'
                                                 )}
                                             </td>
                                             <td className="is-numeric">{money(item.unit_price)}</td>
-                                            <td className="is-numeric">{(item.discount_percentage ?? 0) > 0 ? `${item.discount_percentage}% · ${money(item.discount_amount ?? 0)}` : '—'}{item.promotion_amount ? <small>{item.promotion_title || t('Promotion')}: -{money(item.promotion_amount)}</small> : null}</td>
+                                            <td className="is-numeric">
+                                                {(item.discount_percentage ?? 0) > 0
+                                                    ? `${item.discount_percentage}% · ${money(item.discount_amount ?? 0)}`
+                                                    : '—'}
+                                                {item.promotion_amount ? (
+                                                    <small>
+                                                        {item.promotion_title || t('Promotion')}: -
+                                                        {money(item.promotion_amount)}
+                                                    </small>
+                                                ) : null}
+                                            </td>
                                             <td className="is-numeric sale-detail-items__line-total">
                                                 {money(item.line_total)}
                                             </td>
@@ -238,8 +263,16 @@ export function SaleHistoryDetailPage() {
                                 })}
                             </span>
                             <div>
-                                {sale.cashback_amount ? <small>{t('Cashback amount')} · -{money(sale.cashback_amount)}</small> : null}
-                                {sale.promotion_amount ? <small>{sale.promotion_title} · -{money(sale.promotion_amount)}</small> : null}
+                                {sale.cashback_amount ? (
+                                    <small>
+                                        {t('Cashback amount')} · -{money(sale.cashback_amount)}
+                                    </small>
+                                ) : null}
+                                {sale.promotion_amount ? (
+                                    <small>
+                                        {sale.promotion_title} · -{money(sale.promotion_amount)}
+                                    </small>
+                                ) : null}
                                 <small>{t('Sale total')}</small>
                                 <strong>{money(sale.total_amount)}</strong>
                             </div>

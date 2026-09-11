@@ -38,7 +38,13 @@ class SaleResource extends JsonResource
             ] : null,
             'items' => $this->items->map(fn ($item) => [
                 'id' => $item->id,
-                'product' => ['id' => $item->product->id, 'sku' => $item->product->sku, 'name' => $item->product->name, 'unit' => $item->product->unit],
+                'product' => [
+                    'id' => $item->product->id,
+                    'sku' => $item->product->sku,
+                    'name' => $item->product->name,
+                    'unit' => $item->product->unit,
+                    'units' => $item->product->units->map(fn ($unit) => $unit->only(['id', 'name', 'conversion_factor', 'is_base', 'is_default_selling']))->values(),
+                ],
                 'unit' => $item->unit ? ['id' => $item->unit->id, 'name' => $item->unit->name, 'conversion_factor' => $item->unit->conversion_factor] : null,
                 'quantity' => $item->quantity,
                 'base_quantity' => $item->base_quantity,

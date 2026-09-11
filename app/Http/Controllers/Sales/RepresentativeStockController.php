@@ -30,7 +30,7 @@ class RepresentativeStockController extends Controller
             'search' => ['nullable', 'string', 'max:100'],
         ]);
         $query = RepresentativeInventoryController::withPending(RepresentativeInventory::query())
-            ->with(['representative', 'product'])
+            ->with(['representative', 'product.units', 'product.baseUnit'])
             ->where('sales_representative_id', $representative->id)
             ->when($data['search'] ?? null, function ($query, string $search): void {
                 $query->whereHas('product', function ($productQuery) use ($search): void {

@@ -29,7 +29,7 @@ class SaleController extends Controller
         if (isset($data['warehouse_id']) && ! $warehouseIds->contains((int) $data['warehouse_id'])) {
             abort(403);
         }
-        $query = Sale::query()->with(['trip', 'representative', 'warehouse', 'region', 'customer', 'items.product', 'items.unit', 'items.focUnit', 'creator', 'poster', 'voider'])->withSum('items as total_quantity', 'quantity')->whereIn('warehouse_id', $warehouseIds)
+        $query = Sale::query()->with(['trip', 'representative', 'warehouse', 'region', 'customer', 'items.product.units', 'items.unit', 'items.focUnit', 'creator', 'poster', 'voider'])->withSum('items as total_quantity', 'quantity')->whereIn('warehouse_id', $warehouseIds)
             ->when($data['warehouse_id'] ?? null, fn ($query, $id) => $query->where('warehouse_id', $id))->when($data['representative_id'] ?? null, fn ($query, $id) => $query->where('sales_representative_id', $id))->when($data['customer_id'] ?? null, fn ($query, $id) => $query->where('customer_id', $id))->when($data['status'] ?? null, fn ($query, $status) => $query->where('status', $status))->when($data['payment_type'] ?? null, fn ($query, $type) => $query->where('payment_type', $type))->when($data['search'] ?? null, fn ($query, $search) => $query->where('reference', 'like', "%{$search}%"));
         $this->period($query, $data['period'] ?? null);
         $this->dateRange($query, $data['date_from'] ?? null, $data['date_to'] ?? null);
@@ -87,13 +87,13 @@ class SaleController extends Controller
         abort_unless($this->warehouseAccess->allows($request->user(), $sale->warehouse_id), 403);
         $this->posting->void($sale, $request->user(), $this->idempotencyKey($request), $this->commandReason($request), $request);
 
-        return new SaleResource($sale->fresh(['trip', 'representative', 'warehouse', 'region', 'customer', 'items.product', 'items.unit', 'items.focUnit', 'creator', 'poster', 'voider']));
+        return new SaleResource($sale->fresh(['trip', 'representative', 'warehouse', 'region', 'customer', 'items.product.units', 'items.unit', 'items.focUnit', 'creator', 'poster', 'voider']));
     }
 
     public function show(Request $request, Sale $sale): SaleResource
     {
         abort_unless($this->warehouseAccess->allows($request->user(), $sale->warehouse_id), 403);
 
-        return new SaleResource($sale->load(['trip', 'representative', 'warehouse', 'region', 'customer', 'items.product', 'items.unit', 'items.focUnit', 'creator', 'poster', 'voider']));
+        return new SaleResource($sale->load(['trip', 'representative', 'warehouse', 'region', 'customer', 'items.product.units', 'items.unit', 'items.focUnit', 'creator', 'poster', 'voider']));
     }
 }

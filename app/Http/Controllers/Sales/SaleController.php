@@ -346,7 +346,7 @@ class SaleController extends Controller
     /** @return list<string> */
     private function relations(): array
     {
-        return ['trip', 'representative.regions', 'warehouse', 'region', 'customer.assignedRegion', 'items.product', 'items.unit', 'items.focUnit', 'creator', 'poster', 'voider'];
+        return ['trip', 'representative.regions', 'warehouse', 'region', 'customer.assignedRegion', 'items.product.units', 'items.unit', 'items.focUnit', 'creator', 'poster', 'voider'];
     }
 
     private function load(Sale $sale): Sale

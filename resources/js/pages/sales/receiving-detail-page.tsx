@@ -150,25 +150,32 @@ export function ReceivingDetailPage() {
                                             <small>{item.product.sku}</small>
                                         </td>
                                         <td className="is-numeric">
-                                            <strong>{formatNumber(item.quantity)}</strong>
+                                            <strong>
+                                                {formatNumber(item.quantity)} {item.unit?.name ?? item.product.unit}
+                                            </strong>
                                             <small>
                                                 {t('{unit}, {quantity} base', {
-                                                    unit: item.unit?.name ?? item.product.unit,
+                                                    unit: item.product.unit,
                                                     quantity: formatNumber(paidBase),
                                                 })}
                                             </small>
                                         </td>
                                         <td className="is-numeric">
-                                            <strong>{formatNumber(item.foc_quantity ?? 0)}</strong>
+                                            <strong>
+                                                {formatNumber(item.foc_quantity ?? 0)}{' '}
+                                                {item.foc_unit?.name ?? item.product.unit}
+                                            </strong>
                                             <small>
                                                 {t('{unit}, {quantity} base', {
-                                                    unit: item.foc_unit?.name ?? item.product.unit,
+                                                    unit: item.product.unit,
                                                     quantity: formatNumber(focBase),
                                                 })}
                                             </small>
                                         </td>
                                         <td className="is-numeric">
-                                            <strong>{formatNumber(paidBase + focBase)}</strong>
+                                            <strong>
+                                                {formatNumber(paidBase + focBase)} {item.product.unit}
+                                            </strong>
                                         </td>
                                     </tr>
                                 );

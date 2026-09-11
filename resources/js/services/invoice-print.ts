@@ -2,6 +2,7 @@ import type { Branding } from '../branding/branding-context';
 import type { Sale } from './sales';
 import type { AppLocale } from '../localization/locale-context';
 import { myanmarTranslations } from '../localization/translations';
+import { formatSellingUnitEquivalent } from '../ui/selling-unit-equivalent';
 
 const escapeHtml = (value: string | number | null | undefined) =>
     String(value ?? '')
@@ -59,6 +60,7 @@ export function invoiceDocument(
     const currency = branding.currency_code ?? 'MMK';
     const money = (value: number) =>
         `${new Intl.NumberFormat(locale === 'my' ? 'my-MM' : 'en-US').format(value)} ${currency}`;
+    const formatNumber = (value: number) => new Intl.NumberFormat(locale === 'my' ? 'my-MM' : 'en-US').format(value);
     const issuedAt = sale.posted_at ?? sale.created_at;
     const contact = [sale.customer.phone, sale.customer.address].filter(Boolean).map(escapeHtml).join('<br>');
     const businessContact = [
@@ -74,8 +76,8 @@ export function invoiceDocument(
             (item, index) => `<tr>
                 <td class="item-index number">${index + 1}</td>
                 <td class="item-product"><strong>${escapeHtml(item.product.name)}</strong><small>${escapeHtml(item.product.sku)}</small></td>
-                <td class="item-sold number" data-label="${escapeHtml(t('Sold'))}">${item.quantity} ${escapeHtml(item.unit?.name ?? item.product.unit)}</td>
-                <td class="item-foc number" data-label="FOC">${item.foc_quantity ? `${item.foc_quantity} ${escapeHtml(item.foc_unit?.name ?? item.unit?.name ?? item.product.unit)}` : '—'}</td>
+                <td class="item-sold number" data-label="${escapeHtml(t('Sold'))}">${escapeHtml(formatSellingUnitEquivalent(item.base_quantity ?? item.quantity * (item.unit?.conversion_factor ?? 1), item.product, formatNumber))}</td>
+                <td class="item-foc number" data-label="FOC">${item.foc_quantity ? escapeHtml(formatSellingUnitEquivalent(item.foc_base_quantity ?? item.foc_quantity * (item.foc_unit?.conversion_factor ?? 1), item.product, formatNumber)) : '—'}</td>
                 <td class="item-price number" data-label="${escapeHtml(t('Price'))}">${escapeHtml(money(item.unit_price))}</td>
                 <td class="item-discount number" data-label="${escapeHtml(t('Discount'))}">${(item.discount_percentage ?? 0) > 0 ? `${item.discount_percentage}% · ${escapeHtml(money(item.discount_amount ?? 0))}` : '—'}${item.promotion_amount ? `<small>${escapeHtml(item.promotion_title || t('Promotion'))}: -${escapeHtml(money(item.promotion_amount))}</small>` : ''}</td>
                 <td class="item-amount number" data-label="${escapeHtml(t('Amount'))}"><strong>${escapeHtml(money(item.line_total))}</strong></td>
@@ -117,16 +119,10 @@ export function printInvoice(
     return true;
 }
 
-export function invoiceBatchDocument(
-    sales: Sale[],
-    branding: Branding = fallbackBranding,
-    locale: AppLocale = 'en',
-) {
+export function invoiceBatchDocument(sales: Sale[], branding: Branding = fallbackBranding, locale: AppLocale = 'en') {
     const documents = sales.map((sale) => invoiceDocument(sale, branding, 'a5', locale));
     const sharedStyles = documents[0]?.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? '';
-    const invoices = documents
-        .map((document) => document.match(/<main[\s\S]*?<\/main>/)?.[0] ?? '')
-        .join('');
+    const invoices = documents.map((document) => document.match(/<main[\s\S]*?<\/main>/)?.[0] ?? '').join('');
 
     return `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><title>Invoices</title><style>${sharedStyles}
     @page{size:A5;margin:10mm}.invoice-batch>main{break-after:page;page-break-after:always}.invoice-batch>main:last-child{break-after:auto;page-break-after:auto}

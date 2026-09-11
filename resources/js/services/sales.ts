@@ -9,6 +9,7 @@ export type SaleProduct = {
     sku: string;
     name: string;
     unit: string;
+    units?: SaleUnit[];
 };
 export type SaleItem = {
     id: number;

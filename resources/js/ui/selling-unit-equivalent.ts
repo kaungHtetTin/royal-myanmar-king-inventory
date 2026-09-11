@@ -1,7 +1,8 @@
 export type SellingEquivalentProduct = {
     unit: string;
-    base_unit?: { name: string; conversion_factor: number } | null;
+    base_unit?: { name: string; conversion_factor: number } | string | null;
     default_selling_unit?: { name: string; conversion_factor: number } | null;
+    units?: Array<{ name: string; conversion_factor: number }>;
 };
 
 export function formatSellingUnitEquivalent(
@@ -10,26 +11,34 @@ export function formatSellingUnitEquivalent(
     formatNumber: (value: number) => string,
 ): string {
     const quantity = Math.trunc(baseQuantity);
-    const baseName = product.base_unit?.name ?? product.unit;
-    const sellingUnit = product.default_selling_unit;
-    const conversion = sellingUnit?.conversion_factor ?? 1;
-
-    if (!sellingUnit || conversion <= 1 || sellingUnit.name === baseName || quantity === 0) {
-        return `${formatNumber(quantity)} ${baseName}`;
-    }
-
     const sign = quantity < 0 ? -1 : 1;
-    const absoluteQuantity = Math.abs(quantity);
-    const sellingQuantity = Math.floor(absoluteQuantity / conversion);
-    const remainder = absoluteQuantity % conversion;
+    let remainder = Math.abs(quantity);
+    const baseUnit = typeof product.base_unit === 'string' ? null : product.base_unit;
+    const baseName =
+        (typeof product.base_unit === 'string' ? product.base_unit : product.base_unit?.name) ??
+        product.units?.find((unit) => unit.conversion_factor === 1)?.name ??
+        product.unit;
+    const configuredUnits = product.units?.length
+        ? product.units
+        : [product.default_selling_unit, baseUnit].filter((unit): unit is { name: string; conversion_factor: number } =>
+              Boolean(unit),
+          );
+    const units = [...configuredUnits, { name: baseName, conversion_factor: 1 }]
+        .filter((unit) => Number.isInteger(unit.conversion_factor) && unit.conversion_factor > 0)
+        .sort((left, right) => right.conversion_factor - left.conversion_factor)
+        .filter(
+            (unit, index, all) =>
+                all.findIndex((candidate) => candidate.conversion_factor === unit.conversion_factor) === index,
+        );
     const parts: string[] = [];
 
-    if (sellingQuantity > 0) {
-        parts.push(`${formatNumber(sellingQuantity * sign)} ${sellingUnit.name}`);
-    }
-    if (remainder > 0) {
-        parts.push(`${formatNumber(remainder)} ${baseName}`);
+    for (const unit of units) {
+        const unitQuantity = Math.floor(remainder / unit.conversion_factor);
+        if (unitQuantity > 0) {
+            parts.push(`${formatNumber(unitQuantity * sign)} ${unit.name}`);
+            remainder %= unit.conversion_factor;
+        }
     }
 
-    return parts.join(' + ');
+    return parts.length ? parts.join(' + ') : `${formatNumber(0)} ${baseName}`;
 }
