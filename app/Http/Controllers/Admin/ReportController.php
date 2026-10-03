@@ -163,25 +163,54 @@ class ReportController extends Controller
 
     private function customers(array $data, $warehouseIds): JsonResponse
     {
-        $query = DB::table('sales')
-            ->join('customers', 'customers.id', '=', 'sales.customer_id')
-            ->join('warehouses', 'warehouses.id', '=', 'sales.warehouse_id')
+        $filteredSales = DB::table('sales')
             ->whereIn('sales.warehouse_id', $warehouseIds)
             ->where('sales.status', SaleStatus::Posted->value)
             ->when($data['region_id'] ?? null, fn ($query, $id) => $query->where('sales.region_id', $id))
             ->when($data['date_from'] ?? null, fn ($query, $date) => $query->whereDate('sales.posted_at', '>=', $date))
-            ->when($data['date_to'] ?? null, fn ($query, $date) => $query->whereDate('sales.posted_at', '<=', $date))
+            ->when($data['date_to'] ?? null, fn ($query, $date) => $query->whereDate('sales.posted_at', '<=', $date));
+
+        $largestUnits = DB::table('product_units')
+            ->selectRaw('product_id, MAX(conversion_factor) conversion_factor')
+            ->where('conversion_factor', '>', 0)
+            ->groupBy('product_id');
+
+        // Combine purchases per product before discarding incomplete largest units.
+        // Legacy lines without a unit use their original base-unit quantity.
+        $division = DB::getDriverName() === 'mysql' ? 'DIV' : '/';
+        $quantityConversion = "SUM(CASE WHEN sale_items.product_unit_id IS NULL AND sale_items.base_quantity = 0 THEN sale_items.quantity ELSE sale_items.base_quantity END) {$division} COALESCE(largest_units.conversion_factor, 1)";
+        $wholeQuantity = DB::getDriverName() === 'sqlite'
+            ? "CAST({$quantityConversion} AS INTEGER)"
+            : "FLOOR({$quantityConversion})";
+        $productQuantities = (clone $filteredSales)
+            ->join('sale_items', 'sale_items.sale_id', '=', 'sales.id')
+            ->leftJoinSub($largestUnits, 'largest_units', 'largest_units.product_id', '=', 'sale_items.product_id')
+            ->groupBy('sales.customer_id', 'sales.warehouse_id', 'sale_items.product_id', 'largest_units.conversion_factor')
+            ->selectRaw("sales.customer_id, sales.warehouse_id, {$wholeQuantity} whole_quantity");
+        $customerQuantities = DB::query()->fromSub($productQuantities, 'product_quantities')
+            ->groupBy('customer_id', 'warehouse_id')
+            ->selectRaw('customer_id, warehouse_id, SUM(whole_quantity) purchase_quantity');
+
+        $query = (clone $filteredSales)
+            ->join('customers', 'customers.id', '=', 'sales.customer_id')
+            ->join('warehouses', 'warehouses.id', '=', 'sales.warehouse_id')
+            ->leftJoinSub($customerQuantities, 'customer_quantities', function ($join): void {
+                $join->on('customer_quantities.customer_id', '=', 'sales.customer_id')
+                    ->on('customer_quantities.warehouse_id', '=', 'sales.warehouse_id');
+            })
             ->groupBy('customers.id', 'customers.code', 'customers.name', 'warehouses.id', 'warehouses.code', 'warehouses.name')
             ->selectRaw('customers.id customer_id, customers.code customer_code, customers.name customer_name, warehouses.id warehouse_id, warehouses.code warehouse_code, warehouses.name warehouse_name, COUNT(sales.id) purchase_count, COALESCE(SUM(sales.total_amount), 0) purchase_amount, MAX(sales.posted_at) last_purchase_at')
+            ->selectRaw('COALESCE(MAX(customer_quantities.purchase_quantity), 0) purchase_quantity')
             ->havingRaw('COALESCE(SUM(sales.total_amount), 0) >= ?', [(int) ($data['min_amount'] ?? 0)]);
 
         $summary = DB::query()->fromSub(clone $query, 'customer_analysis')
-            ->selectRaw('COUNT(*) analyzed_count, COALESCE(SUM(purchase_amount), 0) total_amount, COALESCE(SUM(purchase_count), 0) transaction_count')->first();
+            ->selectRaw('COUNT(*) analyzed_count, COALESCE(SUM(purchase_amount), 0) total_amount, COALESCE(SUM(purchase_count), 0) transaction_count, COALESCE(SUM(purchase_quantity), 0) purchase_quantity')->first();
         $paginator = $query->orderByDesc('purchase_amount')->paginate($data['per_page'] ?? 25)->withQueryString();
         $paginator->setCollection($paginator->getCollection()->map(fn ($row) => [
             'customer' => ['id' => $row->customer_id, 'code' => $row->customer_code, 'name' => $row->customer_name],
             'warehouse' => ['id' => $row->warehouse_id, 'code' => $row->warehouse_code, 'name' => $row->warehouse_name],
             'purchase_count' => (int) $row->purchase_count,
+            'purchase_quantity' => (int) $row->purchase_quantity,
             'purchase_amount' => (int) $row->purchase_amount,
             'last_purchase_at' => $row->last_purchase_at,
         ]));
@@ -189,6 +218,7 @@ class ReportController extends Controller
         return $this->response('customers', $paginator, [
             'customers' => (int) $summary->analyzed_count,
             'purchase_amount' => (int) $summary->total_amount,
+            'purchase_quantity' => (int) $summary->purchase_quantity,
             'transactions' => (int) $summary->transaction_count,
         ]);
     }

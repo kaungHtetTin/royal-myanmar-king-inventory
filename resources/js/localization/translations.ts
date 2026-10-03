@@ -8,7 +8,8 @@ export const myanmarTranslations: Record<string, string> = {
     'No assigned vehicle available': 'သတ်မှတ်ထားသော ယာဉ် မရရှိနိုင်ပါ',
     'Unable to update assignment.': 'သတ်မှတ်ချက် ပြင်ဆင်၍ မရပါ။',
     'Unable to load vehicle.': 'ယာဉ်အချက်အလက် ရယူ၍ မရပါ။',
-    'The assigned vehicle is selected automatically. Assign an available vehicle in the representative or vehicle details.': 'သတ်မှတ်ထားသောယာဉ်ကို အလိုအလျောက် ရွေးထားပါသည်။ ကိုယ်စားလှယ် သို့မဟုတ် ယာဉ်အသေးစိတ်တွင် ရရှိနိုင်သောယာဉ်ကို သတ်မှတ်ပါ။',
+    'The assigned vehicle is selected automatically. Assign an available vehicle in the representative or vehicle details.':
+        'သတ်မှတ်ထားသောယာဉ်ကို အလိုအလျောက် ရွေးထားပါသည်။ ကိုယ်စားလှယ် သို့မဟုတ် ယာဉ်အသေးစိတ်တွင် ရရှိနိုင်သောယာဉ်ကို သတ်မှတ်ပါ။',
     'No reductions applied': 'လျှော့ငွေ မထည့်ရသေးပါ',
     'Discount (%)': 'လျှော့ဈေး (%)',
     'Promotion amount': 'ပရိုမိုးရှင်း ပမာဏ',
@@ -17,7 +18,8 @@ export const myanmarTranslations: Record<string, string> = {
     'Item reductions cannot exceed the item total.': 'လျှော့ငွေစုစုပေါင်းသည် ပစ္စည်းတန်ဖိုးထက် မကျော်ရပါ။',
     'Enter a promotion title.': 'ပရိုမိုးရှင်းခေါင်းစဉ် ထည့်ပါ။',
     'Enter a whole amount of 0 or more.': 'သုည သို့မဟုတ် သုညထက်ကြီးသော ကိန်းပြည့်ပမာဏ ထည့်ပါ။',
-    'Enter a discount from 0 to 100 with up to two decimal places.': 'သုညမှ ၁၀၀ အတွင်း လျှော့ဈေးကို ဒဿမနှစ်နေရာအထိ ထည့်ပါ။',
+    'Enter a discount from 0 to 100 with up to two decimal places.':
+        'သုညမှ ၁၀၀ အတွင်း လျှော့ဈေးကို ဒဿမနှစ်နေရာအထိ ထည့်ပါ။',
     English: 'အင်္ဂလိပ်',
     Myanmar: 'မြန်မာ',
     Language: 'ဘာသာစကား',
@@ -1915,6 +1917,7 @@ export const myanmarTranslations: Record<string, string> = {
     'Minimum purchase amount': 'အနည်းဆုံး ဝယ်ယူမှုပမာဏ',
     'Sales amount': 'အရောင်းပမာဏ',
     'Purchase amount': 'ဝယ်ယူမှုပမာဏ',
+    'Purchase quantity (whole largest units)': 'ဝယ်ယူသည့်အရေအတွက် (အကြီးဆုံးယူနစ် အပြည့်)',
     'Last purchase': 'နောက်ဆုံးဝယ်ယူမှု',
     'No analysis results': 'ဆန်းစစ်မှုရလဒ် မရှိပါ',
     'Adjust the duration or minimum amount filters.': 'ကာလ သို့မဟုတ် အနည်းဆုံးပမာဏ စစ်ထုတ်မှုကို ပြင်ဆင်ပါ။',

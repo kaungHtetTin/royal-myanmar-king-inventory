@@ -82,7 +82,7 @@ export function ReportsPage() {
             ? ['month_sales', 'year_sales', 'gross_sales', 'units_sold']
             : report === 'representatives'
               ? ['representatives', 'sales_amount', 'transactions']
-              : ['customers', 'purchase_amount', 'transactions'];
+              : ['customers', 'purchase_amount', 'purchase_quantity', 'transactions'];
     const apply = (event: FormEvent) => {
         event.preventDefault();
         setFilters({ ...draft, page: 1 });
@@ -146,11 +146,16 @@ export function ReportsPage() {
                     .map((key) => (
                         <MetricCard
                             hint={t('Current filters')}
-                            icon={key.includes('unit') ? 'box' : 'cash'}
+                            icon={key.includes('unit') || key === 'purchase_quantity' ? 'box' : 'cash'}
                             key={key}
-                            label={t(key.replaceAll('_', ' '))}
+                            label={
+                                key === 'purchase_quantity'
+                                    ? t('Purchase quantity (whole largest units)')
+                                    : t(key.replaceAll('_', ' '))
+                            }
                             value={
-                                key.includes('sales') || key.includes('purchase') || key.includes('amount')
+                                key !== 'purchase_quantity' &&
+                                (key.includes('sales') || key.includes('purchase') || key.includes('amount'))
                                     ? money(response.summary[key])
                                     : formatNumber(response.summary[key])
                             }
@@ -416,6 +421,7 @@ type AnalysisRow = {
     customer_count?: number;
     sales_amount?: number;
     purchase_count?: number;
+    purchase_quantity?: number;
     purchase_amount?: number;
     last_purchase_at?: string | null;
 };
@@ -448,6 +454,7 @@ function AnalysisTable({
                         <th>{t('Warehouse')}</th>
                         <th>{t('Transactions')}</th>
                         {report === 'representatives' ? <th>{t('Customers')}</th> : <th>{t('Last purchase')}</th>}
+                        {report === 'customers' && <th>{t('Purchase quantity (whole largest units)')}</th>}
                         <th>{report === 'representatives' ? t('Sales amount') : t('Purchase amount')}</th>
                     </tr>
                 </thead>
@@ -472,6 +479,7 @@ function AnalysisTable({
                                           ? dateTime(row.last_purchase_at)
                                           : '—'}
                                 </td>
+                                {report === 'customers' && <td>{row.purchase_quantity ?? 0}</td>}
                                 <td>
                                     <strong>
                                         {money(
@@ -532,6 +540,7 @@ function csvRows(
             t('Warehouse'),
             t('Transactions'),
             t('Last purchase'),
+            t('Purchase quantity (whole largest units)'),
             t('Purchase amount'),
         ],
         ...(rows as AnalysisRow[]).map((row) => [
@@ -541,6 +550,7 @@ function csvRows(
             row.warehouse.name,
             row.purchase_count ?? 0,
             row.last_purchase_at ?? '',
+            row.purchase_quantity ?? 0,
             row.purchase_amount ?? 0,
         ]),
     ];

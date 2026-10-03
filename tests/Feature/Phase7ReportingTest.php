@@ -126,7 +126,41 @@ class Phase7ReportingTest extends TestCase
         $this->getJson('/api/admin/reports/customers?date_from='.today()->toDateString().'&min_amount=700&per_page=10')->assertOk()
             ->assertJsonPath('report', 'customers')->assertJsonPath('meta.total', 1)
             ->assertJsonPath('data.0.customer.id', $fixture['customer']->id)
-            ->assertJsonPath('data.0.purchase_amount', 800)->assertJsonPath('data.0.purchase_count', 2);
+            ->assertJsonPath('data.0.purchase_amount', 800)->assertJsonPath('data.0.purchase_count', 2)
+            ->assertJsonPath('data.0.purchase_quantity', 8)->assertJsonPath('summary.purchase_quantity', 8);
+    }
+
+    public function test_customer_purchase_quantity_combines_each_product_before_truncating_its_largest_unit(): void
+    {
+        $fixture = $this->fixture();
+        $product = $fixture['product'];
+        $product->units()->create(['name' => 'Carton', 'conversion_factor' => 12]);
+        $secondProduct = Product::factory()->create(['unit' => 'bottle']);
+        $pack = $secondProduct->units()->create(['name' => 'Pack', 'conversion_factor' => 3, 'is_default_selling' => true]);
+        $secondProduct->units()->create(['name' => 'Box', 'conversion_factor' => 6]);
+        $partialProduct = Product::factory()->create();
+        $partialProduct->units()->create(['name' => 'Box', 'conversion_factor' => 6]);
+
+        $cash = Sale::query()->where('reference', 'P7-CASH')->firstOrFail();
+        $credit = Sale::query()->where('reference', 'P7-CREDIT')->firstOrFail();
+        $cash->items()->update(['product_unit_id' => $product->baseUnit->id, 'quantity' => 17, 'base_quantity' => 17, 'foc_base_quantity' => 120]);
+        $credit->items()->update(['product_unit_id' => $product->baseUnit->id, 'quantity' => 12, 'base_quantity' => 12]);
+        $cash->items()->create(['product_id' => $secondProduct->id, 'product_unit_id' => $pack->id, 'quantity' => 6, 'base_quantity' => 18, 'unit_price' => 100, 'line_total' => 600]);
+        $credit->items()->create(['product_id' => $secondProduct->id, 'product_unit_id' => $secondProduct->baseUnit->id, 'quantity' => 1, 'base_quantity' => 1, 'unit_price' => 100, 'line_total' => 100]);
+        $cash->items()->create(['product_id' => $partialProduct->id, 'quantity' => 5, 'base_quantity' => 5, 'unit_price' => 100, 'line_total' => 500]);
+        Sale::query()->whereIn('reference', ['P7-DRAFT', 'P7-VOID'])->get()->each(fn ($sale) => $sale->items()->update(['base_quantity' => 1200]));
+
+        $admin = $this->office($fixture['warehouse'], PermissionName::ReportView);
+        $this->actingAs($admin)->getJson('/api/admin/reports/customers')->assertOk()
+            // floor(29/12) + floor(19/6) + floor(5/6) = 5, without multiplying invoice totals.
+            ->assertJsonPath('data.0.purchase_quantity', 5)->assertJsonPath('summary.purchase_quantity', 5)
+            ->assertJsonPath('data.0.purchase_count', 2)->assertJsonPath('data.0.purchase_amount', 800);
+
+        $credit->update(['posted_at' => today()->subDay()->setTime(12, 0)]);
+        $this->getJson('/api/admin/reports/customers?date_from='.today()->toDateString().'&date_to='.today()->toDateString())->assertOk()
+            ->assertJsonPath('data.0.purchase_quantity', 4)->assertJsonPath('summary.purchase_quantity', 4);
+        $this->getJson('/api/admin/reports/customers?min_amount=900')->assertOk()
+            ->assertJsonPath('meta.total', 0)->assertJsonPath('summary.purchase_quantity', 0);
     }
 
     public function test_customer_analysis_filters_recorded_sale_region_and_warehouse_before_aggregation(): void
@@ -146,6 +180,7 @@ class Phase7ReportingTest extends TestCase
             ->assertJsonPath('data.0.customer.id', $fixture['customer']->id)
             ->assertJsonPath('data.0.purchase_amount', 500)
             ->assertJsonPath('data.0.purchase_count', 1)
+            ->assertJsonPath('data.0.purchase_quantity', 5)
             ->assertJsonPath('summary.customers', 1)
             ->assertJsonPath('summary.purchase_amount', 500)
             ->assertJsonPath('summary.transactions', 1);
