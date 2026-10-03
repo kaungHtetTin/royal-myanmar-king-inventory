@@ -73,7 +73,9 @@ export function ReportsPage() {
         sales: t('Analyse posted sales across your assigned locations.'),
         representatives: t('Compare representative sales power across warehouses and durations.'),
         customers: t('Compare customer purchase power for a selected duration.'),
-        trip: t('Posted trip sales grouped by product. Quantities exclude FOC; net amounts include item discounts and item promotions. Invoice-level cashback is reflected only in invoice totals.'),
+        trip: t(
+            'Posted trip sales grouped by product. Quantities exclude FOC; net amounts include item discounts and item promotions. Invoice-level cashback is reflected only in invoice totals.',
+        ),
     };
     const metrics =
         report === 'sales'
@@ -182,37 +184,81 @@ export function ReportsPage() {
                                     />
                                 </label>
                             ) : null}
-                            {report !== 'customers' ? (
-                                <select
-                                    aria-label={t('Warehouse')}
-                                    onChange={(event) =>
-                                        setDraft((value) => ({
-                                            ...value,
-                                            warehouse_id: Number(event.target.value) || undefined,
-                                            region_id: undefined,
-                                            representative_id: undefined,
-                                        }))
-                                    }
-                                    value={draft.warehouse_id ?? 0}
-                                >
-                                    <option value={0}>{t('All warehouses')}</option>
-                                    {options.warehouses.map((warehouse) => (
-                                        <option key={warehouse.id} value={warehouse.id}>
-                                            {warehouse.code} · {warehouse.name}
-                                        </option>
-                                    ))}
-                                </select>
+                            <select
+                                aria-label={t('Warehouse')}
+                                onChange={(event) =>
+                                    setDraft((value) => ({
+                                        ...value,
+                                        warehouse_id: Number(event.target.value) || undefined,
+                                        region_id: undefined,
+                                        representative_id: undefined,
+                                    }))
+                                }
+                                value={draft.warehouse_id ?? 0}
+                            >
+                                <option value={0}>{t('All warehouses')}</option>
+                                {options.warehouses.map((warehouse) => (
+                                    <option key={warehouse.id} value={warehouse.id}>
+                                        {warehouse.code} · {warehouse.name}
+                                    </option>
+                                ))}
+                            </select>
+                            {report === 'trip' || report === 'customers' ? (
+                                <>
+                                    <select
+                                        aria-label={t('Region')}
+                                        value={draft.region_id ?? 0}
+                                        onChange={(event) =>
+                                            setDraft((value) => ({
+                                                ...value,
+                                                region_id: Number(event.target.value) || undefined,
+                                                representative_id: undefined,
+                                            }))
+                                        }
+                                    >
+                                        <option value={0}>{t('All regions')}</option>
+                                        {(options.regions ?? [])
+                                            .filter(
+                                                (item) =>
+                                                    !draft.warehouse_id || item.warehouse_id === draft.warehouse_id,
+                                            )
+                                            .map((item) => (
+                                                <option key={item.id} value={item.id}>
+                                                    {item.name}
+                                                </option>
+                                            ))}
+                                    </select>
+                                </>
                             ) : null}
-                            {report === 'trip' ? <>
-                                <select aria-label={t('Region')} value={draft.region_id ?? 0} onChange={(event) => setDraft((value) => ({ ...value, region_id: Number(event.target.value) || undefined, representative_id: undefined }))}>
-                                    <option value={0}>{t('All regions')}</option>
-                                    {(options.regions ?? []).filter((item) => !draft.warehouse_id || item.warehouse_id === draft.warehouse_id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                                </select>
-                                <select aria-label={t('Sales representative')} value={draft.representative_id ?? 0} onChange={(event) => setDraft((value) => ({ ...value, representative_id: Number(event.target.value) || undefined }))}>
-                                    <option value={0}>{t('All representatives')}</option>
-                                    {(options.representatives ?? []).filter((item) => (!draft.warehouse_id || item.primary_warehouse_id === draft.warehouse_id) && (!draft.region_id || item.regions.some((region) => region.id === draft.region_id))).map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
-                                </select>
-                            </> : null}
+                            {report === 'trip' ? (
+                                <>
+                                    <select
+                                        aria-label={t('Sales representative')}
+                                        value={draft.representative_id ?? 0}
+                                        onChange={(event) =>
+                                            setDraft((value) => ({
+                                                ...value,
+                                                representative_id: Number(event.target.value) || undefined,
+                                            }))
+                                        }
+                                    >
+                                        <option value={0}>{t('All representatives')}</option>
+                                        {(options.representatives ?? [])
+                                            .filter(
+                                                (item) =>
+                                                    (!draft.warehouse_id ||
+                                                        item.primary_warehouse_id === draft.warehouse_id) &&
+                                                    (!draft.region_id ||
+                                                        item.regions.some((region) => region.id === draft.region_id)),
+                                            )
+                                            .map((item) => (
+                                                <option key={item.id} value={item.id}>
+                                                    {item.code} · {item.name}
+                                                </option>
+                                            ))}
+                                    </select>
+                                </>
+                            ) : null}
                             {report === 'sales' ? (
                                 <select
                                     aria-label={t('Status')}
@@ -291,10 +337,38 @@ export function ReportsPage() {
                         year={response.analysis?.year_trend ?? []}
                     />
                 ) : report === 'trip' ? (
-                    response.data.length === 0 ? <EmptyState title={t('No sales found')} description={t('Adjust the date or warehouse filters to analyse posted sales.')} /> :
-                    <div className="ui-table-wrap"><table className="ui-table"><thead><tr><th>{t('Product')}</th><th className="is-numeric">{t('Quantity')}</th><th className="is-numeric">{t('Net amount')}</th></tr></thead><tbody>
-                        {(response.data as TripReportRow[]).map((row) => <tr key={row.product.id}><td><strong>{row.product.name}</strong><small>{row.product.sku}</small></td><td className="is-numeric">{formatSellingUnitEquivalent(row.quantity, row.product, formatNumber)}</td><td className="is-numeric">{money(row.net_amount)}</td></tr>)}
-                    </tbody></table></div>
+                    response.data.length === 0 ? (
+                        <EmptyState
+                            title={t('No sales found')}
+                            description={t('Adjust the date or warehouse filters to analyse posted sales.')}
+                        />
+                    ) : (
+                        <div className="ui-table-wrap">
+                            <table className="ui-table">
+                                <thead>
+                                    <tr>
+                                        <th>{t('Product')}</th>
+                                        <th className="is-numeric">{t('Quantity')}</th>
+                                        <th className="is-numeric">{t('Net amount')}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {(response.data as TripReportRow[]).map((row) => (
+                                        <tr key={row.product.id}>
+                                            <td>
+                                                <strong>{row.product.name}</strong>
+                                                <small>{row.product.sku}</small>
+                                            </td>
+                                            <td className="is-numeric">
+                                                {formatSellingUnitEquivalent(row.quantity, row.product, formatNumber)}
+                                            </td>
+                                            <td className="is-numeric">{money(row.net_amount)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )
                 ) : (
                     <AnalysisTable dateTime={formatDateTime} money={money} report={report} rows={response.data} t={t} />
                 )}
@@ -420,10 +494,15 @@ function csvRows(
     rows: Record<string, unknown>[],
     t: (key: string) => string,
 ): Array<Array<string | number>> {
-    if (report === 'trip') return [
-        [t('Product'), t('Quantity'), t('Net amount')],
-        ...(rows as TripReportRow[]).map((row) => [row.product.name, formatSellingUnitEquivalent(row.quantity, row.product, String), row.net_amount]),
-    ];
+    if (report === 'trip')
+        return [
+            [t('Product'), t('Quantity'), t('Net amount')],
+            ...(rows as TripReportRow[]).map((row) => [
+                row.product.name,
+                formatSellingUnitEquivalent(row.quantity, row.product, String),
+                row.net_amount,
+            ]),
+        ];
     if (report === 'representatives')
         return [
             [

@@ -1,8 +1,0 @@
-In report page, 
-I want to add new tab name: trip,
-For filtering I want to filtering
-From Date to Date, warehouse, region, sale 
-
-I want to show, total sum group by product item:
-prouct, quanitity(selling equivalent unit), net amount
-also add csv export function

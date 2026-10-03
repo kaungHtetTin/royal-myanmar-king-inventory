@@ -9,6 +9,7 @@ use App\Models\CashSubmission;
 use App\Models\Customer;
 use App\Models\CustomerCreditBalance;
 use App\Models\Product;
+use App\Models\Region;
 use App\Models\RepresentativeCashBalance;
 use App\Models\RepresentativeInventory;
 use App\Models\RepresentativeTransfer;
@@ -126,6 +127,32 @@ class Phase7ReportingTest extends TestCase
             ->assertJsonPath('report', 'customers')->assertJsonPath('meta.total', 1)
             ->assertJsonPath('data.0.customer.id', $fixture['customer']->id)
             ->assertJsonPath('data.0.purchase_amount', 800)->assertJsonPath('data.0.purchase_count', 2);
+    }
+
+    public function test_customer_analysis_filters_recorded_sale_region_and_warehouse_before_aggregation(): void
+    {
+        $fixture = $this->fixture();
+        $region = Region::query()->create(['warehouse_id' => $fixture['warehouse']->id, 'name' => 'North']);
+        $otherRegion = Region::query()->create(['warehouse_id' => $fixture['warehouse']->id, 'name' => 'South']);
+        Sale::query()->where('reference', 'P7-CASH')->update(['region_id' => $region->id]);
+        Sale::query()->where('reference', 'P7-CREDIT')->update(['region_id' => $otherRegion->id]);
+        // Customer reassignment must not change the region of historical sales.
+        $fixture['customer']->update(['region_id' => $otherRegion->id]);
+        $admin = $this->office($fixture['warehouse'], PermissionName::ReportView);
+        $url = '/api/admin/reports/customers?warehouse_id='.$fixture['warehouse']->id.'&region_id='.$region->id;
+
+        $this->actingAs($admin)->getJson($url)->assertOk()
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.customer.id', $fixture['customer']->id)
+            ->assertJsonPath('data.0.purchase_amount', 500)
+            ->assertJsonPath('data.0.purchase_count', 1)
+            ->assertJsonPath('summary.customers', 1)
+            ->assertJsonPath('summary.purchase_amount', 500)
+            ->assertJsonPath('summary.transactions', 1);
+        $this->getJson($url.'&min_amount=600')->assertOk()
+            ->assertJsonPath('meta.total', 0)->assertJsonPath('summary.purchase_amount', 0);
+        $this->getJson('/api/admin/reports/customers?warehouse_id='.$fixture['foreignWarehouse']->id)->assertForbidden();
+        $this->getJson('/api/admin/reports/customers?warehouse_id='.$fixture['foreignWarehouse']->id.'&region_id='.$region->id)->assertForbidden();
     }
 
     public function test_representative_sales_report_is_own_only_and_supports_today_customer_product_and_payment_filters(): void

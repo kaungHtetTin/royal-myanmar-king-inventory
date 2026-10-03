@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Enums\SaleStatus;
 use App\Http\Controllers\Controller;
+use App\Models\Region;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\SalesRepresentative;
 use App\Models\Warehouse;
 use App\Services\ReportScope;
 use Carbon\CarbonImmutable;
@@ -26,8 +28,8 @@ class ReportController extends Controller
 
         return response()->json([
             'warehouses' => Warehouse::query()->whereIn('id', $warehouseIds)->orderBy('name')->get(['id', 'code', 'name']),
-            'regions' => \App\Models\Region::query()->whereIn('warehouse_id', $warehouseIds)->orderBy('name')->get(['id', 'name', 'warehouse_id']),
-            'representatives' => \App\Models\SalesRepresentative::query()->whereIn('primary_warehouse_id', $warehouseIds)->with('regions:id')->orderBy('name')->get(['id', 'code', 'name', 'primary_warehouse_id']),
+            'regions' => Region::query()->whereIn('warehouse_id', $warehouseIds)->orderBy('name')->get(['id', 'name', 'warehouse_id']),
+            'representatives' => SalesRepresentative::query()->whereIn('primary_warehouse_id', $warehouseIds)->with('regions:id')->orderBy('name')->get(['id', 'code', 'name', 'primary_warehouse_id']),
             'reports' => ['sales', 'representatives', 'customers', 'trip'],
         ]);
     }
@@ -166,6 +168,7 @@ class ReportController extends Controller
             ->join('warehouses', 'warehouses.id', '=', 'sales.warehouse_id')
             ->whereIn('sales.warehouse_id', $warehouseIds)
             ->where('sales.status', SaleStatus::Posted->value)
+            ->when($data['region_id'] ?? null, fn ($query, $id) => $query->where('sales.region_id', $id))
             ->when($data['date_from'] ?? null, fn ($query, $date) => $query->whereDate('sales.posted_at', '>=', $date))
             ->when($data['date_to'] ?? null, fn ($query, $date) => $query->whereDate('sales.posted_at', '<=', $date))
             ->groupBy('customers.id', 'customers.code', 'customers.name', 'warehouses.id', 'warehouses.code', 'warehouses.name')

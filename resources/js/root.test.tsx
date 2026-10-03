@@ -357,9 +357,7 @@ describe('application portals', () => {
 
         render(
             <MemoryRouter
-                initialEntries={[
-                    '/admin/transfers/representative/new?tripId=9&warehouseId=1&representativeId=7',
-                ]}
+                initialEntries={['/admin/transfers/representative/new?tripId=9&warehouseId=1&representativeId=7']}
             >
                 <Root initialUser={baseUser} />
             </MemoryRouter>,
@@ -1333,7 +1331,9 @@ describe('application portals', () => {
         fireEvent.click(within(incentives).getByText('Item discounts and promotions'));
         expect(incentives).toHaveAttribute('open');
         fireEvent.change(screen.getByLabelText('Discount (%) — Drinking Water 1 Litre'), { target: { value: '10' } });
-        fireEvent.change(screen.getByLabelText('Promotion amount — Drinking Water 1 Litre'), { target: { value: '50' } });
+        fireEvent.change(screen.getByLabelText('Promotion amount — Drinking Water 1 Litre'), {
+            target: { value: '50' },
+        });
         fireEvent.click(within(incentives).getByText('Item discounts and promotions'));
         expect(incentives).not.toHaveAttribute('open');
         expect(within(incentives).getByText(/Save/)).toBeInTheDocument();
@@ -1872,7 +1872,10 @@ describe('application portals', () => {
             'href',
             '/sales/sales-history',
         );
-        expect(within(mobileNavigation).getByRole('link', { name: 'Sales' })).toHaveAttribute('href', '/sales/sales-history');
+        expect(within(mobileNavigation).getByRole('link', { name: 'Sales' })).toHaveAttribute(
+            'href',
+            '/sales/sales-history',
+        );
         expect(screen.getByRole('link', { name: 'StockFlow home' })).toHaveAttribute('href', '/sales/dashboard');
     });
 
@@ -2125,7 +2128,9 @@ describe('application portals', () => {
             within(screen.getByRole('navigation', { name: 'Cash submissions pagination' })).getByText('Next'),
         );
         await waitFor(() =>
-            expect(get).toHaveBeenCalledWith('api/sales/cash-submissions', { params: { page: 2, per_page: 10, trip_id: 7 } }),
+            expect(get).toHaveBeenCalledWith('api/sales/cash-submissions', {
+                params: { page: 2, per_page: 10, trip_id: 7 },
+            }),
         );
         fireEvent.click(screen.getByRole('tab', { name: /Cash ledger/ }));
         fireEvent.click(within(screen.getByRole('navigation', { name: 'Cash activity pagination' })).getByText('Next'));
@@ -2382,6 +2387,59 @@ describe('application portals', () => {
         expect(screen.getByLabelText('Date from')).toBeInTheDocument();
         expect(screen.getByLabelText('Date to')).toBeInTheDocument();
         expect(screen.getByRole('searchbox', { name: 'Search report' })).toBeInTheDocument();
+    });
+
+    it('applies customer warehouse and region filters and clears region when warehouse changes', async () => {
+        const get = vi.spyOn(axios, 'get').mockImplementation((url) =>
+            Promise.resolve({
+                data:
+                    url === 'api/admin/report-options'
+                        ? {
+                              reports: ['sales', 'customers'],
+                              warehouses: [
+                                  { id: 1, code: 'YGN', name: 'Yangon' },
+                                  { id: 2, code: 'NPT', name: 'Nay Pyi Taw' },
+                              ],
+                              regions: [
+                                  { id: 11, name: 'North', warehouse_id: 1 },
+                                  { id: 22, name: 'South', warehouse_id: 2 },
+                              ],
+                          }
+                        : {
+                              report: url === 'api/admin/reports/customers' ? 'customers' : 'sales',
+                              data: [],
+                              summary: {},
+                              rules: {},
+                              meta: { current_page: 1, from: null, last_page: 1, per_page: 25, to: null, total: 0 },
+                          },
+            }),
+        );
+        render(
+            <MemoryRouter initialEntries={['/admin/reports']}>
+                <Root initialUser={baseUser} />
+            </MemoryRouter>,
+        );
+        fireEvent.click(await screen.findByRole('tab', { name: 'Customer analysis' }));
+        await screen.findByRole('option', { name: /YGN.*Yangon/ });
+        fireEvent.change(screen.getByRole('combobox', { name: 'Warehouse' }), { target: { value: '1' } });
+        expect(screen.queryByRole('option', { name: 'South' })).not.toBeInTheDocument();
+        fireEvent.change(screen.getByRole('combobox', { name: 'Region' }), { target: { value: '11' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+        await waitFor(() =>
+            expect(get).toHaveBeenCalledWith('api/admin/reports/customers', {
+                params: { warehouse_id: 1, region_id: 11, representative_id: undefined, page: 1, per_page: 25 },
+            }),
+        );
+        fireEvent.change(screen.getByRole('combobox', { name: 'Warehouse' }), { target: { value: '2' } });
+        expect(screen.getByRole('combobox', { name: 'Region' })).toHaveValue('0');
+        expect(screen.queryByRole('option', { name: 'North' })).not.toBeInTheDocument();
+        expect(screen.getByRole('option', { name: 'South' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+        await waitFor(() =>
+            expect(get).toHaveBeenCalledWith('api/admin/reports/customers', {
+                params: { warehouse_id: 2, region_id: undefined, representative_id: undefined, page: 1, per_page: 25 },
+            }),
+        );
     });
 
     it('filters the main admin sale register by duration', async () => {

@@ -1468,6 +1468,7 @@ export const myanmarTranslations: Record<string, string> = {
     '{region} price for {unit} in MMK': '{region} ရှိ {unit} ၏ MMK ဈေးနှုန်း',
     Remove: 'ဖယ်ရှားရန်',
     Description: 'ဖော်ပြချက်',
+    'Expense title': 'အသုံးစရိတ်ခေါင်းစဉ်',
     'Active product': 'အသုံးပြုနေသော ကုန်ပစ္စည်း',
     'Inactive products remain in history but cannot be selected for new transactions.':
         'ပိတ်ထားသောကုန်ပစ္စည်းများသည် မှတ်တမ်းတွင် ဆက်ရှိနေမည်ဖြစ်သော်လည်း ငွေကြေးလွှဲပြောင်းမှုအသစ်များအတွက် ရွေးချယ်၍မရပါ။',
