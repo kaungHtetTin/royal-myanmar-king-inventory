@@ -45,7 +45,7 @@ class OperationProcessSeeder extends Seeder
     public function run(): void
     {
         $this->call([
-            DatabaseSeeder::class,
+            EssentialSetupSeeder::class,
             WarehouseSeeder::class,
             ProductSeeder::class,
             VehicleSeeder::class,

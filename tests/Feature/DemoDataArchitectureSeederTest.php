@@ -10,6 +10,7 @@ use Database\Seeders\AccessControlSeeder;
 use Database\Seeders\CustomerSeeder;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoDataSeeder;
+use Database\Seeders\EssentialSetupSeeder;
 use Database\Seeders\ProductSeeder;
 use Database\Seeders\SalesRepresentativeSeeder;
 use Database\Seeders\VehicleSeeder;
@@ -24,7 +25,7 @@ class DemoDataArchitectureSeederTest extends TestCase
     public function test_master_data_seeders_follow_the_regional_sales_architecture_and_are_idempotent(): void
     {
         $this->seed(AccessControlSeeder::class);
-        $this->seed(DatabaseSeeder::class);
+        $this->seed(EssentialSetupSeeder::class);
 
         foreach ([WarehouseSeeder::class, ProductSeeder::class, VehicleSeeder::class, SalesRepresentativeSeeder::class, CustomerSeeder::class] as $seeder) {
             $this->seed($seeder);
@@ -53,6 +54,16 @@ class DemoDataArchitectureSeederTest extends TestCase
     {
         $this->seed(DemoDataSeeder::class);
 
+        $this->assertDatabaseCount('sales', 3);
+        $this->assertDatabaseHas('sale_items', ['foc_quantity' => 2, 'foc_base_quantity' => 2]);
+        $this->assertDatabaseCount('region_sales_representative', 6);
+    }
+
+    public function test_default_seeder_builds_complete_demo_data(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        $this->assertDatabaseCount('warehouses', 3);
         $this->assertDatabaseCount('sales', 3);
         $this->assertDatabaseHas('sale_items', ['foc_quantity' => 2, 'foc_base_quantity' => 2]);
         $this->assertDatabaseCount('region_sales_representative', 6);
